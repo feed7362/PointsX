@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv pip:*)",
+      "Bash(.venv/Scripts/python -c \"import torch; import ultralytics; print\\(f''PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available\\(\\)}''\\); print\\(f''Ultralytics {ultralytics.__version__}''\\)\")"
+    ]
+  }
+}

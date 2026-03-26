@@ -1,0 +1,26 @@
+[project]
+name = "pointsx"
+version = "0.1.0"
+description = "PyTorch research project with YOLO for point detection"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    "ultralytics>=8.1.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.29.0",
+    "numpy>=1.26.0",
+    "opencv-python>=4.9.0",
+    "matplotlib>=3.8.0",
+    "pillow>=10.2.0",
+    "tqdm>=4.66.0",
+    "pyyaml>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
