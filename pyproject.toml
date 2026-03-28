@@ -15,7 +15,14 @@ dependencies = [
     "pillow>=10.2.0",
     "tqdm>=4.66.0",
     "pyyaml>=6.0.0",
+    "seaborn>=0.13.2",
+    "scipy>=1.17.1",
+    "smplx>=0.1.28",
+    "smpl-anthropometry>=0.1.0",
 ]
+
+[project.scripts]
+pointsx = "pointsx.cli:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -9,3 +9,5 @@ models/*.pt
 dist/
 build/
 .ruff_cache/
+.idea/
+data/

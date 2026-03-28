@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(uv pip:*)",
-      "Bash(.venv/Scripts/python -c \"import torch; import ultralytics; print\\(f''PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available\\(\\)}''\\); print\\(f''Ultralytics {ultralytics.__version__}''\\)\")"
+      "Bash(.venv/Scripts/python -c \"import torch; import ultralytics; print\\(f''PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available\\(\\)}''\\); print\\(f''Ultralytics {ultralytics.__version__}''\\)\")",
+      "Bash(wc -l \"Q:/Projects/KHNU/PointsX/data/LV-MHP-v2/list/\"*)",
+      "Bash(ls -lh train/pose_annos/*.mat)",
+      "Bash(grep -oP d+/10s+d+G?s+.*d+/958.* C:UsersAdminAppDataLocalTempclaudeQ--Projects-KHNU-PointsX28388bec-e203-48d5-9561-e9cc2a84fae3tasksbe3inpdzv.output)",
+      "Bash(grep -oP d+/10.*d+/958.* C:UsersAdminAppDataLocalTempclaudeQ--Projects-KHNU-PointsX28388bec-e203-48d5-9561-e9cc2a84fae3tasksbe3inpdzv.output)"
     ]
   }
 }
