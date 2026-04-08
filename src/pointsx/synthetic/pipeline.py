@@ -159,8 +159,9 @@ def _load_smplx_faces(model_dir: Path) -> np.ndarray:
     """Load triangle face indices from an SMPL-X model file."""
     import smplx
 
+    smplx_root = str(model_dir.parent) if model_dir.name == "smplx" else str(model_dir)
     model = smplx.create(
-        str(model_dir),
+        smplx_root,
         model_type="smplx",
         gender="neutral",
         use_face_contour=False,
