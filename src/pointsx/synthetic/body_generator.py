@@ -243,10 +243,10 @@ def save_landmarks_json(
         "body_id": sample.body_id,
         "sex": sample.sex,
         "pose": _get_pose_name(sample.body_id),
-        "target_height_cm": round(sample.target_height_cm, 1),
-        "actual_height_cm": round(sample.actual_height_cm, 1),
+        "target_height_cm": round(float(sample.target_height_cm), 1),
+        "actual_height_cm": round(float(sample.actual_height_cm), 1),
         "bmi_class": sample.bmi_class,
-        "measurements": {k: round(v, 1) for k, v in measurements.items()},
+        "measurements": {k: round(float(v), 1) for k, v in measurements.items()},
         "landmarks_3d": {
             name: coord.tolist()
             for name, coord in zip(LANDMARK_NAMES, landmarks_3d)

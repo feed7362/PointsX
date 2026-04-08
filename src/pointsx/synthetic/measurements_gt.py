@@ -30,7 +30,7 @@ class BodyMeasurementsGT:
     shoulder_width_cm: float = 0.0           # L_shoulder → R_shoulder
 
     def to_dict(self) -> dict:
-        return {k: round(v, 1) for k, v in asdict(self).items()}
+        return {k: round(float(v), 1) for k, v in asdict(self).items()}
 
 
 # ── SMPL-X joint indices used in geometric fallback ─────────────────────────
