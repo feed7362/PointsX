@@ -12,6 +12,19 @@ import torch
 
 from pointsx.synthetic.landmarks import extract_landmarks, LANDMARK_NAMES
 
+
+class NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that converts numpy scalars/arrays to Python types."""
+
+    def default(self, o):
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        return super().default(o)
+
 logger = logging.getLogger(__name__)
 
 # ── Height calibration constants (empirical from SMPL-X neutral model) ──────
@@ -252,7 +265,7 @@ def save_landmarks_json(
             for name, coord in zip(LANDMARK_NAMES, landmarks_3d)
         },
     }
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False, cls=NumpyEncoder))
 
 
 def _get_pose_name(body_id: int) -> str:

@@ -30,12 +30,14 @@ from pathlib import Path
 
 import numpy as np
 
+
 from pointsx.synthetic.body_generator import (
     generate_body_samples,
     run_smplx_forward,
     save_body_obj,
     save_landmarks_json,
     BodySample,
+    NumpyEncoder,
 )
 from pointsx.synthetic.landmarks import LANDMARK_NAMES, FLIP_IDX
 from pointsx.synthetic.measurements_gt import compute_measurements, sanity_check
@@ -102,8 +104,8 @@ def run_smplx_phase(
             logger.warning("SMPL-X forward pass failed for body %d: %s", sample.body_id, exc)
             continue
 
-        # Update actual height
-        sample.actual_height_cm = height_m * 100.0
+        # Update actual height (cast to Python float for JSON serialization)
+        sample.actual_height_cm = float(height_m) * 100.0
 
         # Save OBJ mesh
         obj_path = mesh_dir / f"body_{sample.body_id:05d}.obj"
@@ -129,10 +131,10 @@ def run_smplx_phase(
             json.dumps({
                 "body_id": sample.body_id,
                 "sex": sample.sex,
-                "actual_height_cm": round(sample.actual_height_cm, 1),
+                "actual_height_cm": round(float(sample.actual_height_cm), 1),
                 "bmi_class": sample.bmi_class,
                 **meas.to_dict(),
-            }, indent=2)
+            }, indent=2, cls=NumpyEncoder)
         )
 
         # Pick random skin texture index (1–30)
@@ -186,7 +188,7 @@ def run_blender_phase(
 ) -> None:
     """Chunk the manifest and launch Blender subprocess(es)."""
     manifest_path = out_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    manifest_path.write_text(json.dumps(manifest, indent=2, cls=NumpyEncoder))
     logger.info("Wrote manifest with %d entries → %s", len(manifest), manifest_path)
 
     blender_script = Path(__file__).with_name("blender_render.py")
