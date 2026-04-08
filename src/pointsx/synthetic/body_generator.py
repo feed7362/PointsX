@@ -184,11 +184,10 @@ def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, 
             "Download from https://smpl-x.is.tue.mpg.de/ and place in models/smplx/"
         )
 
-    # smplx.create() looks for {model_path}/{model_type}/SMPLX_*.npz internally.
-    # If model_dir already ends with "smplx" (e.g. models/smplx/), pass the parent.
-    smplx_root = str(model_dir.parent) if model_dir.name == "smplx" else str(model_dir)
+    # Pass the .npz file path directly to bypass smplx's directory resolution
+    # (the library double-appends "smplx/" when given a directory).
     model = smplx.create(
-        smplx_root,
+        str(model_path),
         model_type="smplx",
         gender=sample.sex,
         use_face_contour=False,

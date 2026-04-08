@@ -159,9 +159,10 @@ def _load_smplx_faces(model_dir: Path) -> np.ndarray:
     """Load triangle face indices from an SMPL-X model file."""
     import smplx
 
-    smplx_root = str(model_dir.parent) if model_dir.name == "smplx" else str(model_dir)
+    # Pass the .npz file path directly to bypass smplx's directory resolution
+    # (the library double-appends "smplx/" when given a directory).
     model = smplx.create(
-        smplx_root,
+        str(model_dir / "SMPLX_NEUTRAL.npz"),
         model_type="smplx",
         gender="neutral",
         use_face_contour=False,
