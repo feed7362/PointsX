@@ -510,6 +510,12 @@ def render_sample(
 
 def main_blender() -> None:
     """Parse args and render all entries from the manifest file."""
+    # Ensure pointsx is importable inside Blender's embedded Python.
+    # Walk up from this file to find the src/ root: .../src/pointsx/synthetic/blender_render.py
+    _src_dir = str(Path(__file__).resolve().parent.parent.parent)
+    if _src_dir not in sys.path:
+        sys.path.insert(0, _src_dir)
+
     # Blender passes script args after "--"
     argv = sys.argv
     if "--" in argv:
@@ -547,9 +553,9 @@ def main_blender() -> None:
             with open(results_path, "a") as f:
                 f.write(json.dumps({"body_id": entry["body_id"], **res}) + "\n")
         except Exception as exc:
-            print(f"  ERROR: {exc}", file=sys.stderr)
+            print(f"  ERROR rendering body_id={entry['body_id']}: {exc}")
             import traceback
-            traceback.print_exc()
+            traceback.print_exc(file=sys.stdout)
             continue
 
     print("[blender_render] Done.")
