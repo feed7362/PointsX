@@ -559,19 +559,40 @@ def main_blender() -> None:
     results_path = out_dir / "render_results.jsonl"
     results_path.parent.mkdir(parents=True, exist_ok=True)
 
-    for i, entry in enumerate(entries):
-        print(f"[blender_render] {i+1}/{len(entries)} — body_id={entry['body_id']}")
-        try:
-            res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu)
-            with open(results_path, "a") as f:
-                f.write(json.dumps({"body_id": entry["body_id"], **res}) + "\n")
-        except Exception as exc:
-            print(f"  ERROR rendering body_id={entry['body_id']}: {exc}")
-            import traceback
-            traceback.print_exc(file=sys.stdout)
-            continue
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
-    print("[blender_render] Done.")
+    n_ok, n_err = 0, 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]Rendering"),
+        BarColumn(bar_width=30),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("•"),
+        TextColumn("{task.completed}/{task.total}"),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("eta"),
+        TimeRemainingColumn(),
+        TextColumn("• [green]{task.fields[ok]} ok[/] [red]{task.fields[err]} err[/]"),
+    ) as progress:
+        task = progress.add_task("render", total=len(entries), ok=0, err=0)
+
+        for entry in entries:
+            try:
+                res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu)
+                with open(results_path, "a") as f:
+                    f.write(json.dumps({"body_id": entry["body_id"], **res}) + "\n")
+                n_ok += 1
+            except Exception as exc:
+                progress.console.print(f"  [red]ERROR[/] body_id={entry['body_id']}: {exc}")
+                import traceback
+                traceback.print_exc(file=sys.stdout)
+                n_err += 1
+
+            progress.update(task, advance=1, ok=n_ok, err=n_err)
+
+    print(f"[blender_render] Done. {n_ok} rendered, {n_err} errors.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
