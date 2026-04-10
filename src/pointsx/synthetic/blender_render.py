@@ -39,7 +39,8 @@ IMG_W = 640
 IMG_H = 640
 FOCAL_LENGTH_MM = 50
 SENSOR_WIDTH_MM = 36.0
-RENDER_SAMPLES = 256   # Cycles samples (reduce to 64 for CPU fallback)
+RENDER_ENGINE = "BLENDER_EEVEE"  # "BLENDER_EEVEE" (fast) or "CYCLES" (photorealistic)
+RENDER_SAMPLES = 64    # Cycles samples (64 + denoiser ≈ same quality as 256 without)
 DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
@@ -99,33 +100,41 @@ def clear_scene() -> None:
         bpy.data.images.remove(block)
 
 
-def setup_render_settings(use_gpu: bool = True) -> None:
-    """Configure Cycles renderer with photorealistic settings."""
+def setup_render_settings(use_gpu: bool = True, engine: str = RENDER_ENGINE) -> None:
+    """Configure render engine (EEVEE or Cycles)."""
     scene = bpy.context.scene
-    scene.render.engine = "CYCLES"
     scene.render.resolution_x = IMG_W
     scene.render.resolution_y = IMG_H
     scene.render.image_settings.file_format = "JPEG"
-    scene.render.image_settings.quality = 95
+    scene.render.image_settings.quality = 85
 
-    cycles = scene.cycles
-    if use_gpu:
-        bpy.context.preferences.addons["cycles"].preferences.compute_device_type = "CUDA"
-        scene.cycles.device = "GPU"
-        cycles.samples = RENDER_SAMPLES
+    if engine == "CYCLES":
+        scene.render.engine = "CYCLES"
+        cycles = scene.cycles
+        if use_gpu:
+            bpy.context.preferences.addons["cycles"].preferences.compute_device_type = "CUDA"
+            cycles.device = "GPU"
+            cycles.samples = RENDER_SAMPLES
+            # Smaller tiles for better T4 GPU utilization
+            scene.render.tile_x = 128
+            scene.render.tile_y = 128
+        else:
+            cycles.device = "CPU"
+            cycles.samples = max(32, RENDER_SAMPLES // 2)
+        cycles.use_denoising = True
+        cycles.denoiser = DENOISER
     else:
-        scene.cycles.device = "CPU"
-        cycles.samples = max(64, RENDER_SAMPLES // 4)
+        # EEVEE — real-time rasterizer, 10-50x faster than Cycles
+        scene.render.engine = "BLENDER_EEVEE"
+        eevee = scene.eevee
+        eevee.taa_render_samples = 32
+        eevee.use_ssr = True           # screen-space reflections
+        eevee.use_gtao = True          # ambient occlusion
+        eevee.use_soft_shadows = True
 
-    cycles.use_denoising = True
-    cycles.denoiser = DENOISER
-
-    # Enable Z-pass for occlusion detection
-    scene.view_layers[0].use_pass_z = True
-    scene.use_nodes = True
-
-    # Compositor: film grain + slight colour grade
-    _setup_compositor(scene)
+    # Z-pass for occlusion detection (Cycles only; EEVEE uses projection-based)
+    scene.view_layers[0].use_pass_z = (engine == "CYCLES")
+    scene.use_nodes = False  # skip compositor for speed
 
 
 def _setup_compositor(scene) -> None:
@@ -404,6 +413,7 @@ def render_sample(
     assets_dir: Path,
     out_dir: Path,
     use_gpu: bool = True,
+    engine: str = RENDER_ENGINE,
 ) -> dict:
     """Render all views for one body sample.
 
@@ -442,7 +452,7 @@ def render_sample(
     for view in ("front", "side"):
         # ── Build scene ─────────────────────────────────────────────────
         clear_scene()
-        setup_render_settings(use_gpu=use_gpu)
+        setup_render_settings(use_gpu=use_gpu, engine=engine)
 
         # HDRI lighting
         hdri_dir = assets_dir / "hdri"
@@ -482,8 +492,6 @@ def render_sample(
 
         scene = bpy.context.scene
         scene.render.filepath = str(img_path)
-        # Enable Z-pass output for depth buffer
-        scene.view_layers[0].use_pass_z = True
 
         bpy.ops.render.render(write_still=True)
 
@@ -499,7 +507,8 @@ def render_sample(
             landmarks_3d, K, V, IMG_W, IMG_H
         )
 
-        depth_buf = extract_z_buffer(str(img_path))
+        # Z-buffer occlusion: only available with Cycles (EEVEE skips it)
+        depth_buf = extract_z_buffer(str(img_path)) if engine == "CYCLES" else None
 
         visibility = classify_visibility(coords_px, depth, depth_buf, IMG_W, IMG_H)
 
@@ -542,6 +551,8 @@ def main_blender() -> None:
     parser.add_argument("--assets",      required=True, help="Path to assets directory")
     parser.add_argument("--gpu",         action="store_true", default=False,
                         help="Use GPU (CUDA) rendering")
+    parser.add_argument("--cycles",      action="store_true", default=False,
+                        help="Use Cycles instead of EEVEE (slower, photorealistic)")
     parser.add_argument("--start-idx",   type=int, default=0,
                         help="First manifest entry index to process")
     parser.add_argument("--end-idx",     type=int, default=None,
@@ -551,9 +562,11 @@ def main_blender() -> None:
     manifest_path = Path(args.manifest)
     out_dir       = Path(args.out_dir)
     assets_dir    = Path(args.assets)
+    engine        = "CYCLES" if args.cycles else RENDER_ENGINE
 
     manifest = json.loads(manifest_path.read_text())
     entries = manifest[args.start_idx: args.end_idx]
+    print(f"[blender_render] Engine: {engine} | GPU: {args.gpu} | Bodies: {len(entries)}")
 
     # Results tracking
     results_path = out_dir / "render_results.jsonl"
@@ -580,7 +593,7 @@ def main_blender() -> None:
 
         for entry in entries:
             try:
-                res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu)
+                res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu, engine=engine)
                 with open(results_path, "a") as f:
                     f.write(json.dumps({"body_id": entry["body_id"], **res}) + "\n")
                 n_ok += 1
