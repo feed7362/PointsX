@@ -216,6 +216,19 @@ def import_body_obj(obj_path: str) -> object:
     return bpy.context.selected_objects[0]
 
 
+def _bsdf_input(bsdf, *names):
+    """Look up a Principled BSDF input by name, trying aliases for cross-version compat.
+
+    Blender 4.0+ renamed several inputs:
+        "Subsurface" → "Subsurface Weight"
+        "Specular"   → "Specular IOR Level"
+    """
+    for name in names:
+        if name in bsdf.inputs:
+            return bsdf.inputs[name]
+    raise KeyError(f"BSDF input not found (tried {names})")
+
+
 def apply_skin_material(body_obj, texture_path: str) -> None:
     """Apply photorealistic skin Principled BSDF with SSS to the body mesh."""
     mat = bpy.data.materials.new("skin")
@@ -228,17 +241,17 @@ def apply_skin_material(body_obj, texture_path: str) -> None:
     out  = nodes.new("ShaderNodeOutputMaterial")
 
     # Subsurface scattering — skin-like parameters
-    bsdf.inputs["Subsurface Weight"].default_value = 0.3
+    _bsdf_input(bsdf, "Subsurface Weight", "Subsurface").default_value = 0.3
     bsdf.inputs["Subsurface Radius"].default_value = (0.24, 0.12, 0.08)
     bsdf.inputs["Roughness"].default_value = 0.7
-    bsdf.inputs["Specular IOR Level"].default_value = 0.3
+    _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.3
 
     # UV texture
     if texture_path and Path(texture_path).exists():
         tex_node = nodes.new("ShaderNodeTexImage")
         tex_node.image = bpy.data.images.load(texture_path)
         links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
-        links.new(tex_node.outputs["Color"], bsdf.inputs["Subsurface Color"])
+        links.new(tex_node.outputs["Color"], _bsdf_input(bsdf, "Subsurface Color", "Base Color"))
     else:
         # Fallback: neutral skin tone
         bsdf.inputs["Base Color"].default_value = (0.8, 0.6, 0.5, 1.0)
