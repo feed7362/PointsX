@@ -39,26 +39,27 @@ IMG_W = 640
 IMG_H = 640
 FOCAL_LENGTH_MM = 50
 SENSOR_WIDTH_MM = 36.0
-RENDER_ENGINE = "BLENDER_EEVEE"  # "BLENDER_EEVEE" (fast) or "CYCLES" (photorealistic)
+RENDER_ENGINE = "CYCLES"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
 RENDER_SAMPLES = 64    # Cycles samples (64 + denoiser ≈ same quality as 256 without)
 DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
-# Blender: Z up, Y forward (camera looks in -Y direction by default after +90° X rotation)
+# SMPL-X origin is at pelvis (~0m Z); head ~+0.85m, feet ~-0.85m.
+# Camera aimed at origin (pelvis) from enough distance to capture full body + margin.
 CAMERAS = {
     "front": {
-        "location": (0.0, -2.75, 1.0),
+        "location": (0.0, -4.5, 0.85),
         "rotation": (math.radians(90), 0.0, 0.0),
     },
     "side": {
-        "location": (2.75, 0.0, 1.0),
+        "location": (4.5, 0.0, 0.85),
         "rotation": (math.radians(90), 0.0, math.radians(90)),
     },
 }
 
 # Camera random jitter ranges
-CAM_DISTANCE_RANGE = (2.5, 3.0)       # metres
-CAM_HEIGHT_RANGE   = (0.9, 1.1)       # metres (belly / lower-rib level)
+CAM_DISTANCE_RANGE = (4.0, 5.0)       # metres (far enough for full body with 50mm lens)
+CAM_HEIGHT_RANGE   = (0.7, 1.0)       # metres (navel height — centers full body in frame)
 CAM_HORIZ_JITTER   = math.radians(5)  # always applied
 CAM_TILT_PROB      = 0.30             # 30% chance of ±10° tilt
 CAM_TILT_RANGE     = math.radians(10)
