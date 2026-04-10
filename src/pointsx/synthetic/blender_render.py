@@ -159,7 +159,7 @@ def _setup_compositor(scene) -> None:
     links.new(render_layers.outputs["Image"], hue_sat.inputs["Image"])
     links.new(hue_sat.outputs["Image"], mix_grain.inputs[1])
     links.new(mix_grain.outputs["Image"], composite.inputs["Image"])
-    links.new(composite.outputs["Image"], viewer.inputs["Image"])
+    links.new(mix_grain.outputs["Image"], viewer.inputs["Image"])
 
 
 def load_hdri(hdri_path: str) -> None:
