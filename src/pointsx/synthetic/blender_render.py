@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import random
 import sys
 from pathlib import Path
@@ -27,25 +26,24 @@ if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
 # Тепер імпорт спрацює без помилок
-from pointsx.calibration import logger
 # ─────────────────────────────────────────────────────────────────────────────
 # Guard: only import bpy when running inside Blender
 # ─────────────────────────────────────────────────────────────────────────────
 try:
     import bpy
     import mathutils
+
     _IN_BLENDER = True
 except ImportError:
     _IN_BLENDER = False
 
-
 # ── Constants ─────────────────────────────────────────────────────────────────
 IMG_W = 640
 IMG_H = 640
-FOCAL_LENGTH_MM = 50       # wide-angle to fit full body at close range
+FOCAL_LENGTH_MM = 50  # wide-angle to fit full body at close range
 SENSOR_WIDTH_MM = 36.0
 RENDER_ENGINE = "BLENDER_EEVEE"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
-RENDER_SAMPLES = 16    # Cycles samples (minimal — flat shading doesn't need many bounces)
+RENDER_SAMPLES = 16  # Cycles samples (minimal — flat shading doesn't need many bounces)
 DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
@@ -63,11 +61,11 @@ CAMERAS = {
 }
 
 # Camera random jitter ranges
-CAM_DISTANCE_RANGE = (2.2, 2.8)       # metres (close, like real photos)
-CAM_HEIGHT_RANGE   = (0.8, 1.1)       # metres (roughly pelvis-level, slight variation)
-CAM_HORIZ_JITTER   = math.radians(2)  # subtle horizontal jitter
-CAM_TILT_PROB      = 0.15             # 15% chance of ±5° tilt
-CAM_TILT_RANGE     = math.radians(5)
+CAM_DISTANCE_RANGE = (2.2, 2.8)  # metres (close, like real photos)
+CAM_HEIGHT_RANGE = (0.8, 1.1)  # metres (roughly pelvis-level, slight variation)
+CAM_HORIZ_JITTER = math.radians(2)  # subtle horizontal jitter
+CAM_TILT_PROB = 0.15  # 15% chance of ±5° tilt
+CAM_TILT_RANGE = math.radians(5)
 
 # Skin tone names (Fitzpatrick I-VI × male/female = 12; 30 total = 5 per combo)
 SKIN_TEXTURE_PATTERN = "skin_{:02d}.png"  # assets/textures/skin_01.png … skin_30.png
@@ -161,8 +159,8 @@ def _setup_compositor(scene) -> None:
     tree.nodes.clear()
 
     render_layers = tree.nodes.new("CompositorNodeRLayers")
-    composite    = tree.nodes.new("CompositorNodeComposite")
-    viewer       = tree.nodes.new("CompositorNodeViewer")
+    composite = tree.nodes.new("CompositorNodeComposite")
+    viewer = tree.nodes.new("CompositorNodeViewer")
 
     # Colour grade: slight contrast + saturation boost
     hue_sat = tree.nodes.new("CompositorNodeHueSat")
@@ -199,11 +197,11 @@ def load_hdri(hdri_path: str) -> None:
     links = world.node_tree.links
     nodes.clear()
 
-    bg    = nodes.new("ShaderNodeBackground")
-    env   = nodes.new("ShaderNodeTexEnvironment")
+    bg = nodes.new("ShaderNodeBackground")
+    env = nodes.new("ShaderNodeTexEnvironment")
     mapping = nodes.new("ShaderNodeMapping")
     coord = nodes.new("ShaderNodeTexCoord")
-    out   = nodes.new("ShaderNodeOutputWorld")
+    out = nodes.new("ShaderNodeOutputWorld")
 
     env.image = bpy.data.images.load(hdri_path)
     # Random HDRI rotation for variety
@@ -265,7 +263,7 @@ def apply_skin_material(body_obj, texture_path: str) -> None:
     nodes.clear()
 
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-    out  = nodes.new("ShaderNodeOutputMaterial")
+    out = nodes.new("ShaderNodeOutputMaterial")
 
     # Simple diffuse — no SSS, no specular (fast rendering for training data)
     bsdf.inputs["Roughness"].default_value = 1.0
@@ -308,99 +306,6 @@ def import_clothing(clothing_path: str, body_obj) -> object | None:
     return cloth_obj
 
 
-# ── Procedural tight clothing presets ────────────────────────────────────────
-# SMPL-X mesh: origin at pelvis (Z=0), head ~+0.85m, feet ~-0.85m.
-# Select vertices by Z-range to define garment regions.
-CLOTHING_PRESETS = [
-    {   # T-shirt + shorts
-        "name": "tshirt_shorts",
-        "pieces": [
-            {"z_min": -0.05, "z_max": 0.45, "offset": 0.004},   # torso (t-shirt)
-            {"z_min": -0.50, "z_max": -0.05, "offset": 0.003},  # shorts
-        ],
-    },
-    {   # Tank top + leggings
-        "name": "tank_leggings",
-        "pieces": [
-            {"z_min": 0.10, "z_max": 0.45, "offset": 0.003},   # tank top
-            {"z_min": -0.80, "z_max": -0.05, "offset": 0.003}, # leggings
-        ],
-    },
-    {   # Full bodysuit
-        "name": "bodysuit",
-        "pieces": [
-            {"z_min": -0.70, "z_max": 0.45, "offset": 0.004},  # neck to knees
-        ],
-    },
-    {   # Sports bra + shorts (female-ish)
-        "name": "sportsbra_shorts",
-        "pieces": [
-            {"z_min": 0.20, "z_max": 0.40, "offset": 0.004},   # sports bra
-            {"z_min": -0.40, "z_max": -0.05, "offset": 0.003},  # shorts
-        ],
-    },
-    {   # Bare (no clothing)
-        "name": "bare",
-        "pieces": [],
-    },
-]
-
-
-def add_procedural_clothing(body_obj, rng: random.Random) -> list:
-    """Generate tight clothing by duplicating body mesh regions and inflating.
-
-    Selects vertices by Z-height, duplicates them as a separate object,
-    pushes along normals for a 3-5mm offset, and applies a fabric material.
-    """
-    preset = rng.choice(CLOTHING_PRESETS)
-    if not preset["pieces"]:
-        return []  # bare body
-
-    import bmesh
-
-    cloth_objects = []
-    for piece in preset["pieces"]:
-        z_min, z_max, offset = piece["z_min"], piece["z_max"], piece["offset"]
-
-        # Duplicate body mesh
-        cloth_data = body_obj.data.copy()
-        cloth_obj = bpy.data.objects.new(f"cloth_{preset['name']}", cloth_data)
-        bpy.context.collection.objects.link(cloth_obj)
-        cloth_obj.matrix_world = body_obj.matrix_world.copy()
-
-        # Select faces in Z-range and delete the rest
-        bm = bmesh.new()
-        bm.from_mesh(cloth_data)
-        bm.verts.ensure_lookup_table()
-
-        # Mark vertices outside the Z-range
-        verts_outside = set()
-        for v in bm.verts:
-            if v.co.z < z_min or v.co.z > z_max:
-                verts_outside.add(v.index)
-
-        # Delete faces where ALL vertices are outside the range
-        faces_to_delete = [
-            f for f in bm.faces
-            if all(v.index in verts_outside for v in f.verts)
-        ]
-        bmesh.ops.delete(bm, geom=faces_to_delete, context="FACES")
-
-        # Push remaining vertices outward along normals
-        bm.verts.ensure_lookup_table()
-        for v in bm.verts:
-            v.co += v.normal * offset
-
-        bm.to_mesh(cloth_data)
-        bm.free()
-
-        # Apply random fabric material
-        _apply_fabric_material(cloth_obj)
-        cloth_objects.append(cloth_obj)
-
-    return cloth_objects
-
-
 def _apply_fabric_material(obj) -> None:
     """Apply random-coloured PBR fabric shader to clothing mesh."""
     mat = bpy.data.materials.new("fabric")
@@ -410,7 +315,7 @@ def _apply_fabric_material(obj) -> None:
     nodes.clear()
 
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-    out  = nodes.new("ShaderNodeOutputMaterial")
+    out = nodes.new("ShaderNodeOutputMaterial")
 
     # Random hue, contrasting saturation
     hue = random.random()
@@ -515,16 +420,17 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
         print(f"Z-buffer error: {e}")
         return None
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main render function
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_sample(
-    manifest_entry: dict,
-    assets_dir: Path,
-    out_dir: Path,
-    use_gpu: bool = True,
-    engine: str = RENDER_ENGINE,
+        manifest_entry: dict,
+        assets_dir: Path,
+        out_dir: Path,
+        use_gpu: bool = True,
+        engine: str = RENDER_ENGINE,
 ) -> dict:
     """Render all views for one body sample.
 
@@ -602,12 +508,13 @@ def render_sample(
 
         # Clothing — use OBJ files if available, otherwise procedural
         cloth_dir = assets_dir / "clothing"
-        cloth_files = list(cloth_dir.glob("*.obj")) if cloth_dir.exists() else []
-        if cloth_files:
-            cloth_path = str(rng.choice(cloth_files))
-            import_clothing(cloth_path, body_obj)
-        else:
-            add_procedural_clothing(body_obj, rng)
+        if cloth_dir.exists():
+            cloth_files = list(cloth_dir.glob("*.obj"))
+
+            # 85% шанс, що модель буде в одязі (якщо файли існують), 15% - базовий меш тіла
+            if cloth_files and rng.random() < 0.85:
+                cloth_path = str(rng.choice(cloth_files))
+                import_clothing(cloth_path, body_obj)
 
         # Camera
         cam_obj, cam_params = setup_camera(view, rng)
@@ -726,10 +633,10 @@ def render_sample(
             write_yolo_label(label, label_path)
 
         results[view] = {
-            "image_path":   str(img_path),
-            "label_path":   str(label_path) if label else None,
+            "image_path": str(img_path),
+            "label_path": str(label_path) if label else None,
             "camera_params": cam_params,
-            "n_visible_kp":  int((visibility >= 1).sum()),
+            "n_visible_kp": int((visibility >= 1).sum()),
         }
 
     return results
@@ -755,24 +662,24 @@ def main_blender() -> None:
         argv = []
 
     parser = argparse.ArgumentParser(description="Blender synthetic body renderer")
-    parser.add_argument("--manifest",    required=True, help="Path to manifest JSON")
-    parser.add_argument("--out-dir",     required=True, help="Output root directory")
-    parser.add_argument("--assets",      required=True, help="Path to assets directory")
-    parser.add_argument("--gpu",         action="store_true", default=False,
+    parser.add_argument("--manifest", required=True, help="Path to manifest JSON")
+    parser.add_argument("--out-dir", required=True, help="Output root directory")
+    parser.add_argument("--assets", required=True, help="Path to assets directory")
+    parser.add_argument("--gpu", action="store_true", default=False,
                         help="Use GPU (CUDA) rendering")
-    parser.add_argument("--engine",      type=str, default=RENDER_ENGINE,
+    parser.add_argument("--engine", type=str, default=RENDER_ENGINE,
                         choices=["CYCLES", "BLENDER_EEVEE"],
                         help="Render engine (default: %(default)s)")
-    parser.add_argument("--start-idx",   type=int, default=0,
+    parser.add_argument("--start-idx", type=int, default=0,
                         help="First manifest entry index to process")
-    parser.add_argument("--end-idx",     type=int, default=None,
+    parser.add_argument("--end-idx", type=int, default=None,
                         help="Last manifest entry index (exclusive)")
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
-    out_dir       = Path(args.out_dir)
-    assets_dir    = Path(args.assets)
-    engine        = args.engine
+    out_dir = Path(args.out_dir)
+    assets_dir = Path(args.assets)
+    engine = args.engine
 
     manifest = json.loads(manifest_path.read_text())
     entries = manifest[args.start_idx: args.end_idx]
@@ -787,17 +694,17 @@ def main_blender() -> None:
     n_ok, n_err = 0, 0
 
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold blue]Rendering"),
-        BarColumn(bar_width=30),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("•"),
-        TextColumn("{task.completed}/{task.total}"),
-        TextColumn("•"),
-        TimeElapsedColumn(),
-        TextColumn("eta"),
-        TimeRemainingColumn(),
-        TextColumn("• [green]{task.fields[ok]} ok[/] [red]{task.fields[err]} err[/]"),
+            SpinnerColumn(),
+            TextColumn("[bold blue]Rendering"),
+            BarColumn(bar_width=30),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("•"),
+            TextColumn("{task.completed}/{task.total}"),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("eta"),
+            TimeRemainingColumn(),
+            TextColumn("• [green]{task.fields[ok]} ok[/] [red]{task.fields[err]} err[/]"),
     ) as progress:
         task = progress.add_task("render", total=len(entries), ok=0, err=0)
 
