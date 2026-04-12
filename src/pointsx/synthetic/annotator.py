@@ -20,16 +20,16 @@ logger = logging.getLogger(__name__)
 MIN_VISIBLE_KP = 5
 
 # Bounding-box padding factor around the visible keypoints
-BBOX_PAD = 0.15      # 15% of the tight bbox extent
-BBOX_MIN_PX = 50     # absolute minimum side length in pixels
+BBOX_PAD = 0.15  # 15% of the tight bbox extent
+BBOX_MIN_PX = 50  # absolute minimum side length in pixels
 
 
 def project_landmarks_to_2d(
-    landmarks_3d: list[np.ndarray],
-    camera_matrix: np.ndarray,
-    view_matrix: np.ndarray,
-    img_w: int,
-    img_h: int,
+        landmarks_3d: list[np.ndarray],
+        camera_matrix: np.ndarray,
+        view_matrix: np.ndarray,
+        img_w: int,
+        img_h: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Project 3D world coordinates to 2D image pixels.
 
@@ -43,15 +43,15 @@ def project_landmarks_to_2d(
         coords_px:  (25, 2) float32 — pixel (x, y) per landmark (may be outside frame)
         depth:      (25,)   float32 — camera-space depth (positive = in front)
     """
-    pts = np.array(landmarks_3d, dtype=np.float64)   # (25, 3)
+    pts = np.array(landmarks_3d, dtype=np.float64)  # (25, 3)
 
     # ── World → Camera space ─────────────────────────────────────────────
     # Blender's camera looks down -Z in camera space; Y is up.
     # view_matrix: column-major 4×4.  Apply: cam_pt = view_matrix @ [x,y,z,1]
     ones = np.ones((len(pts), 1), dtype=np.float64)
-    pts_h = np.hstack([pts, ones])                    # (25, 4)
-    cam_pts = (view_matrix @ pts_h.T).T               # (25, 4)
-    cam_xyz = cam_pts[:, :3]                           # (25, 3)
+    pts_h = np.hstack([pts, ones])  # (25, 4)
+    cam_pts = (view_matrix @ pts_h.T).T  # (25, 4)
+    cam_xyz = cam_pts[:, :3]  # (25, 3)
 
     # In Blender camera coords: camera looks down -Z
     # depth = -Z component (positive means in front of camera)
@@ -60,9 +60,9 @@ def project_landmarks_to_2d(
     # ── Camera → Image (perspective division) ────────────────────────────
     # NDC: divide by -Z (Blender convention)
     eps = 1e-8
-    z = -cam_xyz[:, 2:3]                              # positive denominator
+    z = -cam_xyz[:, 2:3]  # positive denominator
     z = np.where(np.abs(z) < eps, eps, z)
-    ndc_xy = cam_xyz[:, :2] / z                       # (25, 2)
+    ndc_xy = cam_xyz[:, :2] / z  # (25, 2)
 
     # Camera intrinsics: [fx, 0, cx; 0, fy, cy; 0,0,1]
     fx = camera_matrix[0, 0]
@@ -81,12 +81,12 @@ def project_landmarks_to_2d(
 
 
 def classify_visibility(
-    coords_px: np.ndarray,
-    depth: np.ndarray,
-    depth_buffer: np.ndarray | None,
-    img_w: int,
-    img_h: int,
-    occlusion_threshold: float = 0.02,
+        coords_px: np.ndarray,
+        depth: np.ndarray,
+        depth_buffer: np.ndarray | None,
+        img_w: int,
+        img_h: int,
+        occlusion_threshold: float = 0.02,
 ) -> np.ndarray:
     """Classify each landmark as visible (2), occluded (1), or off-frame (0).
 
@@ -124,10 +124,10 @@ def classify_visibility(
 
 
 def build_yolo_label(
-    coords_px: np.ndarray,
-    visibility: np.ndarray,
-    img_w: int,
-    img_h: int,
+        coords_px: np.ndarray,
+        visibility: np.ndarray,
+        img_w: int,
+        img_h: int,
 ) -> str | None:
     """Build YOLO pose label string for a single image.
 
@@ -182,10 +182,10 @@ def write_yolo_label(label: str, path: Path) -> None:
 # ── Camera matrix helpers (called by pipeline / blender_render) ──────────────
 
 def blender_camera_matrix(
-    focal_length_mm: float,
-    sensor_width_mm: float,
-    img_w: int,
-    img_h: int,
+        focal_length_mm: float,
+        sensor_width_mm: float,
+        img_w: int,
+        img_h: int,
 ) -> np.ndarray:
     """Build a 3×3 pinhole camera intrinsic matrix from Blender parameters.
 
@@ -204,9 +204,9 @@ def blender_camera_matrix(
     cy = img_h / 2.0
 
     K = np.array([
-        [f_px, 0.0,  cx],
-        [0.0,  f_px, cy],
-        [0.0,  0.0,  1.0],
+        [f_px, 0.0, cx],
+        [0.0, f_px, cy],
+        [0.0, 0.0, 1.0],
     ], dtype=np.float64)
     return K
 
@@ -228,8 +228,8 @@ def euler_to_rotation_matrix(rx: float, ry: float, rz: float) -> np.ndarray:
 
 
 def build_view_matrix(
-    camera_location: tuple[float, float, float],
-    camera_rotation_euler: tuple[float, float, float],
+        camera_location: tuple[float, float, float],
+        camera_rotation_euler: tuple[float, float, float],
 ) -> np.ndarray:
     """Build a 4×4 world-to-camera view matrix from Blender camera transform.
 
@@ -240,12 +240,14 @@ def build_view_matrix(
     Returns:
         view_matrix: (4, 4) float64
     """
-    R = euler_to_rotation_matrix(*camera_rotation_euler)
+    R_cam2world = euler_to_rotation_matrix(*camera_rotation_euler)
+    R_world2cam = R_cam2world.T
+
     t = np.array(camera_location, dtype=np.float64)
 
     # View matrix: world → camera  =  [R | -R @ t]
     Rt = np.eye(4, dtype=np.float64)
-    Rt[:3, :3] = R
-    Rt[:3,  3] = -R @ t
+    Rt[:3, :3] = R_world2cam
+    Rt[:3, 3] = -R_world2cam @ t
 
     return Rt
