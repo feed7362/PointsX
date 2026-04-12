@@ -37,7 +37,7 @@ except ImportError:
 # ── Constants ─────────────────────────────────────────────────────────────────
 IMG_W = 640
 IMG_H = 640
-FOCAL_LENGTH_MM = 50
+FOCAL_LENGTH_MM = 28       # wide-angle to fit full body at close range
 SENSOR_WIDTH_MM = 36.0
 RENDER_ENGINE = "CYCLES"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
 RENDER_SAMPLES = 16    # Cycles samples (minimal — flat shading doesn't need many bounces)
@@ -45,21 +45,21 @@ DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
 # SMPL-X origin is at pelvis (~0m Z); head ~+0.85m, feet ~-0.85m.
-# Camera aimed at origin (pelvis) from enough distance to capture full body + margin.
+# Close range (1.5-2.5m) with 28mm lens → body fills the frame.
 CAMERAS = {
     "front": {
-        "location": (0.0, -4.5, 0.85),
+        "location": (0.0, -2.0, 0.0),
         "rotation": (math.radians(90), 0.0, 0.0),
     },
     "side": {
-        "location": (4.5, 0.0, 0.85),
+        "location": (2.0, 0.0, 0.0),
         "rotation": (math.radians(90), 0.0, math.radians(90)),
     },
 }
 
 # Camera random jitter ranges
-CAM_DISTANCE_RANGE = (4.0, 5.0)       # metres (far enough for full body with 50mm lens)
-CAM_HEIGHT_RANGE   = (0.7, 1.0)       # metres (navel height — centers full body in frame)
+CAM_DISTANCE_RANGE = (1.5, 2.5)       # metres (close, like real photos)
+CAM_HEIGHT_RANGE   = (-0.05, 0.10)    # metres (roughly pelvis-level, slight variation)
 CAM_HORIZ_JITTER   = math.radians(2)  # subtle horizontal jitter
 CAM_TILT_PROB      = 0.15             # 15% chance of ±5° tilt
 CAM_TILT_RANGE     = math.radians(5)
