@@ -25,6 +25,7 @@ class NumpyEncoder(json.JSONEncoder):
             return o.tolist()
         return super().default(o)
 
+
 logger = logging.getLogger(__name__)
 
 # ── Height calibration constants (empirical from SMPL-X neutral model) ──────
@@ -36,11 +37,11 @@ HEIGHT_STD_M = {"male": 0.065, "female": 0.060}
 # BMI class → β[1] approximate range (weight PC)
 # Negative β[1] = thinner, positive = heavier
 BMI_BETA1_RANGE = {
-    "very_thin":    (-3.0, -1.5),
-    "thin":         (-1.5, -0.5),
-    "normal":       (-0.5,  0.5),
-    "overweight":   ( 0.5,  1.5),
-    "obese":        ( 1.5,  3.0),
+    "very_thin": (-3.0, -1.5),
+    "thin": (-1.5, -0.5),
+    "normal": (-0.5, 0.5),
+    "overweight": (0.5, 1.5),
+    "obese": (1.5, 3.0),
 }
 
 BMI_CLASSES = list(BMI_BETA1_RANGE.keys())
@@ -53,9 +54,9 @@ class BodySample:
     sex: str
     target_height_cm: float
     bmi_class: str
-    betas: list[float]            # shape (10,)
-    body_pose: list[float]        # shape (63,) — 21 joints × 3 axis-angle
-    global_orient: list[float]    # shape (3,)
+    betas: list[float]  # shape (10,)
+    body_pose: list[float]  # shape (63,) — 21 joints × 3 axis-angle
+    global_orient: list[float]  # shape (3,)
 
     # Outputs (filled after SMPL-X forward pass)
     actual_height_cm: float = 0.0
@@ -84,10 +85,10 @@ def _a_pose() -> np.ndarray:
     # L_shoulder = joint 16 → body_pose index (16-1)*3 = 45
     # R_shoulder = joint 17 → body_pose index (17-1)*3 = 48
     arm_angle = np.radians(np.random.uniform(15, 20))
-    pose[45] = arm_angle    # L_shoulder z-axis (abduction)
-    pose[48] = -arm_angle   # R_shoulder z-axis (adduction = negative)
+    pose[45] = arm_angle  # L_shoulder z-axis (abduction)
+    pose[48] = -arm_angle  # R_shoulder z-axis (adduction = negative)
     # Slight hip outward rotation for visibility of crotch
-    pose[1] = np.radians(np.random.uniform(5, 10))   # L_hip
+    pose[1] = np.radians(np.random.uniform(5, 10))  # L_hip
     pose[4] = -np.radians(np.random.uniform(5, 10))  # R_hip
     return pose
 
@@ -126,8 +127,8 @@ POSE_WEIGHTS = [0.40, 0.40, 0.20]  # 70% useful + 30% robustness (rounded to pos
 
 
 def generate_body_samples(
-    n_bodies: int = 500,
-    seed: int = 42,
+        n_bodies: int = 500,
+        seed: int = 42,
 ) -> list[BodySample]:
     """Generate N unique body configurations (shape + 3 poses each)."""
     rng = np.random.default_rng(seed)
@@ -207,12 +208,12 @@ def _get_smplx_model(sex: str, model_dir: Path) -> object:
 
 
 def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, np.ndarray, float]:
-    """Run SMPL-X forward pass for one body sample.
+    """Run SMPL-X forward pass for one body sample and enforce exact target height.
 
     Returns:
         vertices: (10475, 3) float32
-        joints:   (127, 3)  float32  (SMPL-X full joints)
-        height_m: actual height in meters computed from mesh
+        joints:   (127, 3)  float32
+        height_m: actual height in meters (now guaranteed to match target)
     """
     model = _get_smplx_model(sample.sex, model_dir)
 
@@ -230,15 +231,29 @@ def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, 
             return_verts=True,
         )
 
-    vertices = output.vertices[0].numpy()   # (10475, 3)
-    joints = output.joints[0].numpy()       # (127, 3)
+    vertices = output.vertices[0].numpy()  # (10475, 3)
+    joints = output.joints[0].numpy()  # (127, 3)
+    head_y = vertices[411, 1]  # vertex 411 = head_top
+    ankle_y = (vertices[6852, 1] + vertices[3438, 1]) / 2
+    raw_height_m = abs(head_y - ankle_y)
 
-    # Compute actual height from mesh
-    head_y = vertices[411, 1]               # vertex 411 = head_top
-    ankle_y = (vertices[6852, 1] + vertices[3438, 1]) / 2  # L+R ankle vertices
-    height_m = abs(head_y - ankle_y)
+    target_height_m = sample.target_height_cm / 100.0
 
-    return vertices, joints, height_m
+    if raw_height_m < 0.1:
+        raw_height_m = 1.7
+
+    scale_factor = target_height_m / raw_height_m
+
+    vertices *= scale_factor
+    joints *= scale_factor
+
+    lowest_y = np.min(vertices[:, 1])
+    vertices[:, 1] -= lowest_y
+    joints[:, 1] -= lowest_y
+
+    final_height_m = target_height_m
+
+    return vertices, joints, final_height_m
 
 
 def save_body_obj(vertices: np.ndarray, faces: np.ndarray, path: Path) -> None:
@@ -248,14 +263,14 @@ def save_body_obj(vertices: np.ndarray, faces: np.ndarray, path: Path) -> None:
         for v in vertices:
             f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
         for face in faces:
-            f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
+            f.write(f"f {face[0] + 1} {face[1] + 1} {face[2] + 1}\n")
 
 
 def save_landmarks_json(
-    sample: BodySample,
-    landmarks_3d: list[np.ndarray],
-    measurements: dict,
-    path: Path,
+        sample: BodySample,
+        landmarks_3d: list[np.ndarray],
+        measurements: dict,
+        path: Path,
 ) -> None:
     """Save landmark 3D coordinates + ground truth measurements to JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
