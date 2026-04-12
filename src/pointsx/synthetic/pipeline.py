@@ -185,6 +185,7 @@ def run_blender_phase(
     jobs: int = 1,
     use_gpu: bool = False,
 ) -> None:
+    import math
     """Chunk the manifest and launch Blender subprocess(es)."""
     manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, cls=NumpyEncoder))
@@ -197,8 +198,6 @@ def run_blender_phase(
     # Split manifest into chunks for parallel Blender instances
     chunk_size = math.ceil(len(manifest) / max(jobs, 1))
     procs = []
-
-    import math  # noqa: PLC0415
 
     for job_idx in range(jobs):
         start = job_idx * chunk_size
