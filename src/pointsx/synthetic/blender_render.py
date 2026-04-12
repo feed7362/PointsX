@@ -40,7 +40,7 @@ IMG_H = 640
 FOCAL_LENGTH_MM = 50
 SENSOR_WIDTH_MM = 36.0
 RENDER_ENGINE = "CYCLES"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
-RENDER_SAMPLES = 64    # Cycles samples (64 + denoiser ≈ same quality as 256 without)
+RENDER_SAMPLES = 32    # Cycles samples (32 + OIDN denoiser is sufficient for training data)
 DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
@@ -60,9 +60,9 @@ CAMERAS = {
 # Camera random jitter ranges
 CAM_DISTANCE_RANGE = (4.0, 5.0)       # metres (far enough for full body with 50mm lens)
 CAM_HEIGHT_RANGE   = (0.7, 1.0)       # metres (navel height — centers full body in frame)
-CAM_HORIZ_JITTER   = math.radians(5)  # always applied
-CAM_TILT_PROB      = 0.30             # 30% chance of ±10° tilt
-CAM_TILT_RANGE     = math.radians(10)
+CAM_HORIZ_JITTER   = math.radians(2)  # subtle horizontal jitter
+CAM_TILT_PROB      = 0.15             # 15% chance of ±5° tilt
+CAM_TILT_RANGE     = math.radians(5)
 
 # Skin tone names (Fitzpatrick I-VI × male/female = 12; 30 total = 5 per combo)
 SKIN_TEXTURE_PATTERN = "skin_{:02d}.png"  # assets/textures/skin_01.png … skin_30.png
@@ -361,10 +361,7 @@ def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
 
     cam_obj.data.lens = FOCAL_LENGTH_MM
     cam_obj.data.sensor_width = SENSOR_WIDTH_MM
-    cam_obj.data.dof.use_dof = True
-    cam_obj.data.dof.aperture_fstop = 8.0
-    # Focus on pelvis height (approx 1.0m from ground ≈ 0.9m in Blender Z)
-    cam_obj.data.dof.focus_distance = dist
+    cam_obj.data.dof.use_dof = False  # sharp images for keypoint training
 
     params = {
         "location": tuple(loc),
@@ -447,7 +444,27 @@ def render_sample(
 
     results = {}
 
+    # ── Resume support: skip views that already have image + label ───
+    body_id = manifest_entry["body_id"]
+    views_todo = []
     for view in ("front", "side"):
+        sample_id = f"s{body_id:05d}_{view}"
+        # Check both train and val splits for existing output
+        found = False
+        for split in ("train", "val"):
+            img = out_dir / split / "images" / f"{sample_id}.jpg"
+            lbl = out_dir / split / "labels" / f"{sample_id}.txt"
+            if img.exists() and lbl.exists():
+                results[view] = {"image_path": str(img), "label_path": str(lbl), "skipped": True}
+                found = True
+                break
+        if not found:
+            views_todo.append(view)
+
+    if not views_todo:
+        return results  # both views already done
+
+    for view in views_todo:
         # ── Build scene ─────────────────────────────────────────────────
         clear_scene()
         setup_render_settings(use_gpu=use_gpu, engine=engine)
