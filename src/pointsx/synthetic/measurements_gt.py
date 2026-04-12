@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, asdict
 
 import numpy as np
+from scipy.spatial import ConvexHull
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,12 @@ class BodyMeasurementsGT:
     chest_circumference_cm: float = 0.0
     waist_circumference_cm: float = 0.0
     hips_circumference_cm: float = 0.0
-    thigh_circumference_cm: float = 0.0       # mean of L+R
-    calf_circumference_cm: float = 0.0        # mean of L+R
-    wrist_circumference_cm: float = 0.0       # mean of L+R
+    thigh_circumference_cm: float = 0.0  # mean of L+R
+    calf_circumference_cm: float = 0.0  # mean of L+R
+    wrist_circumference_cm: float = 0.0  # mean of L+R
     inseam_length_cm: float = 0.0
-    arm_length_cm: float = 0.0               # shoulder → wrist (mean L+R)
-    shoulder_width_cm: float = 0.0           # L_shoulder → R_shoulder
+    arm_length_cm: float = 0.0  # shoulder → wrist (mean L+R)
+    shoulder_width_cm: float = 0.0  # L_shoulder → R_shoulder
 
     def to_dict(self) -> dict:
         return {k: round(float(v), 1) for k, v in asdict(self).items()}
@@ -54,48 +55,51 @@ _J = {
 
 # Neck ring ~12 vertices around the neck at joint-12 height
 _NECK_RING_VERTS = [
-    411, 412, 413, 5765, 5766, 5767,   # front top
-    3085, 3086, 3087, 6580, 6581, 6582, # back
+    411, 412, 413, 5765, 5766, 5767,  # front top
+    3085, 3086, 3087, 6580, 6581, 6582,  # back
 ]
 # Chest ring at nipple level
 _CHEST_RING_VERTS = [
-    3050, 3051, 3052, 3053,   # L breast
-    6545, 6546, 6547, 6548,   # R breast
-    2943, 2944, 2945,          # mid back thorax
-    3085, 3086,                # upper back
+    3050, 3051, 3052, 3053,  # L breast
+    6545, 6546, 6547, 6548,  # R breast
+    2943, 2944, 2945,  # mid back thorax
+    3085, 3086,  # upper back
 ]
 # Waist ring at navel height
 _WAIST_RING_VERTS = [
-    3500, 3501, 3502,   # navel front
-    702, 703,           # L waist side
-    4098, 4099,         # R waist side
-    3020, 3021,         # lower back
+    3500, 3501, 3502,  # navel front
+    702, 703,  # L waist side
+    4098, 4099,  # R waist side
+    3020, 3021,  # lower back
 ]
 # Hip ring at outer-hip height
 _HIP_RING_VERTS = [
-    1380, 1381, 1382,   # L hip outer
-    4821, 4822, 4823,   # R hip outer
-    3145, 3146,         # glute back
-    1210, 1211,         # crotch front
+    1380, 1381, 1382,  # L hip outer
+    4821, 4822, 4823,  # R hip outer
+    3145, 3146,  # glute back
+    1210, 1211,  # crotch front
 ]
 
 
 def _perimeter_from_points(pts: np.ndarray) -> float:
-    """Approximate perimeter of a roughly convex 2-D polygon (XZ plane).
-
-    Points need not be in order — we sort by angle around centroid.
-    """
+    """Approximate perimeter using Convex Hull (simulates tailor's tape)."""
     if len(pts) < 3:
         return 0.0
-    xz = pts[:, [0, 2]]                   # project onto horizontal plane
-    centre = xz.mean(axis=0)
-    angles = np.arctan2(xz[:, 1] - centre[1], xz[:, 0] - centre[0])
-    order = np.argsort(angles)
-    xz = xz[order]
-    # Close the loop
-    closed = np.vstack([xz, xz[0]])
-    diffs = np.diff(closed, axis=0)
-    return float(np.linalg.norm(diffs, axis=1).sum())
+
+    xz = pts[:, [0, 2]]  # project onto horizontal plane
+
+    try:
+        # ConvexHull automatically wraps the outermost points like a rubber band
+        hull = ConvexHull(xz)
+        perimeter = 0.0
+        # Calculate the length of the boundary edges
+        for simplex in hull.simplices:
+            p1, p2 = xz[simplex[0]], xz[simplex[1]]
+            perimeter += np.linalg.norm(p1 - p2)
+        return float(perimeter)
+    except Exception as e:
+        logger.warning(f"ConvexHull failed: {e}")
+        return 0.0
 
 
 def _ring_circumference_m(vertices: np.ndarray, ring_indices: list[int]) -> float:
@@ -105,32 +109,37 @@ def _ring_circumference_m(vertices: np.ndarray, ring_indices: list[int]) -> floa
 
 
 def _band_circumference_m(
-    vertices: np.ndarray,
-    y_center: float,
-    band_half: float = 0.015,
+        vertices: np.ndarray,
+        y_center: float,
+        band_half: float = 0.015,
+        max_x_radius: float = 0.25  # Limit to 25cm from center to exclude arms
 ) -> float:
-    """Compute circumference by selecting all vertices within a Y-band.
+    """Compute circumference by selecting all vertices within a Y-band and X-limit."""
 
-    Works best for neck, waist, chest, hips where the body is convex.
-    """
-    mask = np.abs(vertices[:, 1] - y_center) < band_half
-    pts = vertices[mask]
+    # Filter by height (Y-axis)
+    mask_y = np.abs(vertices[:, 1] - y_center) < band_half
+
+    # Filter by width (X-axis) to exclude arms!
+    mask_x = np.abs(vertices[:, 0]) < max_x_radius
+
+    pts = vertices[mask_y & mask_x]
     if len(pts) < 6:
         return 0.0
+
     return _perimeter_from_points(pts)
 
 
 def _limb_circumference_m(
-    vertices: np.ndarray,
-    y_center: float,
-    x_center: float,
-    band_half: float = 0.015,
-    x_radius: float = 0.12,
+        vertices: np.ndarray,
+        y_center: float,
+        x_center: float,
+        band_half: float = 0.015,
+        x_radius: float = 0.12,
 ) -> float:
     """Circumference of a single limb by selecting vertices near (x, y)."""
     mask = (
-        (np.abs(vertices[:, 1] - y_center) < band_half) &
-        (np.abs(vertices[:, 0] - x_center) < x_radius)
+            (np.abs(vertices[:, 1] - y_center) < band_half) &
+            (np.abs(vertices[:, 0] - x_center) < x_radius)
     )
     pts = vertices[mask]
     if len(pts) < 4:
@@ -141,9 +150,9 @@ def _limb_circumference_m(
 # ── SMPL-Anthropometry wrapper ───────────────────────────────────────────────
 
 def _try_smpl_anthropometry(
-    vertices: np.ndarray,
-    faces: np.ndarray,
-    sex: str,
+        vertices: np.ndarray,
+        faces: np.ndarray,
+        sex: str,
 ) -> dict | None:
     """Attempt to compute measurements with SMPL-Anthropometry library.
 
@@ -159,17 +168,17 @@ def _try_smpl_anthropometry(
         scale = 100.0
 
         mapping = {
-            "height_cm":              raw.get("height", 0) * scale,
-            "neck_circumference_cm":  raw.get("neck_girth", 0) * scale,
+            "height_cm": raw.get("height", 0) * scale,
+            "neck_circumference_cm": raw.get("neck_girth", 0) * scale,
             "chest_circumference_cm": raw.get("chest_girth", 0) * scale,
             "waist_circumference_cm": raw.get("waist_girth", 0) * scale,
-            "hips_circumference_cm":  raw.get("hips_girth", 0) * scale,
+            "hips_circumference_cm": raw.get("hips_girth", 0) * scale,
             "thigh_circumference_cm": raw.get("thigh_girth", 0) * scale,
-            "calf_circumference_cm":  raw.get("calf_girth", 0) * scale,
+            "calf_circumference_cm": raw.get("calf_girth", 0) * scale,
             "wrist_circumference_cm": raw.get("wrist_girth", 0) * scale,
-            "inseam_length_cm":       raw.get("inseam", 0) * scale,
-            "arm_length_cm":          raw.get("arm_length", 0) * scale,
-            "shoulder_width_cm":      raw.get("shoulder_breadth", 0) * scale,
+            "inseam_length_cm": raw.get("inseam", 0) * scale,
+            "arm_length_cm": raw.get("arm_length", 0) * scale,
+            "shoulder_width_cm": raw.get("shoulder_breadth", 0) * scale,
         }
 
         # If most values are zero the library didn't return useful data
@@ -189,8 +198,8 @@ def _try_smpl_anthropometry(
 # ── Geometric fallback ───────────────────────────────────────────────────────
 
 def _geometric_measurements(
-    vertices: np.ndarray,
-    joints: np.ndarray,
+        vertices: np.ndarray,
+        joints: np.ndarray,
 ) -> BodyMeasurementsGT:
     """Fast geometric measurement extraction from SMPL-X mesh.
 
@@ -201,7 +210,7 @@ def _geometric_measurements(
     j = joints  # shorthand
 
     # ── Height ────────────────────────────────────────────────────────────
-    head_y  = vertices[411, 1]
+    head_y = vertices[411, 1]
     ankle_y = (vertices[6852, 1] + vertices[3438, 1]) / 2
     m.height_cm = abs(head_y - ankle_y) * 100.0
 
@@ -212,12 +221,12 @@ def _geometric_measurements(
 
     # ── Arm length (shoulder → wrist, both sides averaged) ───────────────
     l_arm = (
-        np.linalg.norm(j[_J["L_shoulder"]] - j[_J["L_elbow"]]) +
-        np.linalg.norm(j[_J["L_elbow"]]    - j[_J["L_wrist"]])
+            np.linalg.norm(j[_J["L_shoulder"]] - j[_J["L_elbow"]]) +
+            np.linalg.norm(j[_J["L_elbow"]] - j[_J["L_wrist"]])
     )
     r_arm = (
-        np.linalg.norm(j[_J["R_shoulder"]] - j[_J["R_elbow"]]) +
-        np.linalg.norm(j[_J["R_elbow"]]    - j[_J["R_wrist"]])
+            np.linalg.norm(j[_J["R_shoulder"]] - j[_J["R_elbow"]]) +
+            np.linalg.norm(j[_J["R_elbow"]] - j[_J["R_wrist"]])
     )
     m.arm_length_cm = (l_arm + r_arm) / 2 * 100.0
 
@@ -228,25 +237,25 @@ def _geometric_measurements(
     m.inseam_length_cm = abs(crotch_y - (l_ankle_y + r_ankle_y) / 2) * 100.0
 
     # ── Circumferences via Y-band method ──────────────────────────────────
-    neck_y    = j[_J["neck"], 1]
-    chest_y   = (j[_J["L_shoulder"], 1] + j[_J["R_shoulder"], 1]) / 2 - 0.05
-    navel_y   = vertices[3500, 1]
-    hip_y     = j[_J["pelvis"], 1]
+    neck_y = j[_J["neck"], 1]
+    chest_y = (j[_J["L_shoulder"], 1] + j[_J["R_shoulder"], 1]) / 2 - 0.05
+    navel_y = vertices[3500, 1]
+    hip_y = j[_J["pelvis"], 1]
 
     # Neck (tight band)
-    c = _band_circumference_m(vertices, neck_y, band_half=0.012)
+    c = _band_circumference_m(vertices, neck_y, band_half=0.012, max_x_radius=0.15)
     m.neck_circumference_cm = c * 100.0 if c > 0.1 else 35.0
 
     # Chest (slightly wider band)
-    c = _band_circumference_m(vertices, chest_y, band_half=0.025)
+    c = _band_circumference_m(vertices, chest_y, band_half=0.025, max_x_radius=0.30)
     m.chest_circumference_cm = c * 100.0 if c > 0.3 else 90.0
 
     # Waist
-    c = _band_circumference_m(vertices, navel_y, band_half=0.020)
+    c = _band_circumference_m(vertices, navel_y, band_half=0.020, max_x_radius=0.35)
     m.waist_circumference_cm = c * 100.0 if c > 0.3 else 75.0
 
     # Hips
-    c = _band_circumference_m(vertices, hip_y, band_half=0.025)
+    c = _band_circumference_m(vertices, hip_y, band_half=0.025, max_x_radius=0.40)
     m.hips_circumference_cm = c * 100.0 if c > 0.3 else 95.0
 
     # Thigh: 25% down from hip to knee, left + right averaged
@@ -290,10 +299,10 @@ def _geometric_measurements(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def compute_measurements(
-    vertices: np.ndarray,
-    joints: np.ndarray,
-    faces: np.ndarray,
-    sex: str,
+        vertices: np.ndarray,
+        joints: np.ndarray,
+        faces: np.ndarray,
+        sex: str,
 ) -> BodyMeasurementsGT:
     """Compute all ground-truth body measurements from SMPL-X mesh.
 
@@ -339,15 +348,15 @@ def sanity_check(m: BodyMeasurementsGT) -> list[str]:
 
     h = m.height_cm
     if h > 0:
-        _check("neck_circumference_cm",   m.neck_circumference_cm,   25, 55)
-        _check("chest_circumference_cm",  m.chest_circumference_cm,  60, 160)
-        _check("waist_circumference_cm",  m.waist_circumference_cm,  50, 160)
-        _check("hips_circumference_cm",   m.hips_circumference_cm,   70, 170)
-        _check("thigh_circumference_cm",  m.thigh_circumference_cm,  35, 100)
-        _check("calf_circumference_cm",   m.calf_circumference_cm,   22,  60)
-        _check("wrist_circumference_cm",  m.wrist_circumference_cm,  12,  25)
-        _check("shoulder_width_cm",       m.shoulder_width_cm,       30,  60)
-        _check("arm_length_cm",           m.arm_length_cm,           50,  85)
-        _check("inseam_length_cm",        m.inseam_length_cm,        60,  95)
+        _check("neck_circumference_cm", m.neck_circumference_cm, 25, 55)
+        _check("chest_circumference_cm", m.chest_circumference_cm, 60, 160)
+        _check("waist_circumference_cm", m.waist_circumference_cm, 50, 160)
+        _check("hips_circumference_cm", m.hips_circumference_cm, 70, 170)
+        _check("thigh_circumference_cm", m.thigh_circumference_cm, 35, 100)
+        _check("calf_circumference_cm", m.calf_circumference_cm, 22, 60)
+        _check("wrist_circumference_cm", m.wrist_circumference_cm, 12, 25)
+        _check("shoulder_width_cm", m.shoulder_width_cm, 30, 60)
+        _check("arm_length_cm", m.arm_length_cm, 50, 85)
+        _check("inseam_length_cm", m.inseam_length_cm, 60, 95)
 
     return warnings
