@@ -21,7 +21,7 @@ class LMType(Enum):
 
 @dataclass
 class LandmarkDef:
-    idx: int | list[int]   # joint or vertex index / indices
+    idx: int | list[int]  # joint or vertex index / indices
     lm_type: LMType
     name: str
     description: str
@@ -50,92 +50,94 @@ class LandmarkDef:
 
 LANDMARKS: list[LandmarkDef] = [
     # ── Head ──────────────────────────────────────────────────────────────
-    LandmarkDef(411,          LMType.VERTEX,      "head_top",        "Тім'я / Top of head"),
-    LandmarkDef(8152,         LMType.VERTEX,      "chin",            "Підборіддя / Chin"),
+    LandmarkDef(411, LMType.VERTEX, "head_top", "Тім'я / Top of head"),
+    LandmarkDef(8152, LMType.VERTEX, "chin", "Підборіддя / Chin"),
 
     # ── Neck / upper back ──────────────────────────────────────────────────
-    LandmarkDef(12,           LMType.JOINT,       "back_of_neck",    "Задня частина шиї / Back of neck"),
+    LandmarkDef(12, LMType.JOINT, "back_of_neck", "Задня частина шиї / Back of neck"),
 
     # ── Shoulders ─────────────────────────────────────────────────────────
-    LandmarkDef(16,           LMType.JOINT,       "left_shoulder",   "Ліве плече / Left shoulder"),
-    LandmarkDef(17,           LMType.JOINT,       "right_shoulder",  "Праве плече / Right shoulder"),
+    LandmarkDef(16, LMType.JOINT, "left_shoulder", "Ліве плече / Left shoulder"),
+    LandmarkDef(17, LMType.JOINT, "right_shoulder", "Праве плече / Right shoulder"),
 
     # ── Chest ─────────────────────────────────────────────────────────────
-    LandmarkDef([3050, 6545], LMType.VERTEX_MEAN, "chest_nipple",    "Лінія сосків / Nipple line (chest)"),
+    LandmarkDef(3050, LMType.VERTEX, "left_nipple", "Лівий сосок / Left nipple"),
+    LandmarkDef(6545, LMType.VERTEX, "right_nipple", "Правий сосок / Right nipple"),
 
     # ── Armpits ───────────────────────────────────────────────────────────
-    LandmarkDef(1850,         LMType.VERTEX,      "left_armpit",     "Ліва пахва / Left armpit"),
-    LandmarkDef(5250,         LMType.VERTEX,      "right_armpit",    "Права пахва / Right armpit"),
+    LandmarkDef(1850, LMType.VERTEX, "left_armpit", "Ліва пахва / Left armpit"),
+    LandmarkDef(5250, LMType.VERTEX, "right_armpit", "Права пахва / Right armpit"),
 
     # ── Back / torso ──────────────────────────────────────────────────────
-    LandmarkDef(2943,         LMType.VERTEX,      "mid_back",        "Середина спини / Mid back"),
-    LandmarkDef(3500,         LMType.VERTEX,      "navel",           "Пупок / Navel / Abdomen"),
+    LandmarkDef(2943, LMType.VERTEX, "mid_back", "Середина спини / Mid back"),
+    LandmarkDef(3500, LMType.VERTEX, "navel", "Пупок / Navel / Abdomen"),
 
     # ── Elbows ────────────────────────────────────────────────────────────
-    LandmarkDef(18,           LMType.JOINT,       "left_elbow",      "Ліпень лікоть / Left elbow"),
-    LandmarkDef(19,           LMType.JOINT,       "right_elbow",     "Правий лікоть / Right elbow"),
+    LandmarkDef(18, LMType.JOINT, "left_elbow", "Лівий лікоть / Left elbow"),
+    LandmarkDef(19, LMType.JOINT, "right_elbow", "Правий лікоть / Right elbow"),
 
     # ── Waist ─────────────────────────────────────────────────────────────
-    LandmarkDef(702,          LMType.VERTEX,      "left_waist",      "Ліва талія / Left waist"),
-    LandmarkDef(4098,         LMType.VERTEX,      "right_waist",     "Права талія / Right waist"),
+    LandmarkDef(702, LMType.VERTEX, "left_waist", "Ліва талія / Left waist"),
+    LandmarkDef(4098, LMType.VERTEX, "right_waist", "Права талія / Right waist"),
 
     # ── Lower back ────────────────────────────────────────────────────────
-    LandmarkDef(3020,         LMType.VERTEX,      "lower_back",      "Крижі / Lower back / Sacrum"),
+    LandmarkDef(3020, LMType.VERTEX, "lower_back", "Крижі / Lower back / Sacrum"),
 
     # ── Hips ──────────────────────────────────────────────────────────────
-    LandmarkDef(1380,         LMType.VERTEX,      "left_outer_hip",  "Ліве стегно зовні / Left outer hip"),
-    LandmarkDef(4821,         LMType.VERTEX,      "right_outer_hip", "Праве стегно зовні / Right outer hip"),
+    LandmarkDef(1380, LMType.VERTEX, "left_outer_hip", "Ліве стегно зовні / Left outer hip"),
+    LandmarkDef(4821, LMType.VERTEX, "right_outer_hip", "Праве стегно зовні / Right outer hip"),
 
     # ── Crotch / glute ────────────────────────────────────────────────────
-    LandmarkDef(1210,         LMType.VERTEX,      "crotch",          "Пах / Crotch"),
-    LandmarkDef(3145,         LMType.VERTEX,      "glute",           "Сідниці / Glute / Buttock"),
+    LandmarkDef(1210, LMType.VERTEX, "crotch", "Пах / Crotch"),
+    LandmarkDef(3145, LMType.VERTEX, "glute", "Сідниці / Glute / Buttock"),
 
     # ── Wrists ────────────────────────────────────────────────────────────
-    LandmarkDef(20,           LMType.JOINT,       "left_wrist",      "Ліве зап'ясток / Left wrist"),
-    LandmarkDef(21,           LMType.JOINT,       "right_wrist",     "Праве зап'ясток / Right wrist"),
+    LandmarkDef(20, LMType.JOINT, "left_wrist", "Ліве зап'ясток / Left wrist"),
+    LandmarkDef(21, LMType.JOINT, "right_wrist", "Праве зап'ясток / Right wrist"),
 
     # ── Knees ─────────────────────────────────────────────────────────────
-    LandmarkDef(4,            LMType.JOINT,       "left_knee",       "Ліве коліно / Left knee"),
-    LandmarkDef(5,            LMType.JOINT,       "right_knee",      "Праве коліно / Right knee"),
+    LandmarkDef(4, LMType.JOINT, "left_knee", "Ліве коліно / Left knee"),
+    LandmarkDef(5, LMType.JOINT, "right_knee", "Праве коліно / Right knee"),
 
     # ── Ankles ────────────────────────────────────────────────────────────
-    LandmarkDef(7,            LMType.JOINT,       "left_ankle",      "Ліва щиколотка / Left ankle"),
-    LandmarkDef(8,            LMType.JOINT,       "right_ankle",     "Права щиколотка / Right ankle"),
+    LandmarkDef(7, LMType.JOINT, "left_ankle", "Ліва щиколотка / Left ankle"),
+    LandmarkDef(8, LMType.JOINT, "right_ankle", "Права щиколотка / Right ankle"),
 ]
 
-NUM_LANDMARKS = len(LANDMARKS)  # 25
-assert NUM_LANDMARKS == 25, f"Expected 25 landmarks, got {NUM_LANDMARKS}"
+NUM_LANDMARKS = len(LANDMARKS)  # 26
+assert NUM_LANDMARKS == 26, f"Expected 26 landmarks, got {NUM_LANDMARKS}"
 
 LANDMARK_NAMES = [lm.name for lm in LANDMARKS]
 
 # Left-right flip index map for YOLO data augmentation
 # Maps each landmark index to its mirror-image counterpart
 FLIP_IDX = [
-    0,   # head_top       → head_top
-    1,   # chin           → chin
-    2,   # back_of_neck   → back_of_neck
-    4,   # left_shoulder  ↔ right_shoulder
-    3,   # right_shoulder ↔ left_shoulder
-    5,   # chest_nipple   → chest_nipple
-    7,   # left_armpit    ↔ right_armpit
-    6,   # right_armpit   ↔ left_armpit
-    8,   # mid_back       → mid_back
-    9,   # navel          → navel
-    11,  # left_elbow     ↔ right_elbow
-    10,  # right_elbow    ↔ left_elbow
-    13,  # left_waist     ↔ right_waist
-    12,  # right_waist    ↔ left_waist
-    14,  # lower_back     → lower_back
-    16,  # left_outer_hip ↔ right_outer_hip
-    15,  # right_outer_hip ↔ left_outer_hip
-    17,  # crotch         → crotch
-    18,  # glute          → glute
-    20,  # left_wrist     ↔ right_wrist
-    19,  # right_wrist    ↔ left_wrist
-    22,  # left_knee      ↔ right_knee
-    21,  # right_knee     ↔ left_knee
-    24,  # left_ankle     ↔ right_ankle
-    23,  # right_ankle    ↔ left_ankle
+    0,  # head_top       → head_top
+    1,  # chin           → chin
+    2,  # back_of_neck   → back_of_neck
+    4,  # left_shoulder  ↔ right_shoulder
+    3,  # right_shoulder ↔ left_shoulder
+    6,  # left_nipple    ↔ right_nipple
+    5,  # right_nipple   ↔ left_nipple
+    8,  # left_armpit    ↔ right_armpit
+    7,  # right_armpit   ↔ left_armpit
+    9,  # mid_back       → mid_back
+    10,  # navel          → navel
+    12,  # left_elbow     ↔ right_elbow
+    11,  # right_elbow    ↔ left_elbow
+    14,  # left_waist     ↔ right_waist
+    13,  # right_waist    ↔ left_waist
+    15,  # lower_back     → lower_back
+    17,  # left_outer_hip ↔ right_outer_hip
+    16,  # right_outer_hip ↔ left_outer_hip
+    18,  # crotch         → crotch
+    19,  # glute          → glute
+    21,  # left_wrist     ↔ right_wrist
+    20,  # right_wrist    ↔ left_wrist
+    23,  # left_knee      ↔ right_knee
+    22,  # right_knee     ↔ left_knee
+    25,  # left_ankle     ↔ right_ankle
+    24,  # right_ankle    ↔ left_ankle
 ]
 
 assert len(FLIP_IDX) == NUM_LANDMARKS
