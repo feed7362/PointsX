@@ -20,6 +20,7 @@ dependencies = [
     "smplx>=0.1.28",
     # smpl-anthropometry is not on PyPI — install manually:
     # pip install git+https://github.com/DavidBoja/SMPL-Anthropometry.git
+    "rich>=15.0.0",
 ]
 
 [project.scripts]

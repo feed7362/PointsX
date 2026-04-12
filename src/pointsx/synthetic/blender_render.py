@@ -22,7 +22,12 @@ import random
 import sys
 from pathlib import Path
 
+_src_dir = str(Path(__file__).resolve().parent.parent.parent)
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
+# Тепер імпорт спрацює без помилок
+from pointsx.calibration import logger
 # ─────────────────────────────────────────────────────────────────────────────
 # Guard: only import bpy when running inside Blender
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,9 +42,9 @@ except ImportError:
 # ── Constants ─────────────────────────────────────────────────────────────────
 IMG_W = 640
 IMG_H = 640
-FOCAL_LENGTH_MM = 28       # wide-angle to fit full body at close range
+FOCAL_LENGTH_MM = 50       # wide-angle to fit full body at close range
 SENSOR_WIDTH_MM = 36.0
-RENDER_ENGINE = "CYCLES"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
+RENDER_ENGINE = "BLENDER_EEVEE"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
 RENDER_SAMPLES = 16    # Cycles samples (minimal — flat shading doesn't need many bounces)
 DENOISER = "OPENIMAGEDENOISE"
 
@@ -58,8 +63,8 @@ CAMERAS = {
 }
 
 # Camera random jitter ranges
-CAM_DISTANCE_RANGE = (1.5, 2.5)       # metres (close, like real photos)
-CAM_HEIGHT_RANGE   = (-0.05, 0.10)    # metres (roughly pelvis-level, slight variation)
+CAM_DISTANCE_RANGE = (2.2, 2.8)       # metres (close, like real photos)
+CAM_HEIGHT_RANGE   = (0.8, 1.1)       # metres (roughly pelvis-level, slight variation)
 CAM_HORIZ_JITTER   = math.radians(2)  # subtle horizontal jitter
 CAM_TILT_PROB      = 0.15             # 15% chance of ±5° tilt
 CAM_TILT_RANGE     = math.radians(5)
@@ -132,13 +137,21 @@ def setup_render_settings(use_gpu: bool = True, engine: str = RENDER_ENGINE) -> 
         # EEVEE — real-time rasterizer, 10-50x faster than Cycles
         scene.render.engine = "BLENDER_EEVEE"
         eevee = scene.eevee
-        eevee.taa_render_samples = 32
-        eevee.use_ssr = True           # screen-space reflections
-        eevee.use_gtao = True          # ambient occlusion
-        eevee.use_soft_shadows = True
+
+        if hasattr(eevee, "taa_render_samples"):
+            eevee.taa_render_samples = 32
+
+        # Підтримка нового EEVEE-Next (Blender 4.2+ / 5.1)
+        if hasattr(eevee, "use_raytracing"):
+            eevee.use_raytracing = True
+        else:
+            # Підтримка старого EEVEE (Blender 3.6 / 4.1 для Colab)
+            if hasattr(eevee, "use_ssr"): eevee.use_ssr = True
+            if hasattr(eevee, "use_gtao"): eevee.use_gtao = True
+            if hasattr(eevee, "use_soft_shadows"): eevee.use_soft_shadows = True
 
     # Z-pass for occlusion detection (Cycles only; EEVEE uses projection-based)
-    scene.view_layers[0].use_pass_z = (engine == "CYCLES")
+    scene.view_layers[0].use_pass_z = True
     scene.use_nodes = False  # skip compositor for speed
 
 
@@ -419,19 +432,13 @@ def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
 
 
 def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
-    """Create and position a camera for the given view.
-
-    Returns:
-        camera object, camera_params dict with location + rotation (for annotator)
-    """
+    """Create and position a camera for the given view."""
     base = CAMERAS[view]
-    loc  = list(base["location"])
-    rot  = list(base["rotation"])
+    loc = list(base["location"])
 
     # Random distance jitter (scale from origin)
     dist = rng.uniform(*CAM_DISTANCE_RANGE)
-    # Normalise existing distance and rescale
-    current_dist = math.sqrt(loc[0]**2 + loc[1]**2)
+    current_dist = math.sqrt(loc[0] ** 2 + loc[1] ** 2)
     if current_dist > 0:
         scale = dist / current_dist
         loc[0] *= scale
@@ -440,27 +447,31 @@ def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
     # Camera height jitter
     loc[2] = rng.uniform(*CAM_HEIGHT_RANGE)
 
+    bpy.ops.object.camera_add(location=loc)
+    cam_obj = bpy.context.active_object
+
+    # Направляємо камеру на центр тіла (Z = 0.9m)
+    look_at_point = mathutils.Vector((0.0, 0.0, 0.9))
+    direction = look_at_point - cam_obj.location
+    rot_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
     # Always apply ±5° horizontal jitter
-    horiz_jitter = rng.uniform(-CAM_HORIZ_JITTER, CAM_HORIZ_JITTER)
-    rot[2] += horiz_jitter
+    rot_euler.z += rng.uniform(-CAM_HORIZ_JITTER, CAM_HORIZ_JITTER)
 
     # 30% chance of ±10° tilt
     if rng.random() < CAM_TILT_PROB:
-        tilt = rng.uniform(-CAM_TILT_RANGE, CAM_TILT_RANGE)
-        rot[0] += tilt
+        rot_euler.x += rng.uniform(-CAM_TILT_RANGE, CAM_TILT_RANGE)
 
-    bpy.ops.object.camera_add(location=loc)
-    cam_obj = bpy.context.active_object
-    cam_obj.rotation_euler = rot
+    cam_obj.rotation_euler = rot_euler
     bpy.context.scene.camera = cam_obj
 
     cam_obj.data.lens = FOCAL_LENGTH_MM
     cam_obj.data.sensor_width = SENSOR_WIDTH_MM
-    cam_obj.data.dof.use_dof = False  # sharp images for keypoint training
+    cam_obj.data.dof.use_dof = False
 
     params = {
         "location": tuple(loc),
-        "rotation": tuple(rot),
+        "rotation": (rot_euler.x, rot_euler.y, rot_euler.z),
         "focal_length_mm": FOCAL_LENGTH_MM,
         "sensor_width_mm": SENSOR_WIDTH_MM,
     }
@@ -478,10 +489,15 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
         import os
 
         rp = Path(render_path)
-        # Шлях, який генерує CompositorNodeOutputFile: s00001_front_depth_0001.exr
-        z_path = rp.parent / f"{rp.stem}_depth_0001.exr"
+
+        # Підтримка і старих версій (з 0001), і Blender 5.1+ (без номера)
+        z_path_v4 = rp.parent / f"{rp.stem}_depth_0001.exr"
+        z_path_v5 = rp.parent / f"{rp.stem}_depth_.exr"
+
+        z_path = z_path_v5 if z_path_v5.exists() else z_path_v4
 
         if not z_path.exists():
+            print(f"Warning: Z-buffer not found for {rp.stem}")
             return None
 
         img = bpy.data.images.load(str(z_path))
@@ -492,14 +508,12 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
         # Очищуємо пам'ять Blender
         bpy.data.images.remove(img)
 
-        # КРИТИЧНО ВАЖЛИВО: Видаляємо файл, щоб не забити диск
         os.remove(z_path)
 
         return z
     except Exception as e:
         print(f"Z-buffer error: {e}")
         return None
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main render function
@@ -607,26 +621,86 @@ def render_sample(
         img_path.parent.mkdir(parents=True, exist_ok=True)
         label_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # ── Налаштування Композитора для Z-буфера ──
         scene = bpy.context.scene
         scene.render.filepath = str(img_path)
 
-        # ФІКС: Змушуємо Blender зберігати мапу глибини через Compositor
-        scene.use_nodes = True
-        tree = scene.node_tree
-        tree.nodes.clear()
+        # ── Налаштування Композитора (Підтримка Blender 4.x та 5.0+) ──
 
-        rlayers = tree.nodes.new("CompositorNodeRLayers")
-        composite = tree.nodes.new("CompositorNodeComposite")
-        tree.links.new(rlayers.outputs["Image"], composite.inputs["Image"])
+        try:
+            if hasattr(scene, "compositing_node_group"):
+                # ==========================================
+                # НОВИЙ API: BLENDER 5.0+
+                # ==========================================
+                if scene.compositing_node_group is None:
+                    tree = bpy.data.node_groups.new("PointsX_Comp", "CompositorNodeTree")
+                    scene.compositing_node_group = tree
+                else:
+                    tree = scene.compositing_node_group
 
-        if engine == "CYCLES":
-            file_out = tree.nodes.new("CompositorNodeOutputFile")
-            file_out.format.file_format = "OPEN_EXR"
-            file_out.format.color_depth = "32"
-            file_out.base_path = str(img_path.parent)
-            # Blender автоматично додасть номер кадру (0001) до цього імені
-            file_out.file_slots[0].path = f"{img_path.stem}_depth_"
-            tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+                tree.nodes.clear()
+                tree.interface.clear()
+
+                rlayers = tree.nodes.new(type="CompositorNodeRLayers")
+
+                # У Blender 5.0+ CompositorNodeComposite замінено на NodeGroupOutput
+                output = tree.nodes.new(type="NodeGroupOutput")
+                tree.interface.new_socket(name="Image", in_out="OUTPUT", socket_type="NodeSocketColor")
+                tree.links.new(rlayers.outputs["Image"], output.inputs["Image"])
+
+                if engine == "BLENDER_EEVEE":
+                    file_out = tree.nodes.new(type="CompositorNodeOutputFile")
+                    file_out.format.file_format = "OPEN_EXR_MULTILAYER"
+                    file_out.format.color_depth = "32"
+
+                    file_out.directory = str(img_path.parent)
+                    file_out.file_name = f"{img_path.stem}_depth_"
+
+                    if len(file_out.file_output_items) > 0:
+                        file_out.file_output_items[0].name = "Depth"
+                    else:
+                        file_out.file_output_items.new(name="Depth", socket_type="FLOAT")
+
+                    tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+
+            else:
+                # ==========================================
+                # СТАРИЙ API: BLENDER 4.x ТА НИЖЧЕ
+                # ==========================================
+                scene.use_nodes = True
+                tree = scene.node_tree
+                tree.nodes.clear()
+
+                rlayers = tree.nodes.new("CompositorNodeRLayers")
+                composite = tree.nodes.new("CompositorNodeComposite")
+                tree.links.new(rlayers.outputs["Image"], composite.inputs["Image"])
+
+                if engine == "BLENDER_EEVEE":
+                    file_out = tree.nodes.new(type="CompositorNodeOutputFile")
+                    file_out.format.file_format = "OPEN_EXR_MULTILAYER"
+                    file_out.format.color_depth = "32"
+                    file_out.base_path = str(img_path.parent)
+                    file_out.file_slots[0].path = f"{img_path.stem}_depth_"
+                    tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+
+        except Exception as e:
+            print(f"Failed to access compositor: {e}")
+            raise
+
+        # tree.nodes.clear()
+        #
+        # rlayers = tree.nodes.new("CompositorNodeRLayers")
+        # composite = tree.nodes.new("CompositorNodeComposite")
+        # tree.links.new(rlayers.outputs["Image"], composite.inputs["Image"])
+        #
+        # if engine == "CYCLES":
+        #     file_out = tree.nodes.new("CompositorNodeOutputFile")
+        #     file_out.format.file_format = "OPEN_EXR"
+        #     file_out.format.color_depth = "32"
+        #     file_out.base_path = str(img_path.parent)
+        #     # Blender автоматично додасть номер кадру (0001) до цього імені
+        #     file_out.file_slots[0].path = f"{img_path.stem}_depth_"
+        #     tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
 
         # Тепер рендер збереже і JPG, і EXR
         bpy.ops.render.render(write_still=True)
@@ -644,8 +718,7 @@ def render_sample(
         )
 
         # Z-buffer occlusion: only available with Cycles (EEVEE skips it)
-        depth_buf = extract_z_buffer(str(img_path)) if engine == "CYCLES" else None
-
+        depth_buf = extract_z_buffer(str(img_path))
         visibility = classify_visibility(coords_px, depth, depth_buf, IMG_W, IMG_H)
 
         label = build_yolo_label(coords_px, visibility, IMG_W, IMG_H)
