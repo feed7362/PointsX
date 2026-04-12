@@ -116,9 +116,6 @@ def setup_render_settings(use_gpu: bool = True, engine: str = RENDER_ENGINE) -> 
             bpy.context.preferences.addons["cycles"].preferences.compute_device_type = "CUDA"
             cycles.device = "GPU"
             cycles.samples = RENDER_SAMPLES
-            # Smaller tiles for better T4 GPU utilization
-            scene.render.tile_x = 128
-            scene.render.tile_y = 128
         else:
             cycles.device = "CPU"
             cycles.samples = max(32, RENDER_SAMPLES // 2)
