@@ -40,7 +40,7 @@ IMG_H = 640
 FOCAL_LENGTH_MM = 50
 SENSOR_WIDTH_MM = 36.0
 RENDER_ENGINE = "CYCLES"  # "CYCLES" (best on headless/Colab) or "BLENDER_EEVEE" (fast with display)
-RENDER_SAMPLES = 32    # Cycles samples (32 + OIDN denoiser is sufficient for training data)
+RENDER_SAMPLES = 16    # Cycles samples (minimal — flat shading doesn't need many bounces)
 DENOISER = "OPENIMAGEDENOISE"
 
 # Camera front-view and side-view base positions / rotations
@@ -121,6 +121,13 @@ def setup_render_settings(use_gpu: bool = True, engine: str = RENDER_ENGINE) -> 
             cycles.samples = max(32, RENDER_SAMPLES // 2)
         cycles.use_denoising = True
         cycles.denoiser = DENOISER
+        # Minimize ray bounces — no need for accurate light transport
+        cycles.max_bounces = 1
+        cycles.diffuse_bounces = 1
+        cycles.glossy_bounces = 0
+        cycles.transmission_bounces = 0
+        cycles.transparent_max_bounces = 0
+        cycles.volume_bounces = 0
     else:
         # EEVEE — real-time rasterizer, 10-50x faster than Cycles
         scene.render.engine = "BLENDER_EEVEE"
@@ -247,18 +254,15 @@ def apply_skin_material(body_obj, texture_path: str) -> None:
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     out  = nodes.new("ShaderNodeOutputMaterial")
 
-    # Subsurface scattering — skin-like parameters
-    _bsdf_input(bsdf, "Subsurface Weight", "Subsurface").default_value = 0.3
-    bsdf.inputs["Subsurface Radius"].default_value = (0.24, 0.12, 0.08)
-    bsdf.inputs["Roughness"].default_value = 0.7
-    _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.3
+    # Simple diffuse — no SSS, no specular (fast rendering for training data)
+    bsdf.inputs["Roughness"].default_value = 1.0
+    _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.0
 
     # UV texture
     if texture_path and Path(texture_path).exists():
         tex_node = nodes.new("ShaderNodeTexImage")
         tex_node.image = bpy.data.images.load(texture_path)
         links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
-        links.new(tex_node.outputs["Color"], _bsdf_input(bsdf, "Subsurface Color", "Base Color"))
     else:
         # Fallback: neutral skin tone
         bsdf.inputs["Base Color"].default_value = (0.8, 0.6, 0.5, 1.0)
@@ -280,17 +284,108 @@ def import_clothing(clothing_path: str, body_obj) -> object | None:
     bpy.ops.wm.obj_import(filepath=clothing_path)
     cloth_obj = bpy.context.selected_objects[0]
 
-    # Shrinkwrap modifier so it conforms to the specific body shape
     mod = cloth_obj.modifiers.new("ShrinkWrap", "SHRINKWRAP")
     mod.target = body_obj
-    mod.offset = 0.003   # 3mm clearance (≤5mm per spec)
+    mod.offset = 0.003
     mod.wrap_method = "NEAREST_SURFACEPOINT"
     bpy.context.view_layer.objects.active = cloth_obj
     bpy.ops.object.modifier_apply(modifier=mod.name)
 
-    # Apply a random fabric material
     _apply_fabric_material(cloth_obj)
     return cloth_obj
+
+
+# ── Procedural tight clothing presets ────────────────────────────────────────
+# SMPL-X mesh: origin at pelvis (Z=0), head ~+0.85m, feet ~-0.85m.
+# Select vertices by Z-range to define garment regions.
+CLOTHING_PRESETS = [
+    {   # T-shirt + shorts
+        "name": "tshirt_shorts",
+        "pieces": [
+            {"z_min": -0.05, "z_max": 0.45, "offset": 0.004},   # torso (t-shirt)
+            {"z_min": -0.50, "z_max": -0.05, "offset": 0.003},  # shorts
+        ],
+    },
+    {   # Tank top + leggings
+        "name": "tank_leggings",
+        "pieces": [
+            {"z_min": 0.10, "z_max": 0.45, "offset": 0.003},   # tank top
+            {"z_min": -0.80, "z_max": -0.05, "offset": 0.003}, # leggings
+        ],
+    },
+    {   # Full bodysuit
+        "name": "bodysuit",
+        "pieces": [
+            {"z_min": -0.70, "z_max": 0.45, "offset": 0.004},  # neck to knees
+        ],
+    },
+    {   # Sports bra + shorts (female-ish)
+        "name": "sportsbra_shorts",
+        "pieces": [
+            {"z_min": 0.20, "z_max": 0.40, "offset": 0.004},   # sports bra
+            {"z_min": -0.40, "z_max": -0.05, "offset": 0.003},  # shorts
+        ],
+    },
+    {   # Bare (no clothing)
+        "name": "bare",
+        "pieces": [],
+    },
+]
+
+
+def add_procedural_clothing(body_obj, rng: random.Random) -> list:
+    """Generate tight clothing by duplicating body mesh regions and inflating.
+
+    Selects vertices by Z-height, duplicates them as a separate object,
+    pushes along normals for a 3-5mm offset, and applies a fabric material.
+    """
+    preset = rng.choice(CLOTHING_PRESETS)
+    if not preset["pieces"]:
+        return []  # bare body
+
+    import bmesh
+
+    cloth_objects = []
+    for piece in preset["pieces"]:
+        z_min, z_max, offset = piece["z_min"], piece["z_max"], piece["offset"]
+
+        # Duplicate body mesh
+        cloth_data = body_obj.data.copy()
+        cloth_obj = bpy.data.objects.new(f"cloth_{preset['name']}", cloth_data)
+        bpy.context.collection.objects.link(cloth_obj)
+        cloth_obj.matrix_world = body_obj.matrix_world.copy()
+
+        # Select faces in Z-range and delete the rest
+        bm = bmesh.new()
+        bm.from_mesh(cloth_data)
+        bm.verts.ensure_lookup_table()
+
+        # Mark vertices outside the Z-range
+        verts_outside = set()
+        for v in bm.verts:
+            if v.co.z < z_min or v.co.z > z_max:
+                verts_outside.add(v.index)
+
+        # Delete faces where ALL vertices are outside the range
+        faces_to_delete = [
+            f for f in bm.faces
+            if all(v.index in verts_outside for v in f.verts)
+        ]
+        bmesh.ops.delete(bm, geom=faces_to_delete, context="FACES")
+
+        # Push remaining vertices outward along normals
+        bm.verts.ensure_lookup_table()
+        for v in bm.verts:
+            v.co += v.normal * offset
+
+        bm.to_mesh(cloth_data)
+        bm.free()
+
+        # Apply random fabric material
+        _apply_fabric_material(cloth_obj)
+        cloth_objects.append(cloth_obj)
+
+    return cloth_objects
 
 
 def _apply_fabric_material(obj) -> None:
@@ -484,14 +579,14 @@ def render_sample(
         tex_path = str(assets_dir / "textures" / SKIN_TEXTURE_PATTERN.format(tex_idx))
         apply_skin_material(body_obj, tex_path)
 
-        # Clothing
-        use_tight = rng.random() < TIGHT_PROB
-        if use_tight:
-            cloth_file = rng.choice(TIGHT_CLOTHING_OBJS)
+        # Clothing — use OBJ files if available, otherwise procedural
+        cloth_dir = assets_dir / "clothing"
+        cloth_files = list(cloth_dir.glob("*.obj")) if cloth_dir.exists() else []
+        if cloth_files:
+            cloth_path = str(rng.choice(cloth_files))
+            import_clothing(cloth_path, body_obj)
         else:
-            cloth_file = rng.choice(BAGGY_CLOTHING_OBJS)
-        cloth_path = assets_dir / "clothing" / cloth_file
-        import_clothing(str(cloth_path), body_obj)
+            add_procedural_clothing(body_obj, rng)
 
         # Camera
         cam_obj, cam_params = setup_camera(view, rng)
