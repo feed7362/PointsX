@@ -180,6 +180,32 @@ def generate_body_samples(
     return samples
 
 
+_SMPLX_MODEL_CACHE: dict[str, object] = {}
+
+
+def _get_smplx_model(sex: str, model_dir: Path) -> object:
+    """Load an SMPL-X model, caching by gender to avoid repeated disk I/O."""
+    if sex not in _SMPLX_MODEL_CACHE:
+        import smplx
+
+        model_path = model_dir / f"SMPLX_{sex.upper()}.npz"
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"SMPL-X model not found: {model_path}\n"
+                "Download from https://smpl-x.is.tue.mpg.de/ and place in models/smplx/"
+            )
+        _SMPLX_MODEL_CACHE[sex] = smplx.create(
+            str(model_path),
+            model_type="smplx",
+            gender=sex,
+            use_face_contour=False,
+            num_betas=10,
+            num_expression_coeffs=10,
+            ext="npz",
+        )
+    return _SMPLX_MODEL_CACHE[sex]
+
+
 def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, np.ndarray, float]:
     """Run SMPL-X forward pass for one body sample.
 
@@ -188,26 +214,7 @@ def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, 
         joints:   (127, 3)  float32  (SMPL-X full joints)
         height_m: actual height in meters computed from mesh
     """
-    import smplx
-
-    model_path = model_dir / f"SMPLX_{sample.sex.upper()}.npz"
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"SMPL-X model not found: {model_path}\n"
-            "Download from https://smpl-x.is.tue.mpg.de/ and place in models/smplx/"
-        )
-
-    # Pass the .npz file path directly to bypass smplx's directory resolution
-    # (the library double-appends "smplx/" when given a directory).
-    model = smplx.create(
-        str(model_path),
-        model_type="smplx",
-        gender=sample.sex,
-        use_face_contour=False,
-        num_betas=10,
-        num_expression_coeffs=10,
-        ext="npz",
-    )
+    model = _get_smplx_model(sample.sex, model_dir)
 
     betas = torch.tensor([sample.betas], dtype=torch.float32)
     body_pose = torch.tensor([sample.body_pose], dtype=torch.float32)

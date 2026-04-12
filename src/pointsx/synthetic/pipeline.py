@@ -95,9 +95,12 @@ def run_smplx_phase(
     # Load faces once (same for all SMPL-X models)
     faces = _load_smplx_faces(model_dir)
 
+    from pointsx.synthetic.landmarks import extract_landmarks  # noqa: PLC0415
+    from tqdm import tqdm
+
     manifest_entries = []
 
-    for i, sample in enumerate(samples):
+    for sample in tqdm(samples, desc="SMPL-X forward pass", unit="body"):
         try:
             vertices, joints, height_m = run_smplx_forward(sample, model_dir)
         except Exception as exc:
@@ -112,7 +115,6 @@ def run_smplx_phase(
         save_body_obj(vertices, faces, obj_path)
 
         # Extract landmarks
-        from pointsx.synthetic.landmarks import extract_landmarks  # noqa: PLC0415
         landmarks_3d = extract_landmarks(vertices, joints)
 
         # Compute measurements
@@ -149,9 +151,6 @@ def run_smplx_phase(
             "skin_texture_idx":    skin_idx,
             "seed":                sample.body_id * 7,
         })
-
-        if (i + 1) % 50 == 0:
-            logger.info("SMPL-X phase: %d / %d bodies processed", i + 1, len(samples))
 
     logger.info("SMPL-X phase complete: %d bodies saved", len(manifest_entries))
     return manifest_entries
