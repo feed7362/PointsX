@@ -53,7 +53,7 @@ path: {path}
 train: train/images
 val: val/images
 
-kpt_shape: [25, 3]
+kpt_shape: [26, 3]
 flip_idx: {flip_idx}
 
 names:
