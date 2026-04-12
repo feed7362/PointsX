@@ -49,57 +49,41 @@ class LandmarkDef:
 
 
 LANDMARKS: list[LandmarkDef] = [
-    # ── Head ──────────────────────────────────────────────────────────────
-    LandmarkDef(411, LMType.VERTEX, "head_top", "Тім'я / Top of head"),
-    LandmarkDef(8152, LMType.VERTEX, "chin", "Підборіддя / Chin"),
-
-    # ── Neck / upper back ──────────────────────────────────────────────────
+    LandmarkDef(15, LMType.JOINT, "head_top", "Голова (суглоб) / Head"),
+    LandmarkDef(12, LMType.JOINT, "chin", "Шия-перед / Front Neck"),
     LandmarkDef(12, LMType.JOINT, "back_of_neck", "Задня частина шиї / Back of neck"),
-
-    # ── Shoulders ─────────────────────────────────────────────────────────
     LandmarkDef(16, LMType.JOINT, "left_shoulder", "Ліве плече / Left shoulder"),
     LandmarkDef(17, LMType.JOINT, "right_shoulder", "Праве плече / Right shoulder"),
 
-    # ── Chest ─────────────────────────────────────────────────────────────
-    LandmarkDef(3050, LMType.VERTEX, "left_nipple", "Лівий сосок / Left nipple"),
-    LandmarkDef(6545, LMType.VERTEX, "right_nipple", "Правий сосок / Right nipple"),
+    LandmarkDef(13, LMType.JOINT, "left_nipple", "Ліва грудь (Collar)"),
+    LandmarkDef(14, LMType.JOINT, "right_nipple", "Права грудь (Collar)"),
 
-    # ── Armpits ───────────────────────────────────────────────────────────
-    LandmarkDef(1850, LMType.VERTEX, "left_armpit", "Ліва пахва / Left armpit"),
-    LandmarkDef(5250, LMType.VERTEX, "right_armpit", "Права пахва / Right armpit"),
+    LandmarkDef(16, LMType.JOINT, "left_armpit", "Ліва пахва (Shoulder anchor)"),
+    LandmarkDef(17, LMType.JOINT, "right_armpit", "Права пахва (Shoulder anchor)"),
 
-    # ── Back / torso ──────────────────────────────────────────────────────
-    LandmarkDef(2943, LMType.VERTEX, "mid_back", "Середина спини / Mid back"),
-    LandmarkDef(3500, LMType.VERTEX, "navel", "Пупок / Navel / Abdomen"),
+    LandmarkDef(9, LMType.JOINT, "mid_back", "Середина спини (spine3)"),
+    LandmarkDef(3, LMType.JOINT, "navel", "Пупок / Талія (spine1)"),
 
-    # ── Elbows ────────────────────────────────────────────────────────────
     LandmarkDef(18, LMType.JOINT, "left_elbow", "Лівий лікоть / Left elbow"),
     LandmarkDef(19, LMType.JOINT, "right_elbow", "Правий лікоть / Right elbow"),
 
-    # ── Waist ─────────────────────────────────────────────────────────────
-    LandmarkDef(702, LMType.VERTEX, "left_waist", "Ліва талія / Left waist"),
-    LandmarkDef(4098, LMType.VERTEX, "right_waist", "Права талія / Right waist"),
+    LandmarkDef(3, LMType.JOINT, "left_waist", "Ліва талія (spine1 anchor)"),
+    LandmarkDef(3, LMType.JOINT, "right_waist", "Права талія (spine1 anchor)"),
 
-    # ── Lower back ────────────────────────────────────────────────────────
-    LandmarkDef(3020, LMType.VERTEX, "lower_back", "Крижі / Lower back / Sacrum"),
+    LandmarkDef(0, LMType.JOINT, "lower_back", "Крижі (pelvis)"),
 
-    # ── Hips ──────────────────────────────────────────────────────────────
-    LandmarkDef(1380, LMType.VERTEX, "left_outer_hip", "Ліве стегно зовні / Left outer hip"),
-    LandmarkDef(4821, LMType.VERTEX, "right_outer_hip", "Праве стегно зовні / Right outer hip"),
+    LandmarkDef(1, LMType.JOINT, "left_outer_hip", "Ліве стегно (L_hip)"),
+    LandmarkDef(2, LMType.JOINT, "right_outer_hip", "Праве стегно (R_hip)"),
 
-    # ── Crotch / glute ────────────────────────────────────────────────────
-    LandmarkDef(1210, LMType.VERTEX, "crotch", "Пах / Crotch"),
-    LandmarkDef(3145, LMType.VERTEX, "glute", "Сідниці / Glute / Buttock"),
+    LandmarkDef(0, LMType.JOINT, "crotch", "Пах (pelvis)"),
+    LandmarkDef(0, LMType.JOINT, "glute", "Сідниці (pelvis anchor)"),
 
-    # ── Wrists ────────────────────────────────────────────────────────────
     LandmarkDef(20, LMType.JOINT, "left_wrist", "Ліве зап'ясток / Left wrist"),
     LandmarkDef(21, LMType.JOINT, "right_wrist", "Праве зап'ясток / Right wrist"),
 
-    # ── Knees ─────────────────────────────────────────────────────────────
     LandmarkDef(4, LMType.JOINT, "left_knee", "Ліве коліно / Left knee"),
     LandmarkDef(5, LMType.JOINT, "right_knee", "Праве коліно / Right knee"),
 
-    # ── Ankles ────────────────────────────────────────────────────────────
     LandmarkDef(7, LMType.JOINT, "left_ankle", "Ліва щиколотка / Left ankle"),
     LandmarkDef(8, LMType.JOINT, "right_ankle", "Права щиколотка / Right ankle"),
 ]
@@ -144,14 +128,14 @@ assert len(FLIP_IDX) == NUM_LANDMARKS
 
 
 def extract_landmarks(vertices, joints) -> list:
-    """Extract 3D positions of all 25 landmarks from SMPL-X output.
+    """Extract 3D positions of all 26 landmarks from SMPL-X output.
 
     Args:
         vertices: numpy array (10475, 3) or torch tensor
         joints:   numpy array (N, 3) or torch tensor, N >= 22
 
     Returns:
-        List of 25 numpy arrays shape (3,) — world coordinates [x, y, z]
+        List of 26 numpy arrays shape (3,) — world coordinates [x, y, z]
     """
     import numpy as np
 

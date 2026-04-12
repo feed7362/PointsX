@@ -233,9 +233,7 @@ def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, 
 
     vertices = output.vertices[0].numpy()  # (10475, 3)
     joints = output.joints[0].numpy()  # (127, 3)
-    head_y = vertices[411, 1]  # vertex 411 = head_top
-    ankle_y = (vertices[6852, 1] + vertices[3438, 1]) / 2
-    raw_height_m = abs(head_y - ankle_y)
+    raw_height_m = float(np.max(vertices[:, 1]) - np.min(vertices[:, 1]))
 
     target_height_m = sample.target_height_cm / 100.0
 
