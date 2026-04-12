@@ -472,15 +472,15 @@ def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def extract_z_buffer(render_path: str) -> "np.ndarray | None":
-    """Extract Z-pass depth buffer from the last render.
-
-    Requires the Z-pass to be enabled (done in setup_render_settings).
-    Returns a (H, W) float32 array of camera-space depths, or None on failure.
-    """
+    """Extract Z-pass depth buffer, load it into Numpy, and delete the EXR file."""
     try:
         import numpy as np
+        import os
 
-        z_path = Path(render_path).with_suffix("") / "depth0001.exr"
+        rp = Path(render_path)
+        # Шлях, який генерує CompositorNodeOutputFile: s00001_front_depth_0001.exr
+        z_path = rp.parent / f"{rp.stem}_depth_0001.exr"
+
         if not z_path.exists():
             return None
 
@@ -488,9 +488,16 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
         pixels = np.array(img.pixels[:]).reshape(IMG_H, IMG_W, 4)
         # Z-pass is in the first channel; Blender stores bottom-up so flip
         z = pixels[::-1, :, 0].copy().astype(np.float32)
+
+        # Очищуємо пам'ять Blender
         bpy.data.images.remove(img)
+
+        # КРИТИЧНО ВАЖЛИВО: Видаляємо файл, щоб не забити диск
+        os.remove(z_path)
+
         return z
-    except Exception:
+    except Exception as e:
+        print(f"Z-buffer error: {e}")
         return None
 
 
@@ -595,7 +602,7 @@ def render_sample(
         split = "train" if rng.random() > 0.20 else "val"
         sample_id = f"s{manifest_entry['body_id']:05d}_{view}"
 
-        img_path   = out_dir / split / "images" / f"{sample_id}.jpg"
+        img_path = out_dir / split / "images" / f"{sample_id}.jpg"
         label_path = out_dir / split / "labels" / f"{sample_id}.txt"
         img_path.parent.mkdir(parents=True, exist_ok=True)
         label_path.parent.mkdir(parents=True, exist_ok=True)
@@ -603,6 +610,25 @@ def render_sample(
         scene = bpy.context.scene
         scene.render.filepath = str(img_path)
 
+        # ФІКС: Змушуємо Blender зберігати мапу глибини через Compositor
+        scene.use_nodes = True
+        tree = scene.node_tree
+        tree.nodes.clear()
+
+        rlayers = tree.nodes.new("CompositorNodeRLayers")
+        composite = tree.nodes.new("CompositorNodeComposite")
+        tree.links.new(rlayers.outputs["Image"], composite.inputs["Image"])
+
+        if engine == "CYCLES":
+            file_out = tree.nodes.new("CompositorNodeOutputFile")
+            file_out.format.file_format = "OPEN_EXR"
+            file_out.format.color_depth = "32"
+            file_out.base_path = str(img_path.parent)
+            # Blender автоматично додасть номер кадру (0001) до цього імені
+            file_out.file_slots[0].path = f"{img_path.stem}_depth_"
+            tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+
+        # Тепер рендер збереже і JPG, і EXR
         bpy.ops.render.render(write_still=True)
 
         # ── Annotate ────────────────────────────────────────────────────
