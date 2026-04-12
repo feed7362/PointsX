@@ -552,8 +552,9 @@ def main_blender() -> None:
     parser.add_argument("--assets",      required=True, help="Path to assets directory")
     parser.add_argument("--gpu",         action="store_true", default=False,
                         help="Use GPU (CUDA) rendering")
-    parser.add_argument("--cycles",      action="store_true", default=False,
-                        help="Use Cycles instead of EEVEE (slower, photorealistic)")
+    parser.add_argument("--engine",      type=str, default=RENDER_ENGINE,
+                        choices=["CYCLES", "BLENDER_EEVEE"],
+                        help="Render engine (default: %(default)s)")
     parser.add_argument("--start-idx",   type=int, default=0,
                         help="First manifest entry index to process")
     parser.add_argument("--end-idx",     type=int, default=None,
@@ -563,7 +564,7 @@ def main_blender() -> None:
     manifest_path = Path(args.manifest)
     out_dir       = Path(args.out_dir)
     assets_dir    = Path(args.assets)
-    engine        = "CYCLES" if args.cycles else RENDER_ENGINE
+    engine        = args.engine
 
     manifest = json.loads(manifest_path.read_text())
     entries = manifest[args.start_idx: args.end_idx]
