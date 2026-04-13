@@ -445,12 +445,9 @@ def render_sample(
         dict mapping view_name → {image_path, label_path, camera_params}
     """
     from pointsx.synthetic.annotator import (  # noqa: PLC0415
-        project_landmarks_to_2d,
         classify_visibility,
         build_yolo_label,
         write_yolo_label,
-        blender_camera_matrix,
-        build_view_matrix,
     )
     import numpy as np
     import json as _json
@@ -613,18 +610,34 @@ def render_sample(
         bpy.ops.render.render(write_still=True)
 
         # ── Annotate ────────────────────────────────────────────────────
-        K = blender_camera_matrix(
-            cam_params["focal_length_mm"],
-            cam_params["sensor_width_mm"],
-            IMG_W, IMG_H,
-        )
-        V = build_view_matrix(cam_params["location"], cam_params["rotation"])
+        import bpy_extras
+        import mathutils
 
-        coords_px, depth = project_landmarks_to_2d(
-            landmarks_3d, K, V, IMG_W, IMG_H
-        )
+        # 1. Піднімаємо точки з підлоги (SMPL -> Blender)
+        landmarks_blender = []
+        for pt in landmarks_3d:
+            blender_pt = [pt[0], -pt[2], pt[1]]
+            landmarks_blender.append(blender_pt)
 
-        # Z-buffer occlusion: only available with Cycles (EEVEE skips it)
+        coords_px_list = []
+        depth_list = []
+
+        scene = bpy.context.scene
+        for pt in landmarks_blender:
+            vec = mathutils.Vector(pt)
+
+            proj = bpy_extras.object_utils.world_to_camera_view(scene, cam_obj, vec)
+
+            px = proj.x * IMG_W
+            py = (1.0 - proj.y) * IMG_H
+
+            coords_px_list.append([px, py])
+            depth_list.append(proj.z)
+
+        coords_px = np.array(coords_px_list, dtype=np.float32)
+        depth = np.array(depth_list, dtype=np.float32)
+
+        # Z-buffer occlusion
         depth_buf = extract_z_buffer(str(img_path))
         visibility = classify_visibility(coords_px, depth, depth_buf, IMG_W, IMG_H)
 
