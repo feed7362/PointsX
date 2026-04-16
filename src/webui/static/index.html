@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PointsX — мірки (mock)</title>
+    <link rel="stylesheet" href="/static/styles.css?v=hints-big1" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>PointsX</h1>
+      <p class="sub">
+        Тестовий інтерфейс: дві фотографії, зріст, стать → mock-результат з сервера. Поза перевіряється в браузері (MediaPipe).
+        <a href="/static/frame-editor.html">Редактор рамки</a>.
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="card references" aria-labelledby="ref-heading" id="section-references">
+        <h2 id="ref-heading">Приклади правильної пози</h2>
+        <p class="ref-intro">
+          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті (руки злегка відведені на ~15–20° від корпусу), між ногами видно пах — не перекривайте пахвинну зону руками.
+          <strong>Профіль:</strong> стоїте боком; руки <strong>не вздовж тіла</strong> — або витягнуті вперед під ~45°, або закладені за спину, щоб не закривати талію й груди. Перевіряється кут <strong>правої</strong> руки (плече–лікоть); лівий лікоть у кадрі не обов’язковий.
+          Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
+        </p>
+        <div class="ref-grid">
+          <figure class="ref-figure">
+            <figcaption>Анфас (A-поза)</figcaption>
+            <div class="ref-svg-wrap" aria-hidden="true">
+              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
+                <polygon
+                  id="ref-poly-front"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  points="50,0.8 56,2.4 58,6.4 57,12 53.5,15.2 55,18.4 66,20.8 73,24.8 81,30.4 88,36 93.5,41.6 96,46.4 94,44.8 87.5,40 80.5,35.2 74,30.4 67,26.4 62,32 59,44.8 56.5,59.2 60,68.8 62,75.2 62.5,86.4 62,99.2 62,112 61.5,124.8 61,136.8 61,145.6 62,152 64,156 62,158.4 57,158.4 56,153.6 55.5,145.6 55.5,136.8 56,124.8 56.5,112 56.5,99.2 56,86.4 54.5,75.2 50,72 45.5,75.2 44,86.4 43.5,99.2 43.5,112 44,124.8 44.5,136.8 44.5,145.6 44,153.6 43,158.4 38,158.4 36,156 39,152 39,145.6 39,136.8 38.5,124.8 38,112 38,99.2 37.5,86.4 37.5,75.2 38,68.8 40,59.2 43.5,59.2 41,44.8 38,32 33,26.4 26,30.4 19.5,35.2 12.5,40 6,44.8 4,46.4 6.5,41.6 12,36 19,30.4 27,24.8 34,20.8 45,18.4 46.5,15.2 43,12 42,6.4 44,2.4"
+                />
+              </svg>
+            </div>
+          </figure>
+          <figure class="ref-figure">
+            <figcaption>Профіль, рука вперед ~45°</figcaption>
+            <div class="ref-svg-wrap" aria-hidden="true">
+              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
+                <polygon
+                  id="ref-poly-profile"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  points="47,0.8 51,0.304 55,0.304 58,1.296 61,2.896 63,4.8 64.5,7.2 65,9.296 64.5,10.896 63,12.208 61,13.104 58,14.096 55,15.2 54,16.304 56,18.4 60,21.6 64,25.6 66,29.6 65,35.2 63,42.4 61,49.6 59,56.8 59,62.4 60,67.2 59.5,73.6 59,80 58.5,86.4 58,92.8 57.5,99.2 57,105.6 56,115.2 55,126.4 54.5,136 55,144 56.5,151.2 58.5,155.2 58,158.4 54,158.4 50,158.4 46.5,155.2 45,151.2 44,144 44.5,136 45,126.4 45,115.2 44,105.6 43.5,99.2 44,92.8 44.5,86.4 45,80 46,73.6 46.5,67.2 47,62.4 46,56.8 43,53.6 39,52.8 36,49.6 36,44 37,38.4 39,32.8 40,27.2 42,22.4 43,18.4 43,15.696 42,12.8 40,9.6 39,6.4 40,3.504 43,1.6"
+                />
+                <polyline
+                  id="ref-poly-arm"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  stroke-dasharray="4 3"
+                  points="65,28 93,47.2"
+                />
+              </svg>
+            </div>
+          </figure>
+        </div>
+        <button type="button" class="btn primary wide" id="btn-to-capture">Продовжити до зйомки</button>
+      </section>
+
+      <section class="card" aria-labelledby="params-heading">
+        <h2 id="params-heading">Параметри</h2>
+        <div class="field">
+          <label for="height">Зріст (см)</label>
+          <input id="height" name="height" type="number" min="100" max="250" value="175" required />
+        </div>
+        <div class="field">
+          <label for="sex">Стать</label>
+          <select id="sex" name="sex" required>
+            <option value="male">Чоловік</option>
+            <option value="female">Жінка</option>
+            <option value="other">Інше</option>
+          </select>
+        </div>
+        <p class="hint">
+          Камера: лише <code>localhost</code> або HTTPS. Перегляд дзеркальний. Пунктир — зона голови; суцільна рамка — від маківки до обох стоп (дві ноги окремо).
+        </p>
+      </section>
+
+      <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
+        <h2 id="capture-heading">Зйомка</h2>
+        <p id="step-label" class="step-label">Крок 1 з 2: анфас</p>
+        <div class="preview-wrap mirror">
+          <video id="video" playsinline autoplay muted></video>
+          <canvas id="overlay" class="overlay" aria-hidden="true"></canvas>
+        </div>
+        <div class="actions">
+          <button type="button" id="btn-start" class="btn primary">Увімкнути камеру</button>
+          <button type="button" id="btn-capture" class="btn" disabled>Зробити фото</button>
+          <button type="button" id="btn-capture-timer" class="btn" disabled>Фото через 10 с</button>
+          <button type="button" id="btn-stop" class="btn ghost" disabled>Зупинити камеру</button>
+        </div>
+        <p id="pose-status" class="pose-status" role="status" aria-live="polite"></p>
+        <p id="status" class="status" role="status"></p>
+        <div class="thumbs">
+          <figure>
+            <figcaption>Анфас</figcaption>
+            <img id="thumb-front" alt="Попередній перегляд анфас" width="112" height="84" hidden />
+          </figure>
+          <figure>
+            <figcaption>Профіль</figcaption>
+            <img id="thumb-side" alt="Попередній перегляд профіль" width="112" height="84" hidden />
+          </figure>
+        </div>
+        <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки (mock)</button>
+      </section>
+
+      <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
+        <h2 id="results-heading">Результат</h2>
+
+        <div class="tailoring-intro" id="tailoring-intro" hidden></div>
+
+        <div class="garment-strip-wrap" id="garment-strip-wrap" hidden>
+          <p class="tailoring-hint" id="garment-strip-label">Тип одягу для пошиву</p>
+          <div class="garment-strip" id="garment-strip" role="radiogroup" aria-labelledby="garment-strip-label"></div>
+        </div>
+
+        <div class="tailoring-panels" id="tailoring-panels" hidden>
+          <div class="tailoring-col">
+            <h3 class="tailoring-sub">Мірки для обраного виробу</h3>
+            <table class="measures measures-compact" id="tailoring-measures-table">
+              <thead>
+                <tr>
+                  <th>Показник</th>
+                  <th>см</th>
+                  <th>Дост.</th>
+                </tr>
+              </thead>
+              <tbody id="tailoring-measures-body"></tbody>
+            </table>
+          </div>
+          <div class="tailoring-col">
+            <h3 class="tailoring-sub">Розмірні сітки (довідково)</h3>
+            <div class="size-tabs" role="tablist" aria-label="Регіональні сітки">
+              <button type="button" class="size-tab" role="tab" id="tab-ua" aria-selected="true" aria-controls="panel-ua" tabindex="0">Україна (орієнт.)</button>
+              <button type="button" class="size-tab" role="tab" id="tab-eu" aria-selected="false" aria-controls="panel-eu" tabindex="-1">Європа (орієнт.)</button>
+              <button type="button" class="size-tab" role="tab" id="tab-us" aria-selected="false" aria-controls="panel-us" tabindex="-1">США (орієнт.)</button>
+            </div>
+            <div id="panel-ua" class="size-panel" role="tabpanel" aria-labelledby="tab-ua"></div>
+            <div id="panel-eu" class="size-panel" role="tabpanel" aria-labelledby="tab-eu" hidden></div>
+            <div id="panel-us" class="size-panel" role="tabpanel" aria-labelledby="tab-us" hidden></div>
+          </div>
+        </div>
+
+        <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden>
+          Розміри на вкладках — орієнтовні, за спрощеними таблицями; вони не замінюють примірку, лекала чи стандарти бренду (ДСТУ/ГОСТ/EU/USA не застосовуються автоматично). Типи одягу відфільтровані за обраною статтю (для «інше» показано весь каталог).
+        </p>
+
+        <details class="all-measures-details" id="all-measures-details">
+          <summary>Усі мірки (повна таблиця)</summary>
+          <table class="measures" id="results-table">
+            <thead>
+              <tr>
+                <th>Показник</th>
+                <th>Значення (см)</th>
+                <th>Достовірність</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </details>
+      </section>
+    </main>
+
+    <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
+    <script type="module" src="/static/app.js?v=ankle-fit1"></script>
+  </body>
+</html>

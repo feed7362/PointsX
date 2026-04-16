@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PointsX — редактор рамки</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        background: #0f1218;
+        color: #e8ecf4;
+      }
+      body {
+        margin: 0;
+        padding: 1rem;
+        max-width: 52rem;
+      }
+      a {
+        color: #8ab4ff;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+        margin: 0.75rem 0;
+      }
+      .toolbar button,
+      .toolbar label.file-btn {
+        padding: 0.45rem 0.85rem;
+        border-radius: 0.35rem;
+        border: 1px solid #3d4659;
+        background: #1a2130;
+        color: inherit;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+      .toolbar button.primary {
+        background: #2f4a8f;
+        border-color: #5b8cff;
+      }
+      .toolbar label.file-btn input {
+        display: none;
+      }
+      #cv-wrap {
+        margin-top: 0.75rem;
+        border: 1px solid #2a3140;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        display: inline-block;
+        background: #080a0e;
+      }
+      canvas {
+        display: block;
+        cursor: crosshair;
+        max-width: 100%;
+        height: auto;
+      }
+      fieldset {
+        border: 1px solid #2a3140;
+        border-radius: 0.35rem;
+        margin: 1rem 0;
+        padding: 0.75rem 1rem;
+      }
+      legend {
+        padding: 0 0.35rem;
+        font-size: 0.85rem;
+        color: #9aa3b5;
+      }
+      .gf-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+        gap: 0.5rem 1rem;
+        font-size: 0.82rem;
+      }
+      .gf-grid label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+      .gf-grid input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.25rem 0.35rem;
+        border-radius: 0.25rem;
+        border: 1px solid #3d4659;
+        background: #141a26;
+        color: inherit;
+      }
+      .hint {
+        font-size: 0.82rem;
+        color: #9aa3b5;
+        margin-top: 0.5rem;
+      }
+      #msg {
+        min-height: 1.25rem;
+        font-size: 0.85rem;
+        color: #7dd87d;
+      }
+      #msg.err {
+        color: #ff8a8a;
+      }
+    </style>
+  </head>
+  <body>
+    <p><a href="/">← До зйомки</a></p>
+    <h1>Редактор рамки (силует)</h1>
+    <p class="hint">
+      Тягніть вузли полігона. <strong>Shift+клік</strong> по ребру контуру — додати точку між сусідами. Клік по точці виділяє її; кнопка нижче або <kbd>Delete</kbd>/<kbd>Backspace</kbd> (коли фокус не в полі вводу) — видалити (мінімум 3 точки на анфас/профіль, 2 на лінії руки).
+      «Зберегти в браузері» — <code>localStorage</code> для зйомки; експорт збігається з ім’ям файлу в репо: <code>guide-geometry.json</code>.
+    </p>
+    <div class="row">
+      <label>Крок <input id="step1" type="radio" name="step" value="1" checked /> анфас</label>
+      <label><input id="step2" type="radio" name="step" value="2" /> профіль</label>
+    </div>
+    <div class="row">
+      <label>Зріст для прев’ю рамки (см) <input id="height-preview" type="number" min="100" max="250" value="175" /></label>
+    </div>
+    <div id="cv-wrap">
+      <canvas id="cv" width="360" height="480" title="Клік — виділити точку; Shift+клік на ребрі — додати точку"></canvas>
+    </div>
+    <p class="hint">Пунктир на профілі — окремі точки руки; їх теж можна зсувати.</p>
+    <div class="toolbar row">
+      <button type="button" id="btn-del-point">Видалити вибрану точку</button>
+      <button type="button" class="primary" id="btn-save">Зберегти в браузері</button>
+      <button type="button" id="btn-reset">Скинути до типових</button>
+      <button type="button" id="btn-export">Експорт JSON</button>
+      <label class="file-btn"> Імпорт JSON <input id="file-import" type="file" accept="application/json,.json" /> </label>
+    </div>
+    <div id="msg" aria-live="polite"></div>
+
+    <fieldset>
+      <legend>Якір голови (ніс → зона)</legend>
+      <div class="gf-grid">
+        <label>Анфас X <input id="ha-fx" type="number" step="0.001" /></label>
+        <label>Анфас Y <input id="ha-fy" type="number" step="0.001" /></label>
+        <label>Профіль X <input id="ha-px" type="number" step="0.001" /></label>
+        <label>Профіль Y <input id="ha-py" type="number" step="0.001" /></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Якір щиколотки (низ силуету)</legend>
+      <div class="gf-grid">
+        <label>Анфас X <input id="fa-fx" type="number" step="0.001" /></label>
+        <label>Анфас Y <input id="fa-fy" type="number" step="0.001" /></label>
+        <label>Профіль X <input id="fa-px" type="number" step="0.001" /></label>
+        <label>Профіль Y <input id="fa-py" type="number" step="0.001" /></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Параметри рамки (guideFrame)</legend>
+      <div class="gf-grid" id="gf-fields"></div>
+    </fieldset>
+
+    <script type="module" src="/static/frame-editor.js?v=ankle-fit1"></script>
+  </body>
+</html>
