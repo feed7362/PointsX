@@ -93,6 +93,28 @@ assert NUM_LANDMARKS == 26, f"Expected 26 landmarks, got {NUM_LANDMARKS}"
 
 LANDMARK_NAMES = [lm.name for lm in LANDMARKS]
 
+# 16-keypoint order used by the runtime/inference stack.
+POINTSX16_NAMES = [
+    "right_ankle",
+    "right_knee",
+    "right_outer_hip",
+    "left_outer_hip",
+    "left_knee",
+    "left_ankle",
+    "lower_back",
+    "mid_back",
+    "back_of_neck",
+    "head_top",
+    "right_wrist",
+    "right_elbow",
+    "right_shoulder",
+    "left_shoulder",
+    "left_elbow",
+    "left_wrist",
+]
+POINTSX16_FLIP_IDX = [5, 4, 3, 2, 1, 0, 6, 7, 8, 9, 15, 14, 13, 12, 11, 10]
+POINTSX16_INDEX = {name: LANDMARK_NAMES.index(name) for name in POINTSX16_NAMES}
+
 # Left-right flip index map for YOLO data augmentation
 # Maps each landmark index to its mirror-image counterpart
 FLIP_IDX = [
@@ -155,3 +177,13 @@ def extract_landmarks(vertices, joints) -> list:
             coords.append(pts.mean(axis=0))
 
     return coords
+
+
+def select_pointsx16(landmarks_3d_by_name: dict[str, list[float] | tuple[float, float, float]]) -> list:
+    """Select and order synthetic landmarks to match the 16-point runtime skeleton."""
+    selected = []
+    for name in POINTSX16_NAMES:
+        if name not in landmarks_3d_by_name:
+            raise KeyError(f"Missing required landmark for 16-point export: {name}")
+        selected.append(landmarks_3d_by_name[name])
+    return selected

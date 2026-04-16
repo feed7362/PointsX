@@ -39,7 +39,7 @@ from pointsx.synthetic.body_generator import (
     BodySample,
     NumpyEncoder,
 )
-from pointsx.synthetic.landmarks import LANDMARK_NAMES, FLIP_IDX
+from pointsx.synthetic.landmarks import POINTSX16_FLIP_IDX
 from pointsx.synthetic.measurements_gt import compute_measurements, sanity_check
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ path: {path}
 train: train/images
 val: val/images
 
-kpt_shape: [26, 3]
+kpt_shape: [16, 3]
 flip_idx: {flip_idx}
 
 names:
@@ -62,7 +62,7 @@ names:
 
 
 def write_dataset_yaml(out_dir: Path) -> Path:
-    flip_str = "[" + ",".join(str(i) for i in FLIP_IDX) + "]"
+    flip_str = "[" + ",".join(str(i) for i in POINTSX16_FLIP_IDX) + "]"
     yaml_path = out_dir / "dataset.yaml"
     yaml_path.write_text(
         DATASET_YAML_TEMPLATE.format(path=str(out_dir), flip_idx=flip_str)

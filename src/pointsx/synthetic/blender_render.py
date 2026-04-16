@@ -449,6 +449,7 @@ def render_sample(
         build_yolo_label,
         write_yolo_label,
     )
+    from pointsx.synthetic.landmarks import select_pointsx16  # noqa: PLC0415
     import numpy as np
     import json as _json
 
@@ -456,9 +457,10 @@ def render_sample(
 
     # Load pre-computed landmarks
     landmarks_data = _json.loads(Path(manifest_entry["landmarks_json_path"]).read_text())
+    selected_landmarks = select_pointsx16(landmarks_data["landmarks_3d"])
     landmarks_3d = [
         np.array(v, dtype=np.float32)
-        for v in landmarks_data["landmarks_3d"].values()
+        for v in selected_landmarks
     ]
 
     results = {}

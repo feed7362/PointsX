@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--pose-model", default="models/yolo11n-pose.pt", help="Path to pose model")
     parser.add_argument("--seg-model", default="models/yolo11n-seg.pt", help="Path to segmentation model")
     parser.add_argument("--regression-model", default=None, help="Path to circumference regression model")
+    parser.add_argument("--device", default="auto", help="Inference device: auto, cpu, cuda")
     parser.add_argument(
         "--output", choices=["table", "json", "csv"], default="table",
         help="Output format (default: table)",
@@ -37,6 +38,7 @@ def main():
         pose_model_path=args.pose_model,
         seg_model_path=args.seg_model,
         regression_model_path=args.regression_model,
+        device=args.device,
     )
 
     result = pipeline(args.front, args.side, args.height)
