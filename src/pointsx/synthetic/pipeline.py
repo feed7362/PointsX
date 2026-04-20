@@ -181,6 +181,8 @@ def run_blender_phase(
     blender_exe: str,
     jobs: int = 1,
     use_gpu: bool = False,
+    mode: str = "photo",
+    engine: str | None = None,
 ) -> None:
     import math
     """Chunk the manifest and launch Blender subprocess(es)."""
@@ -210,9 +212,12 @@ def run_blender_phase(
             "--manifest",   str(manifest_path),
             "--out-dir",    str(out_dir),
             "--assets",     str(assets_dir),
+            "--mode",       mode,
             "--start-idx",  str(start),
             "--end-idx",    str(end),
         ]
+        if engine:
+            cmd.extend(["--engine", engine])
         if use_gpu:
             cmd.append("--gpu")
 
@@ -276,6 +281,16 @@ def main() -> None:
                         help="Enable GPU rendering in Blender (Cycles CUDA)")
     parser.add_argument("--smplx-only",  action="store_true",
                         help="Only run SMPL-X phase (skip Blender rendering)")
+    parser.add_argument("--mode", type=str, default="both",
+                        choices=["photo", "mask", "both"],
+                        help="'photo' = pose dataset, 'mask' = seg dataset, "
+                             "'both' (default) = render both in one run (shares SMPL-X phase)")
+    parser.add_argument("--seg-out-dir", default=None,
+                        help="Where to write the seg dataset when --mode is 'both' or 'mask'. "
+                             "If omitted, defaults to <out-dir>-seg (e.g. synthetic-pose → synthetic-pose-seg).")
+    parser.add_argument("--engine", type=str, default=None,
+                        choices=["CYCLES", "BLENDER_EEVEE"],
+                        help="Render engine (default: script default)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -303,23 +318,61 @@ def main() -> None:
         print_summary(out_dir)
         return
 
+    # Resolve seg output dir (used by mask + both modes)
+    if args.seg_out_dir is not None:
+        seg_out_dir = Path(args.seg_out_dir)
+    else:
+        # Default: sibling "<out>-seg" (e.g. synthetic-pose → synthetic-pose-seg)
+        seg_out_dir = out_dir.parent / f"{out_dir.name}-seg"
+
+    modes_to_run: list[tuple[str, Path]] = []
+    if args.mode in ("photo", "both"):
+        modes_to_run.append(("photo", out_dir))
+    if args.mode in ("mask", "both"):
+        modes_to_run.append(("mask", seg_out_dir if args.mode == "both" else out_dir))
+
     # ── Phase 3: Blender rendering ───────────────────────────────────────
-    logger.info("Starting Blender rendering (%d jobs)…", args.jobs)
-    run_blender_phase(
-        manifest,
-        out_dir,
-        assets_dir,
-        blender_exe=args.blender_exe,
-        jobs=args.jobs,
-        use_gpu=args.gpu,
+    for render_mode, render_out in modes_to_run:
+        render_out.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "Starting Blender rendering: mode=%s → %s (%d jobs)",
+            render_mode, render_out, args.jobs,
+        )
+        run_blender_phase(
+            manifest,
+            render_out,
+            assets_dir,
+            blender_exe=args.blender_exe,
+            jobs=args.jobs,
+            use_gpu=args.gpu,
+            mode=render_mode,
+            engine=args.engine,
+        )
+
+    # ── Phase 4: Finalize dataset(s) ─────────────────────────────────────
+    from pointsx.synthetic.masks_to_polygons import (
+        convert_directory,
+        write_dataset_yaml as write_seg_yaml,
     )
 
-    # ── Phase 4: Write dataset.yaml ──────────────────────────────────────
-    write_dataset_yaml(out_dir)
+    for render_mode, render_out in modes_to_run:
+        if render_mode == "mask":
+            logger.info("Converting silhouette masks → YOLO polygon labels (%s)…", render_out)
+            stats = convert_directory(render_out)
+            logger.info(
+                "Polygons written: ok=%d  empty=%d  skipped=%d  total=%d",
+                stats["ok"], stats["empty"], stats["skipped"], stats["total"],
+            )
+            if stats["ok"] > 0:
+                write_seg_yaml(render_out)
+        else:
+            write_dataset_yaml(render_out)
 
-    print("\n=== Summary ===")
-    print_summary(out_dir)
-    print(f"\nDataset YAML: {out_dir / 'dataset.yaml'}")
+    # ── Summary ──────────────────────────────────────────────────────────
+    for render_mode, render_out in modes_to_run:
+        print(f"\n=== Summary ({render_mode}) ===")
+        print_summary(render_out)
+        print(f"Dataset YAML: {render_out / 'dataset.yaml'}")
 
 
 if __name__ == "__main__":
