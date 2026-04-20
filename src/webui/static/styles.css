@@ -173,6 +173,57 @@ body {
   aspect-ratio: 3 / 4;
 }
 
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(4rem, 22vw, 7rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 0.35rem rgba(0, 0, 0, 0.85), 0 0 1.2rem rgba(91, 140, 255, 0.55);
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Лічильник не дзеркалити разом із відео (selfie). */
+.preview-wrap.mirror .countdown-overlay {
+  transform: scaleX(-1);
+}
+
+.capture--review .preview-wrap {
+  display: none;
+}
+
+.capture--review .pose-status {
+  display: none;
+}
+
+.capture--review .capture-live-actions {
+  display: none;
+}
+
+.thumbs-wrap {
+  margin-bottom: 0.5rem;
+}
+
+.capture--review .thumbs img {
+  width: min(92vw, 280px);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  max-height: 50vh;
+}
+
+.retake-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 #video {
   display: block;
   width: 100%;

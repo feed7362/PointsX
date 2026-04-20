@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PointsX — мірки (mock)</title>
-    <link rel="stylesheet" href="/static/styles.css?v=hints-big1" />
+    <link rel="stylesheet" href="/static/styles.css?v=auto-capture1" />
   </head>
   <body>
     <header class="header">
@@ -19,8 +19,8 @@
       <section class="card references" aria-labelledby="ref-heading" id="section-references">
         <h2 id="ref-heading">Приклади правильної пози</h2>
         <p class="ref-intro">
-          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті (руки злегка відведені на ~15–20° від корпусу), між ногами видно пах — не перекривайте пахвинну зону руками.
-          <strong>Профіль:</strong> стоїте боком; руки <strong>не вздовж тіла</strong> — або витягнуті вперед під ~45°, або закладені за спину, щоб не закривати талію й груди. Перевіряється кут <strong>правої</strong> руки (плече–лікоть); лівий лікоть у кадрі не обов’язковий.
+          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті (руки злегка відведені на ~15–20° від корпусу).
+          <strong>Профіль:</strong> стоїте боком; голова вздовж тіла — дивіться в той самий бік, куди звернене тіло (не обличчям до камери).
           Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
         </p>
         <div class="ref-grid">
@@ -70,7 +70,7 @@
         <button type="button" class="btn primary wide" id="btn-to-capture">Продовжити до зйомки</button>
       </section>
 
-      <section class="card" aria-labelledby="params-heading">
+      <section class="card" aria-labelledby="params-heading" id="section-params">
         <h2 id="params-heading">Параметри</h2>
         <div class="field">
           <label for="height">Зріст (см)</label>
@@ -84,9 +84,6 @@
             <option value="other">Інше</option>
           </select>
         </div>
-        <p class="hint">
-          Камера: лише <code>localhost</code> або HTTPS. Перегляд дзеркальний. Пунктир — зона голови; суцільна рамка — від маківки до обох стоп (дві ноги окремо).
-        </p>
       </section>
 
       <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
@@ -95,8 +92,15 @@
         <div class="preview-wrap mirror">
           <video id="video" playsinline autoplay muted></video>
           <canvas id="overlay" class="overlay" aria-hidden="true"></canvas>
+          <div
+            id="countdown-overlay"
+            class="countdown-overlay"
+            hidden
+            aria-live="assertive"
+            aria-atomic="true"
+          ></div>
         </div>
-        <div class="actions">
+        <div class="actions capture-live-actions">
           <button type="button" id="btn-start" class="btn primary">Увімкнути камеру</button>
           <button type="button" id="btn-capture" class="btn" disabled>Зробити фото</button>
           <button type="button" id="btn-capture-timer" class="btn" disabled>Фото через 10 с</button>
@@ -104,15 +108,21 @@
         </div>
         <p id="pose-status" class="pose-status" role="status" aria-live="polite"></p>
         <p id="status" class="status" role="status"></p>
-        <div class="thumbs">
-          <figure>
-            <figcaption>Анфас</figcaption>
-            <img id="thumb-front" alt="Попередній перегляд анфас" width="112" height="84" hidden />
-          </figure>
-          <figure>
-            <figcaption>Профіль</figcaption>
-            <img id="thumb-side" alt="Попередній перегляд профіль" width="112" height="84" hidden />
-          </figure>
+        <div class="thumbs-wrap" id="thumbs-wrap">
+          <div class="thumbs" id="thumbs-inner">
+            <figure>
+              <figcaption>Анфас</figcaption>
+              <img id="thumb-front" alt="Попередній перегляд анфас" width="112" height="84" hidden />
+            </figure>
+            <figure>
+              <figcaption>Профіль</figcaption>
+              <img id="thumb-side" alt="Попередній перегляд профіль" width="112" height="84" hidden />
+            </figure>
+          </div>
+          <div class="retake-actions" id="retake-actions" hidden>
+            <button type="button" id="btn-retake-front" class="btn">Перезняти анфас</button>
+            <button type="button" id="btn-retake-side" class="btn">Перезняти профіль</button>
+          </div>
         </div>
         <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки (mock)</button>
       </section>
@@ -175,6 +185,6 @@
     </main>
 
     <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
-    <script type="module" src="/static/app.js?v=ankle-fit1"></script>
+    <script type="module" src="/static/app.js?v=auto-capture1"></script>
   </body>
 </html>
