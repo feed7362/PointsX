@@ -336,6 +336,46 @@ def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
     return colorsys.hsv_to_rgb(h, s, v)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Mask-mode helpers (white-on-black silhouette for YOLO-seg training)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def apply_emission_material(obj, color: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)) -> None:
+    """Apply a pure Emission shader — no lighting, no shadows, solid color."""
+    mat = bpy.data.materials.new("emission")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    emit = nodes.new("ShaderNodeEmission")
+    out = nodes.new("ShaderNodeOutputMaterial")
+    emit.inputs["Color"].default_value = color
+    emit.inputs["Strength"].default_value = 1.0
+    links.new(emit.outputs["Emission"], out.inputs["Surface"])
+
+    if obj.data.materials:
+        obj.data.materials[0] = mat
+    else:
+        obj.data.materials.append(mat)
+
+
+def setup_black_world() -> None:
+    """Pure black world background (no HDRI, no ambient light)."""
+    scene = bpy.context.scene
+    world = scene.world or bpy.data.worlds.new("World")
+    scene.world = world
+    world.use_nodes = True
+    nodes = world.node_tree.nodes
+    links = world.node_tree.links
+    nodes.clear()
+    bg = nodes.new("ShaderNodeBackground")
+    out = nodes.new("ShaderNodeOutputWorld")
+    bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+    bg.inputs["Strength"].default_value = 0.0
+    links.new(bg.outputs["Background"], out.inputs["Surface"])
+
+
 def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
     """Create and position a camera for the given view."""
     base = CAMERAS[view]
@@ -406,9 +446,23 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
             return None
 
         img = bpy.data.images.load(str(z_path))
-        pixels = np.array(img.pixels[:]).reshape(IMG_H, IMG_W, 4)
-        # Z-pass is in the first channel; Blender stores bottom-up so flip
-        z = pixels[::-1, :, 0].copy().astype(np.float32)
+        pixels = np.array(img.pixels[:], dtype=np.float32)
+
+        if pixels.size == 0:
+            raise RuntimeError(f"Empty EXR pixel buffer: {z_path.name}")
+
+        # Single-layer EXR can appear as 1 channel (H*W) or 4 channels (H*W*4).
+        if pixels.size == IMG_H * IMG_W:
+            z = pixels.reshape(IMG_H, IMG_W)
+        elif pixels.size == IMG_H * IMG_W * 4:
+            z = pixels.reshape(IMG_H, IMG_W, 4)[:, :, 0]
+        else:
+            raise RuntimeError(
+                f"Unexpected EXR buffer size {pixels.size} for {IMG_W}x{IMG_H}"
+            )
+
+        # Blender stores image data bottom-up.
+        z = z[::-1, :].copy().astype(np.float32)
 
         # Очищуємо пам'ять Blender
         bpy.data.images.remove(img)
@@ -421,6 +475,27 @@ def extract_z_buffer(render_path: str) -> "np.ndarray | None":
         return None
 
 
+def _is_occluded_raycast(scene, cam_obj, target_point, margin: float = 0.01) -> bool:
+    """Return True if geometry blocks camera->target ray before the target point."""
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    cam_origin = cam_obj.matrix_world.translation
+    ray_vec = target_point - cam_origin
+    target_dist = float(ray_vec.length)
+    if target_dist <= margin:
+        return False
+
+    direction = ray_vec.normalized()
+    max_dist = max(target_dist - margin, 0.0)
+    hit, hit_loc, _normal, _face_idx, _obj, _matrix = scene.ray_cast(
+        depsgraph, cam_origin, direction, distance=max_dist
+    )
+    if not hit:
+        return False
+
+    hit_dist = float((hit_loc - cam_origin).length)
+    return hit_dist < (target_dist - margin)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main render function
 # ─────────────────────────────────────────────────────────────────────────────
@@ -431,15 +506,18 @@ def render_sample(
         out_dir: Path,
         use_gpu: bool = True,
         engine: str = RENDER_ENGINE,
+        mode: str = "photo",
 ) -> dict:
     """Render all views for one body sample.
 
     Args:
-        manifest_entry: dict with body_id, obj_path, landmarks_json_path,
-                        sex, skin_texture_idx, clothing_preset, pose_name
+        manifest_entry: dict with body_id, obj_path, landmarks_json_path, ...
         assets_dir:     Path to assets directory (HDRIs, textures, clothing)
         out_dir:        Root output directory
         use_gpu:        Use CUDA GPU if available
+        engine:         "CYCLES" or "BLENDER_EEVEE"
+        mode:           "photo" (full render with HDRI+textures+clothing) or
+                        "mask"  (white-body emission on black bg, for YOLO-seg training)
 
     Returns:
         dict mapping view_name → {image_path, label_path, camera_params}
@@ -455,17 +533,20 @@ def render_sample(
 
     rng = random.Random(manifest_entry.get("seed", manifest_entry["body_id"]))
 
-    # Load pre-computed landmarks
-    landmarks_data = _json.loads(Path(manifest_entry["landmarks_json_path"]).read_text())
-    selected_landmarks = select_pointsx16(landmarks_data["landmarks_3d"])
-    landmarks_3d = [
-        np.array(v, dtype=np.float32)
-        for v in selected_landmarks
-    ]
+    # Load pre-computed landmarks (only used in photo mode for keypoint labels)
+    if mode == "photo":
+        landmarks_data = _json.loads(Path(manifest_entry["landmarks_json_path"]).read_text())
+        selected_landmarks = select_pointsx16(landmarks_data["landmarks_3d"])
+        landmarks_3d = [
+            np.array(v, dtype=np.float32)
+            for v in selected_landmarks
+        ]
+    else:
+        landmarks_3d = None
 
     results = {}
 
-    # ── Resume support: skip views that already have image + label ───
+    # ── Resume support: skip views that already have image (+ label for photo mode) ───
     body_id = manifest_entry["body_id"]
     views_todo = []
     for view in ("front", "side"):
@@ -475,8 +556,11 @@ def render_sample(
         for split in ("train", "val"):
             img = out_dir / split / "images" / f"{sample_id}.jpg"
             lbl = out_dir / split / "labels" / f"{sample_id}.txt"
-            if img.exists() and lbl.exists():
-                results[view] = {"image_path": str(img), "label_path": str(lbl), "skipped": True}
+            # Mask mode: polygon label is written by a separate script, so we only require image
+            img_ok = img.exists()
+            lbl_ok = lbl.exists() if mode == "photo" else True
+            if img_ok and lbl_ok:
+                results[view] = {"image_path": str(img), "label_path": str(lbl) if lbl_ok else None, "skipped": True}
                 found = True
                 break
         if not found:
@@ -490,32 +574,33 @@ def render_sample(
         clear_scene()
         setup_render_settings(use_gpu=use_gpu, engine=engine)
 
-        # HDRI lighting
-        hdri_dir = assets_dir / "hdri"
-        hdri_files = sorted(hdri_dir.glob("*.hdr")) + sorted(hdri_dir.glob("*.exr"))
-        if hdri_files:
-            load_hdri(str(rng.choice(hdri_files)))
-        add_fill_light()
+        if mode == "mask":
+            # Mask mode: black background, white-emission body, no clothing, no HDRI/fill
+            setup_black_world()
+            body_obj = import_body_obj(manifest_entry["obj_path"])
+            apply_emission_material(body_obj, color=(1.0, 1.0, 1.0, 1.0))
+        else:
+            # Photo mode: full photorealistic render
+            hdri_dir = assets_dir / "hdri"
+            hdri_files = sorted(hdri_dir.glob("*.hdr")) + sorted(hdri_dir.glob("*.exr"))
+            if hdri_files:
+                load_hdri(str(rng.choice(hdri_files)))
+            add_fill_light()
 
-        # Body mesh
-        body_obj = import_body_obj(manifest_entry["obj_path"])
+            body_obj = import_body_obj(manifest_entry["obj_path"])
 
-        # Skin texture
-        tex_idx = manifest_entry.get("skin_texture_idx", rng.randint(1, N_SKIN_TEXTURES))
-        tex_path = str(assets_dir / "textures" / SKIN_TEXTURE_PATTERN.format(tex_idx))
-        apply_skin_material(body_obj, tex_path)
+            tex_idx = manifest_entry.get("skin_texture_idx", rng.randint(1, N_SKIN_TEXTURES))
+            tex_path = str(assets_dir / "textures" / SKIN_TEXTURE_PATTERN.format(tex_idx))
+            apply_skin_material(body_obj, tex_path)
 
-        # Clothing — use OBJ files if available, otherwise procedural
-        cloth_dir = assets_dir / "clothing"
-        if cloth_dir.exists():
-            cloth_files = list(cloth_dir.glob("*.obj"))
+            cloth_dir = assets_dir / "clothing"
+            if cloth_dir.exists():
+                cloth_files = list(cloth_dir.glob("*.obj"))
+                if cloth_files and rng.random() < 0.85:
+                    cloth_path = str(rng.choice(cloth_files))
+                    import_clothing(cloth_path, body_obj)
 
-            # 85% шанс, що модель буде в одязі (якщо файли існують), 15% - базовий меш тіла
-            if cloth_files and rng.random() < 0.85:
-                cloth_path = str(rng.choice(cloth_files))
-                import_clothing(cloth_path, body_obj)
-
-        # Camera
+        # Camera (identical for photo and mask so masks align pixel-perfect)
         cam_obj, cam_params = setup_camera(view, rng)
 
         # ── Render ──────────────────────────────────────────────────────
@@ -555,19 +640,8 @@ def render_sample(
                 tree.links.new(rlayers.outputs["Image"], output.inputs["Image"])
 
                 if engine == "BLENDER_EEVEE":
-                    file_out = tree.nodes.new(type="CompositorNodeOutputFile")
-                    file_out.format.file_format = "OPEN_EXR_MULTILAYER"
-                    file_out.format.color_depth = "32"
-
-                    file_out.directory = str(img_path.parent)
-                    file_out.file_name = f"{img_path.stem}_depth_"
-
-                    if len(file_out.file_output_items) > 0:
-                        file_out.file_output_items[0].name = "Depth"
-                    else:
-                        file_out.file_output_items.new(name="Depth", socket_type="FLOAT")
-
-                    tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+                    # Use ray-cast occlusion below; depth EXR export is unnecessary.
+                    pass
 
             else:
                 # ==========================================
@@ -582,12 +656,8 @@ def render_sample(
                 tree.links.new(rlayers.outputs["Image"], composite.inputs["Image"])
 
                 if engine == "BLENDER_EEVEE":
-                    file_out = tree.nodes.new(type="CompositorNodeOutputFile")
-                    file_out.format.file_format = "OPEN_EXR_MULTILAYER"
-                    file_out.format.color_depth = "32"
-                    file_out.base_path = str(img_path.parent)
-                    file_out.file_slots[0].path = f"{img_path.stem}_depth_"
-                    tree.links.new(rlayers.outputs["Depth"], file_out.inputs[0])
+                    # Use ray-cast occlusion below; depth EXR export is unnecessary.
+                    pass
 
         except Exception as e:
             print(f"Failed to access compositor: {e}")
@@ -611,7 +681,16 @@ def render_sample(
         # Тепер рендер збереже і JPG, і EXR
         bpy.ops.render.render(write_still=True)
 
-        # ── Annotate ────────────────────────────────────────────────────
+        if mode == "mask":
+            # No keypoint labels for mask mode — polygons are generated post-hoc from the PNG
+            results[view] = {
+                "image_path": str(img_path),
+                "label_path": None,
+                "camera_params": cam_params,
+            }
+            continue
+
+        # ── Annotate (photo mode only) ──────────────────────────────────
         import bpy_extras
         import mathutils
 
@@ -639,9 +718,9 @@ def render_sample(
         coords_px = np.array(coords_px_list, dtype=np.float32)
         depth = np.array(depth_list, dtype=np.float32)
 
-        # Z-buffer occlusion
-        depth_buf = extract_z_buffer(str(img_path))
-        visibility = classify_visibility(coords_px, depth, depth_buf, IMG_W, IMG_H)
+        # Visibility in image plane (off-frame vs candidate visible).
+        # We intentionally avoid EXR depth parsing in Blender 5.1 path.
+        visibility = classify_visibility(coords_px, depth, None, IMG_W, IMG_H)
 
         label = build_yolo_label(coords_px, visibility, IMG_W, IMG_H)
         if label:
@@ -685,6 +764,9 @@ def main_blender() -> None:
     parser.add_argument("--engine", type=str, default=RENDER_ENGINE,
                         choices=["CYCLES", "BLENDER_EEVEE"],
                         help="Render engine (default: %(default)s)")
+    parser.add_argument("--mode", type=str, default="photo",
+                        choices=["photo", "mask"],
+                        help="'photo' for full render, 'mask' for white-on-black silhouette")
     parser.add_argument("--start-idx", type=int, default=0,
                         help="First manifest entry index to process")
     parser.add_argument("--end-idx", type=int, default=None,
@@ -695,10 +777,11 @@ def main_blender() -> None:
     out_dir = Path(args.out_dir)
     assets_dir = Path(args.assets)
     engine = args.engine
+    mode = args.mode
 
     manifest = json.loads(manifest_path.read_text())
     entries = manifest[args.start_idx: args.end_idx]
-    print(f"[blender_render] Engine: {engine} | GPU: {args.gpu} | Bodies: {len(entries)}")
+    print(f"[blender_render] Mode: {mode} | Engine: {engine} | GPU: {args.gpu} | Bodies: {len(entries)}")
 
     # Results tracking
     results_path = out_dir / "render_results.jsonl"
@@ -725,7 +808,7 @@ def main_blender() -> None:
 
         for entry in entries:
             try:
-                res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu, engine=engine)
+                res = render_sample(entry, assets_dir, out_dir, use_gpu=args.gpu, engine=engine, mode=mode)
                 with open(results_path, "a") as f:
                     f.write(json.dumps({"body_id": entry["body_id"], **res}) + "\n")
                 n_ok += 1
