@@ -1,5 +1,6 @@
-import cv2
 from pathlib import Path
+
+import cv2
 
 
 def draw_yolo_pose(img_path, label_path):

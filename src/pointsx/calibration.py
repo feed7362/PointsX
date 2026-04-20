@@ -6,7 +6,7 @@ import logging
 
 import numpy as np
 
-from pointsx.keypoints import KP, distance, is_valid, midpoint
+from pointsx.keypoints import KP, is_valid
 from pointsx.schemas import CalibrationInfo, Keypoints
 
 logger = logging.getLogger(__name__)

@@ -24,7 +24,6 @@ import cv2
 import numpy as np
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
-
 # Tune these if polygons look too blocky / too dense
 MIN_POLYGON_POINTS = 30
 MAX_POLYGON_POINTS = 100

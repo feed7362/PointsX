@@ -23,13 +23,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
-
 
 from pointsx.synthetic.body_generator import (
     generate_body_samples,

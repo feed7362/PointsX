@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 
 from pointsx.pipeline import MeasurementPipeline
 
