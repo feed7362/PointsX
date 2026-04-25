@@ -158,6 +158,170 @@
       <div class="gf-grid" id="gf-fields"></div>
     </fieldset>
 
-    <script type="module" src="/static/frame-editor.js?v=ankle-fit1"></script>
+    <script type="module" src="/static/js/frame-editor.js?v=ankle-fit1"></script>
+
+    <!-- ============================================================
+         Schema-v2 Ordinal Alignment Viewer (read-only, for operators)
+         ============================================================ -->
+    <fieldset id="ordinal-viewer" style="margin-top:2rem">
+      <legend>Перегляд сіток розмірів v2 (лише читання)</legend>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <label>Стать
+          <select id="ov-sex">
+            <option value="female">Жінки</option>
+            <option value="male">Чоловіки</option>
+          </select>
+        </label>
+        <label>Група
+          <select id="ov-family">
+            <option value="top">Верх (top)</option>
+            <option value="bottom">Низ (bottom)</option>
+          </select>
+        </label>
+        <label>Мірка
+          <select id="ov-meas">
+            <option value="chest_circumference">Груди</option>
+            <option value="waist_circumference">Талія</option>
+            <option value="hip_circumference">Стегна</option>
+            <option value="thigh_circumference">Стегно (окруж.)</option>
+          </select>
+        </label>
+      </div>
+      <div id="ov-table-wrap" style="overflow-x:auto"></div>
+      <p id="ov-status" style="color:#9aa3b5;font-size:0.8rem;margin:0.5rem 0 0"></p>
+    </fieldset>
+
+    <style>
+      #ordinal-viewer select {
+        margin-left: 0.4rem;
+        background: #1a2130;
+        color: inherit;
+        border: 1px solid #3d4659;
+        border-radius: 4px;
+        padding: 0.25rem 0.4rem;
+      }
+      #ov-table-wrap table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+      #ov-table-wrap th, #ov-table-wrap td { border: 1px solid #2a3142; padding: 0.3rem 0.6rem; text-align: center; }
+      #ov-table-wrap th { background: #1a2130; font-weight: 600; }
+      #ov-table-wrap td:first-child { text-align: left; color: #9aa3b5; }
+      .ov-gap  { background: color-mix(in srgb,#f07178 20%, transparent); }
+      .ov-overlap { background: color-mix(in srgb,#f0a030 20%, transparent); }
+    </style>
+
+    <script type="module">
+      const CATALOG_URL = "/static/data/tailoring_config.json?v=4";
+      let catalog = null;
+
+      async function loadCatalog() {
+        if (catalog) return catalog;
+        const r = await fetch(CATALOG_URL);
+        if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        catalog  = await r.json();
+        console.log('[OrdinalViewer] Catalog loaded, version:', catalog.version, 'grids:', catalog.grids?.length);
+        return catalog;
+      }
+
+      const MEAS_SLUG = {
+        chest_circumference: "chest",
+        waist_circumference: "waist",
+        hip_circumference:   "hip",
+        thigh_circumference: "thigh",
+      };
+
+      function findGrids(cat, sexKey, measId, family) {
+        const slug = MEAS_SLUG[measId];
+        if (!slug) return [];
+        return (cat.grids || []).filter(
+          (g) => g.kind === "consensus_band" &&
+                 g.id.startsWith(`${sexKey}_`) === false &&
+                 g.id.includes(`_${sexKey}_${slug}_${family}`) &&
+                 g.measurement_key === measId
+        );
+      }
+
+      function checkBands(bands) {
+        const sorted = [...bands].sort((a, b) => a.min_cm - b.min_cm);
+        const issues = [];
+        for (let i = 0; i < sorted.length - 1; i++) {
+          if (sorted[i].max_cm < sorted[i + 1].min_cm) issues.push(`gap @${sorted[i].max_cm}`);
+          if (sorted[i].max_cm > sorted[i + 1].min_cm) issues.push(`overlap @${sorted[i].max_cm}`);
+        }
+        return issues;
+      }
+
+      async function render() {
+        const sex    = document.getElementById("ov-sex").value;
+        const family = document.getElementById("ov-family").value;
+        const meas   = document.getElementById("ov-meas").value;
+        const wrap   = document.getElementById("ov-table-wrap");
+        const status = document.getElementById("ov-status");
+        wrap.innerHTML = "";
+        status.textContent = "Завантаження…";
+
+        try {
+          const cat   = await loadCatalog();
+          const sexKey = sex === "male" ? "men" : "women";
+          const scale = cat.ordinal_scales?.[`${family}.${sexKey}`] ?? [];
+
+          const regions  = ["ua", "eu", "us"];
+          const gridMap  = {};
+          for (const r of regions) {
+            const id  = `${r}_${sexKey}_${MEAS_SLUG[meas]}_${family}`;
+            gridMap[r] = (cat.grids || []).find((g) => g.id === id) ?? null;
+          }
+
+          const maxOrd = scale.length - 1;
+          const table  = document.createElement("table");
+
+          // Header
+          const thead = table.createTHead();
+          const hr    = thead.insertRow();
+          ["Ординал", "Мітка", "Діапазон (cm)", "UA код", "EU код", "US код"].forEach((h) => {
+            const th = document.createElement("th");
+            th.textContent = h;
+            hr.appendChild(th);
+          });
+
+          // Rows per ordinal
+          const tbody = table.createTBody();
+          for (let ord = 0; ord <= maxOrd; ord++) {
+            const tr    = tbody.insertRow();
+            const label = scale[ord] ?? String(ord);
+
+            const uaBand = gridMap.ua?.bands.find((b) => b.ordinal === ord);
+            const euBand = gridMap.eu?.bands.find((b) => b.ordinal === ord);
+            const usBand = gridMap.us?.bands.find((b) => b.ordinal === ord);
+            const range  = uaBand ? `${uaBand.min_cm} – ${uaBand.max_cm}` :
+                           euBand ? `${euBand.min_cm} – ${euBand.max_cm}` :
+                           usBand ? `${usBand.min_cm} – ${usBand.max_cm}` : "—";
+
+            [String(ord), label, range, uaBand?.code ?? "—", euBand?.code ?? "—", usBand?.code ?? "—"]
+              .forEach((v) => { const td = tr.insertCell(); td.textContent = v; });
+          }
+
+          wrap.appendChild(table);
+
+          // Band integrity checks
+          let allIssues = [];
+          for (const [r, g] of Object.entries(gridMap)) {
+            if (!g) { allIssues.push(`${r}: сітка не знайдена`); continue; }
+            const issues = checkBands(g.bands);
+            if (issues.length) allIssues.push(`${r}: ${issues.join(", ")}`);
+          }
+          status.textContent = allIssues.length
+            ? "⚠ " + allIssues.join(" | ")
+            : `✓ Версія конфігу: ${cat.version ?? 1}. Усі три регіони знайдено, пропусків/перекриттів немає.`;
+        } catch (e) {
+          console.error('[OrdinalViewer] Error:', e);
+          status.textContent = "Помилка: " + e.message;
+          status.style.color = "#ff8a8a";
+        }
+      }
+
+      ["ov-sex","ov-family","ov-meas"].forEach((id) => {
+        document.getElementById(id).addEventListener("change", render);
+      });
+      render();
+    </script>
   </body>
 </html>

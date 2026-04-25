@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PointsX — мірки (mock)</title>
-    <link rel="stylesheet" href="/static/styles.css?v=auto-capture1" />
+    <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
   </head>
   <body>
     <header class="header">
@@ -19,8 +19,8 @@
       <section class="card references" aria-labelledby="ref-heading" id="section-references">
         <h2 id="ref-heading">Приклади правильної пози</h2>
         <p class="ref-intro">
-          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті (руки злегка відведені на ~15–20° від корпусу).
-          <strong>Профіль:</strong> стоїте боком; голова вздовж тіла — дивіться в той самий бік, куди звернене тіло (не обличчям до камери).
+          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+          <strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки вперед на ~45°.
           Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
         </p>
         <div class="ref-grid">
@@ -35,13 +35,12 @@
                   stroke-width="1.6"
                   stroke-linejoin="round"
                   stroke-linecap="round"
-                  points="50,0.8 56,2.4 58,6.4 57,12 53.5,15.2 55,18.4 66,20.8 73,24.8 81,30.4 88,36 93.5,41.6 96,46.4 94,44.8 87.5,40 80.5,35.2 74,30.4 67,26.4 62,32 59,44.8 56.5,59.2 60,68.8 62,75.2 62.5,86.4 62,99.2 62,112 61.5,124.8 61,136.8 61,145.6 62,152 64,156 62,158.4 57,158.4 56,153.6 55.5,145.6 55.5,136.8 56,124.8 56.5,112 56.5,99.2 56,86.4 54.5,75.2 50,72 45.5,75.2 44,86.4 43.5,99.2 43.5,112 44,124.8 44.5,136.8 44.5,145.6 44,153.6 43,158.4 38,158.4 36,156 39,152 39,145.6 39,136.8 38.5,124.8 38,112 38,99.2 37.5,86.4 37.5,75.2 38,68.8 40,59.2 43.5,59.2 41,44.8 38,32 33,26.4 26,30.4 19.5,35.2 12.5,40 6,44.8 4,46.4 6.5,41.6 12,36 19,30.4 27,24.8 34,20.8 45,18.4 46.5,15.2 43,12 42,6.4 44,2.4"
                 />
               </svg>
             </div>
           </figure>
           <figure class="ref-figure">
-            <figcaption>Профіль, рука вперед ~45°</figcaption>
+            <figcaption>Профіль</figcaption>
             <div class="ref-svg-wrap" aria-hidden="true">
               <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
                 <polygon
@@ -51,7 +50,6 @@
                   stroke-width="1.6"
                   stroke-linejoin="round"
                   stroke-linecap="round"
-                  points="47,0.8 51,0.304 55,0.304 58,1.296 61,2.896 63,4.8 64.5,7.2 65,9.296 64.5,10.896 63,12.208 61,13.104 58,14.096 55,15.2 54,16.304 56,18.4 60,21.6 64,25.6 66,29.6 65,35.2 63,42.4 61,49.6 59,56.8 59,62.4 60,67.2 59.5,73.6 59,80 58.5,86.4 58,92.8 57.5,99.2 57,105.6 56,115.2 55,126.4 54.5,136 55,144 56.5,151.2 58.5,155.2 58,158.4 54,158.4 50,158.4 46.5,155.2 45,151.2 44,144 44.5,136 45,126.4 45,115.2 44,105.6 43.5,99.2 44,92.8 44.5,86.4 45,80 46,73.6 46.5,67.2 47,62.4 46,56.8 43,53.6 39,52.8 36,49.6 36,44 37,38.4 39,32.8 40,27.2 42,22.4 43,18.4 43,15.696 42,12.8 40,9.6 39,6.4 40,3.504 43,1.6"
                 />
                 <polyline
                   id="ref-poly-arm"
@@ -61,7 +59,6 @@
                   stroke-linejoin="round"
                   stroke-linecap="round"
                   stroke-dasharray="4 3"
-                  points="65,28 93,47.2"
                 />
               </svg>
             </div>
@@ -125,6 +122,7 @@
           </div>
         </div>
         <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки (mock)</button>
+        <button type="button" id="btn-measure-test" class="btn wide">Тест результатів без фото</button>
       </section>
 
       <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
@@ -133,7 +131,7 @@
         <div class="tailoring-intro" id="tailoring-intro" hidden></div>
 
         <div class="garment-strip-wrap" id="garment-strip-wrap" hidden>
-          <p class="tailoring-hint" id="garment-strip-label">Тип одягу для пошиву</p>
+          <p class="tailoring-hint" id="garment-strip-label">Тип одягу</p>
           <div class="garment-strip" id="garment-strip" role="radiogroup" aria-labelledby="garment-strip-label"></div>
         </div>
 
@@ -164,8 +162,33 @@
           </div>
         </div>
 
+        <details class="pattern-details" id="pattern-details" hidden>
+          <summary>Індивідуальні мірки для пошиття</summary>
+          <div class="pattern-grid">
+            <div class="pattern-col">
+              <h4>Базові розміри (тіло + припуски на вільність)</h4>
+              <table class="measures measures-compact">
+                <thead>
+                  <tr><th>Параметр</th><th>см</th></tr>
+                </thead>
+                <tbody id="pattern-raw-body"></tbody>
+              </table>
+            </div>
+            <div class="pattern-col">
+              <h4>З припусками на шви</h4>
+              <table class="measures measures-compact">
+                <thead>
+                  <tr><th>Параметр</th><th>см</th></tr>
+                </thead>
+                <tbody id="pattern-seam-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="pattern-hint">Ці величини використовуються для індивідуального пошиття. Всі значення приблизні.</p>
+        </details>
+
         <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden>
-          Розміри на вкладках — орієнтовні, за спрощеними таблицями; вони не замінюють примірку, лекала чи стандарти бренду (ДСТУ/ГОСТ/EU/USA не застосовуються автоматично). Типи одягу відфільтровані за обраною статтю (для «інше» показано весь каталог).
+          Розміри на вкладках — орієнтовні
         </p>
 
         <details class="all-measures-details" id="all-measures-details">
@@ -185,6 +208,6 @@
     </main>
 
     <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
-    <script type="module" src="/static/app.js?v=auto-capture1"></script>
+    <script type="module" src="/static/js/app.js?v=auto-capture1"></script>
   </body>
 </html>

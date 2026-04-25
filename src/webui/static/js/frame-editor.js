@@ -1,3 +1,7 @@
+/**
+ * Canvas editor for guide silhouette polygons, anchors, and guideFrame parameters.
+ */
+
 import {
   guideGeom,
   loadGuideGeometry,
@@ -75,6 +79,7 @@ const GF_KEYS = [
   ["ankleVisMin", "Мін. видимість щиколотки для підгонки"],
 ];
 
+/** Push guide geometry into the anchor and guideFrame form fields. */
 function syncFormFromGeom() {
   haFx.value = String(guideGeom.headAnchorFront.x);
   haFy.value = String(guideGeom.headAnchorFront.y);
@@ -92,6 +97,7 @@ function syncFormFromGeom() {
   }
 }
 
+/** Read head anchor inputs into guideGeom when all values are finite. */
 function readAnchorsFromForm() {
   const fx = Number(haFx.value);
   const fy = Number(haFy.value);
@@ -111,6 +117,7 @@ function readAnchorsFromForm() {
   }
 }
 
+/** Read numeric guideFrame fields from the dynamic form. */
 function readGuideFrameFromForm() {
   for (const el of gfFields.querySelectorAll("input[data-gf]")) {
     const k = el.getAttribute("data-gf");
@@ -121,6 +128,7 @@ function readGuideFrameFromForm() {
   }
 }
 
+/** Build guideFrame labeled inputs from GF_KEYS. */
 function buildGfFields() {
   gfFields.innerHTML = "";
   for (const [key, label] of GF_KEYS) {
@@ -135,10 +143,12 @@ function buildGfFields() {
   }
 }
 
+/** Active main polygon: front (step 1) or profile (step 2). */
 function currentMainPoly() {
   return editorStep === 1 ? guideGeom.frontPts : guideGeom.profilePts;
 }
 
+/** Map pointer client coordinates to canvas pixel space. */
 function clientToCanvas(clientX, clientY) {
   const r = cv.getBoundingClientRect();
   const sx = cv.width / r.width;
@@ -146,6 +156,7 @@ function clientToCanvas(clientX, clientY) {
   return { x: (clientX - r.left) * sx, y: (clientY - r.top) * sy };
 }
 
+/** Hit-test a vertex on the main polygon or profile arm stroke. */
 function pickVertex(mx, my) {
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
@@ -175,6 +186,7 @@ function pickVertex(mx, my) {
   return null;
 }
 
+/** Closest point on segment AB to M; returns distance squared and point. */
 function closestOnSeg(mx, my, ax, ay, bx, by) {
   const abx = bx - ax;
   const aby = by - ay;
@@ -190,6 +202,7 @@ function closestOnSeg(mx, my, ax, ay, bx, by) {
   return { distSq: dx * dx + dy * dy, px, py };
 }
 
+/** Find edge insert position on a closed polygon near (mx, my). */
 function findInsertClosed(pts, mx, my, box, threshPx) {
   const thr2 = threshPx * threshPx;
   const n = pts.length;
@@ -217,6 +230,7 @@ function findInsertClosed(pts, mx, my, box, threshPx) {
   return { afterIdx: bestI, nx, ny };
 }
 
+/** Find edge insert position on an open polyline near (mx, my). */
 function findInsertOpen(pts, mx, my, box, threshPx) {
   if (pts.length < 2) return null;
   const thr2 = threshPx * threshPx;
@@ -243,7 +257,9 @@ function findInsertOpen(pts, mx, my, box, threshPx) {
   return { afterIdx: bestI, nx, ny };
 }
 
-/** Shift+клік: вставити точку на найближчому ребрі (основний полігон або лінія руки). */
+/**
+ * Shift-click: insert a point on the nearest edge (main closed polygon or profile arm stroke).
+ */
 function tryInsertShiftClick(mx, my) {
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
@@ -280,6 +296,7 @@ function tryInsertShiftClick(mx, my) {
   return false;
 }
 
+/** Squared distance from (mx,my) to edge starting at segStart. */
 function edgeDistSqAt(mx, my, pts, segStart, box, closed) {
   const i = segStart;
   const j = closed ? (i + 1) % pts.length : i + 1;
@@ -290,6 +307,7 @@ function edgeDistSqAt(mx, my, pts, segStart, box, closed) {
   return closestOnSeg(mx, my, ax, ay, bx, by).distSq;
 }
 
+/** Delete the selected vertex if counts stay above minimums. */
 function removeSelectedVertex() {
   if (!selectedVertex) {
     setMsg("Спочатку клацніть по точці на контуру, щоб її виділити.", true);
@@ -315,6 +333,7 @@ function removeSelectedVertex() {
   return true;
 }
 
+/** Redraw the canvas from form state and guideGeom. */
 function draw() {
   readAnchorsFromForm();
   readGuideFrameFromForm();

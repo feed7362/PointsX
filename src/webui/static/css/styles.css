@@ -189,7 +189,7 @@ body {
   z-index: 2;
 }
 
-/* Лічильник не дзеркалити разом із відео (selfie). */
+/* Undo selfie mirror for the countdown overlay so digits read correctly. */
 .preview-wrap.mirror .countdown-overlay {
   transform: scaleX(-1);
 }
@@ -237,7 +237,6 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  /* Bitmap is sized to match layout pixels × DPR in JS (same box as object-fit: cover video). */
   object-fit: fill;
 }
 
@@ -393,10 +392,11 @@ body {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-.garment-btn svg {
+.garment-btn .garment-icon {
   width: 28px;
   height: 28px;
-  color: var(--accent);
+  object-fit: contain;
+  display: block;
 }
 
 .tailoring-panels {
@@ -505,6 +505,38 @@ body {
   margin-top: 0.5rem;
 }
 
+.pattern-details {
+  font-size: 0.9rem;
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.pattern-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+@media (max-width: 720px) {
+  .pattern-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pattern-col h4 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.pattern-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}
+
 .all-measures-details summary {
   cursor: pointer;
   font-weight: 600;
@@ -519,4 +551,114 @@ body {
 
 .all-measures-details[open] summary {
   margin-bottom: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* v2 consensus size panel                                              */
+/* ------------------------------------------------------------------ */
+
+.size-block--v2 {
+  padding: 0.5rem 0;
+}
+
+.size-primary {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  margin-bottom: 0.3rem;
+}
+
+.size-indication {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.verdict-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.verdict--unanimous {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.verdict--majority {
+  background: color-mix(in srgb, #f0a030 18%, transparent);
+  color: #f0a030;
+}
+
+.verdict--low {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.verdict--none {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+}
+
+.size-between {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.2rem 0;
+}
+
+.vote-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.35rem 0;
+  font-size: 0.82rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.35rem;
+}
+
+.vote-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.15rem 0;
+  color: var(--text);
+}
+
+.vote-item--outlier .vote-result {
+  color: #f0a030;
+  font-weight: 600;
+}
+
+.vote-item--missing {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.vote-item--lowconf .vote-result {
+  color: var(--danger);
+}
+
+.vote-label {
+  color: var(--muted);
+}
+
+.vote-result {
+  font-weight: 600;
+  text-align: right;
+}
+
+.size-hint {
+  font-size: 0.78rem;
+  color: #f0a030;
+  margin: 0.4rem 0 0;
+  border-left: 2px solid #f0a030;
+  padding-left: 0.5rem;
+  line-height: 1.4;
 }

@@ -1,12 +1,12 @@
 /**
- * Налаштовувані полігони рамки-підказки, якір голови та параметри guideBox.
- * Зберігання: localStorage (ключ STORAGE_KEY). Імпорт/експорт — JSON.
- * Опційно в репозиторії: якщо localStorage порожній, підвантажується OPTIONAL_STATIC_DATA_URL.
+ * Configurable guide-frame polygons, head/foot anchors, and guideBox parameters.
+ * Persistence: localStorage (STORAGE_KEY). Import/export as JSON.
+ * Optional repo file: when localStorage is empty, OPTIONAL_STATIC_DATA_URL may be loaded.
  */
 
 export const STORAGE_KEY = "pointsx_guide_v1";
 
-/** Покладіть сюди експортований JSON (version: 1), щоб усі без localStorage отримали ці налаштування. */
+/** Optional static JSON (version: 1) served with the app when users have no localStorage entry. */
 export const OPTIONAL_STATIC_DATA_URL = "/static/data/guide-geometry.json";
 
 /** @typedef {{ x: number, y: number }} Anchor */
@@ -37,7 +37,8 @@ export const DEFAULT_GUIDE = {
     verticalFitMaxFrac: 0.93,
     ankleVisMin: 0.14,
   },
-  frontPts: /** @type {PtList} */ ([
+  /** @type {PtList} */
+  frontPts: [
     [0.5, 0.005],
     [0.56, 0.015],
     [0.58, 0.04],
@@ -119,8 +120,9 @@ export const DEFAULT_GUIDE = {
     [0.43, 0.075],
     [0.42, 0.04],
     [0.44, 0.015],
-  ]),
-  profilePts: /** @type {PtList} */ ([
+  ],
+  /** @type {PtList} */
+  profilePts: [
     [0.5066137566137566, 0.01973816802536232],
     [0.4636243386243386, 0.028796139039855072],
     [0.5099206349206349, 0.01973816802536232],
@@ -190,18 +192,19 @@ export const DEFAULT_GUIDE = {
     [0.5033068783068783, 0.024267153532608696],
     [0.5099206349206349, 0.02200266077898551],
     [0.5099206349206349, 0.01973816802536232],
-  ]),
-  profileArmPts: /** @type {PtList} */ ([
+  ],
+  /** @type {PtList} */
+  profileArmPts: [
     [0.6223544973544973, 0.18062255673150268],
     [0.876984126984127, 0.27596962004195275],
-  ]),
+  ],
 };
 
 function cloneGuide() {
   return structuredClone(DEFAULT_GUIDE);
 }
 
-/** Живий стан (імпортери отримують актуальне посилання). */
+/** Live mutable geometry; importers should use this binding. */
 export let guideGeom = cloneGuide();
 
 function clamp(n, lo, hi) {
@@ -209,8 +212,8 @@ function clamp(n, lo, hi) {
 }
 
 /**
- * Нормалізовані точки рамки → атрибут `points` для ref-SVG (viewBox 0 0 100×160).
- * Точка (nx, ny) у нормалізованих координатах кадру відео → локальні px у cw×ch (object-fit: cover) — див. videoNormToPreviewLocal.
+ * Convert normalized frame points to an SVG `points` attribute (ref SVG viewBox 0 0 100×160).
+ * Maps video-normalized (nx, ny) through object-fit: cover; see videoNormToPreviewLocal.
  */
 export function guidePtsToRefSvgPoints(pts, vbW = 100, vbH = 160) {
   return pts
@@ -247,7 +250,7 @@ export function computeGuideBox(cssW, cssH, heightCmStr, geom = guideGeom) {
   return { left: sidePad, top, width: cssW - 2 * sidePad, height: bodyH };
 }
 
-/** Найнижча видима щиколотка в px прев’ю (27/28). */
+/** Lowest visible ankle Y in preview pixels (landmarks 27/28). */
 export function anklePreviewBottomY(lm, cssW, cssH, vw, vh, visMin = 0.14) {
   let best = -Infinity;
   for (const id of [27, 28]) {
@@ -260,8 +263,8 @@ export function anklePreviewBottomY(lm, cssW, cssH, vw, vh, visMin = 0.14) {
 }
 
 /**
- * Рамка: ширина як раніше; висота й положення за носом + щиколотками (якір голови / якір стопи в силуеті).
- * Мутує smoothDelta (dx, dy у режимі без щиколоток; fitHeight/fitTop/fitLeft при вертикальній підгонці).
+ * Guide box with optional vertical fit from nose and ankles; mutates smoothDelta for smoothing
+ * (dx/dy when ankles are weak; fitHeight/fitTop/fitLeft when stretching to feet).
  */
 export function computeGuideBoxTracked(
   cssW,
@@ -400,7 +403,7 @@ export function computeGuideBoxTracked(
   };
 }
 
-/** Поточна рамка на екрані без додаткового кроку згладжування (для знімка = останній кадр прев’ю). */
+/** Current box on screen using accumulated delta (matches last preview frame before capture). */
 export function computeGuideBoxWithDelta(cssW, cssH, heightCmStr, smoothDelta, geom = guideGeom) {
   const base = computeGuideBox(cssW, cssH, heightCmStr, geom);
   if (smoothDelta.fitHeight != null && smoothDelta.fitTop != null && smoothDelta.fitLeft != null) {
@@ -437,8 +440,8 @@ export function drawOpenStroke(ctx, pts, box) {
 }
 
 /**
- * Малює силует на canvas, де вже активний той самий mirror transform, що й для drawImage(video).
- * @param {{ left: number, top: number, width: number, height: number }} box — з computeGuideBoxTracked або computeGuideBoxWithDelta
+ * Draw the silhouette on a canvas that already uses the same mirror transform as drawImage(video).
+ * @param {{ left: number, top: number, width: number, height: number }} box From computeGuideBoxTracked or computeGuideBoxWithDelta.
  */
 export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideGeom) {
   const cw = ctx.canvas && ctx.canvas.width ? ctx.canvas.width : box.width;
@@ -516,13 +519,12 @@ export function loadGuideGeometry() {
     const o = JSON.parse(raw);
     applyGuidePayload(o);
   } catch {
-    // ignore
   }
 }
 
 /**
- * Якщо в браузері ще немає збереженої рамки — пробує завантажити JSON з репозиторію.
- * @returns {Promise<boolean>} чи застосовано файл
+ * If the browser has no saved geometry, try loading JSON from the optional static URL.
+ * @returns {Promise<boolean>} Whether a file payload was applied.
  */
 export async function loadGuideGeometryFromOptionalStaticFile() {
   try {
@@ -537,7 +539,7 @@ export async function loadGuideGeometryFromOptionalStaticFile() {
   }
 }
 
-/** Завжди новий запит (для прикладів на початку сторінки після зміни файлу на сервері). */
+/** Serialize current geometry to localStorage. */
 export function saveGuideGeometry() {
   if (typeof localStorage === "undefined") return;
   const payload = {
