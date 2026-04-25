@@ -376,21 +376,31 @@ def setup_black_world() -> None:
     links.new(bg.outputs["Background"], out.inputs["Surface"])
 
 
-def setup_camera(view: str, rng: random.Random) -> tuple[object, dict]:
-    """Create and position a camera for the given view."""
+def setup_camera(
+    view: str,
+    rng: random.Random,
+    shared_dist: float | None = None,
+    shared_height: float | None = None,
+) -> tuple[object, dict]:
+    """Create and position a camera for the given view.
+
+    If ``shared_dist`` / ``shared_height`` are provided, they're used for both
+    front and side so the body has the SAME apparent scale in both views.
+    Otherwise each view rolls its own (legacy behaviour).
+    """
     base = CAMERAS[view]
     loc = list(base["location"])
 
-    # Random distance jitter (scale from origin)
-    dist = rng.uniform(*CAM_DISTANCE_RANGE)
+    # Distance — shared across views when provided (eliminates px/cm mismatch)
+    dist = shared_dist if shared_dist is not None else rng.uniform(*CAM_DISTANCE_RANGE)
     current_dist = math.sqrt(loc[0] ** 2 + loc[1] ** 2)
     if current_dist > 0:
         scale = dist / current_dist
         loc[0] *= scale
         loc[1] *= scale
 
-    # Camera height jitter
-    loc[2] = rng.uniform(*CAM_HEIGHT_RANGE)
+    # Height — also shared across views when provided
+    loc[2] = shared_height if shared_height is not None else rng.uniform(*CAM_HEIGHT_RANGE)
 
     bpy.ops.object.camera_add(location=loc)
     cam_obj = bpy.context.active_object
@@ -533,6 +543,12 @@ def render_sample(
 
     rng = random.Random(manifest_entry.get("seed", manifest_entry["body_id"]))
 
+    # Shared camera distance + height across both views — front and side will see
+    # the same body at the same scale, so px_per_cm matches between views.
+    body_rng = random.Random(manifest_entry.get("seed", manifest_entry["body_id"]) ^ 0xC0FFEE)
+    shared_dist   = body_rng.uniform(*CAM_DISTANCE_RANGE)
+    shared_height = body_rng.uniform(*CAM_HEIGHT_RANGE)
+
     # Load pre-computed landmarks (only used in photo mode for keypoint labels)
     if mode == "photo":
         landmarks_data = _json.loads(Path(manifest_entry["landmarks_json_path"]).read_text())
@@ -601,7 +617,9 @@ def render_sample(
                     import_clothing(cloth_path, body_obj)
 
         # Camera (identical for photo and mask so masks align pixel-perfect)
-        cam_obj, cam_params = setup_camera(view, rng)
+        cam_obj, cam_params = setup_camera(
+            view, rng, shared_dist=shared_dist, shared_height=shared_height,
+        )
 
         # ── Render ──────────────────────────────────────────────────────
         split = "train" if rng.random() > 0.20 else "val"

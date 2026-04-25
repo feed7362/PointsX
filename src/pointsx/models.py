@@ -59,9 +59,16 @@ class BodyModels:
         image: np.ndarray,
         view: str,
         reference_point: tuple[float, float] | None = None,
+        conf: float = 0.1,
     ) -> SilhouetteMask | None:
-        """Run segmentation and return the best-matching person mask."""
-        results = self._seg(image, imgsz=self.img_size, verbose=False, device=self.device)
+        """Run segmentation and return the best-matching person mask.
+
+        ``conf`` is intentionally low (0.10) so we don't drop side-view bodies
+        when there's a synthetic→photo domain gap. Increase to 0.25 for real-world
+        photos where false positives are more expensive.
+        """
+        results = self._seg(image, imgsz=self.img_size, verbose=False,
+                            device=self.device, conf=conf)
         r = results[0]
 
         if r.masks is None or len(r.masks) == 0 or r.boxes is None or len(r.boxes) == 0:

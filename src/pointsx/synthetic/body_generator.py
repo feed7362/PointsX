@@ -123,7 +123,7 @@ def _casual_pose() -> np.ndarray:
 
 POSE_GENERATORS = [_a_pose, _side_pose, _casual_pose]
 POSE_NAMES = ["a_pose", "side_pose", "casual"]
-POSE_WEIGHTS = [0.40, 0.40, 0.20]  # 70% useful + 30% robustness (rounded to pose pairs)
+POSE_WEIGHTS = [1.0, 0.0, 0.0]  # 100% a-pose for clean silhouette-width measurements
 
 
 def generate_body_samples(
@@ -160,8 +160,12 @@ def generate_body_samples(
         # Global orient: minimal random jitter (person facing camera)
         global_orient = rng.standard_normal(3) * 0.05
 
-        for pose_fn, pose_name in zip(POSE_GENERATORS, POSE_NAMES):
-            # Add random noise to pose for variety
+        # Honor POSE_WEIGHTS — generate one body per pose with non-zero weight.
+        # Each body gets a unique body_id, so 1500 a-pose bodies (n=1500, weights=[1,0,0])
+        # produces exactly 1500 samples instead of 4500.
+        for pose_fn, pose_name, weight in zip(POSE_GENERATORS, POSE_NAMES, POSE_WEIGHTS):
+            if weight <= 0.0:
+                continue
             base_pose = pose_fn()
             noise = rng.standard_normal(63) * 0.02
             body_pose = (base_pose + noise).tolist()
