@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PointsX — мірки (mock)</title>
+    <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>PointsX</h1>
+      <p class="sub">
+        Тестовий інтерфейс: дві фотографії, зріст, стать → mock-результат з сервера. Поза перевіряється в браузері (MediaPipe).
+        <a href="/static/frame-editor.html">Редактор рамки</a>.
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="card references" aria-labelledby="ref-heading" id="section-references">
+        <h2 id="ref-heading">Приклади правильної пози</h2>
+        <p class="ref-intro">
+          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+          <strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки вперед на ~45°.
+          Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
+        </p>
+        <div class="ref-grid">
+          <figure class="ref-figure">
+            <figcaption>Анфас (A-поза)</figcaption>
+            <div class="ref-svg-wrap" aria-hidden="true">
+              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
+                <polygon
+                  id="ref-poly-front"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </div>
+          </figure>
+          <figure class="ref-figure">
+            <figcaption>Профіль</figcaption>
+            <div class="ref-svg-wrap" aria-hidden="true">
+              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
+                <polygon
+                  id="ref-poly-profile"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+                <polyline
+                  id="ref-poly-arm"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  stroke-dasharray="4 3"
+                />
+              </svg>
+            </div>
+          </figure>
+        </div>
+        <button type="button" class="btn primary wide" id="btn-to-capture">Продовжити до зйомки</button>
+      </section>
+
+      <section class="card" aria-labelledby="params-heading" id="section-params">
+        <h2 id="params-heading">Параметри</h2>
+        <div class="field">
+          <label for="height">Зріст (см)</label>
+          <input id="height" name="height" type="number" min="100" max="250" value="175" required />
+        </div>
+        <div class="field">
+          <label for="sex">Стать</label>
+          <select id="sex" name="sex" required>
+            <option value="male">Чоловік</option>
+            <option value="female">Жінка</option>
+            <option value="other">Інше</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
+        <h2 id="capture-heading">Зйомка</h2>
+        <p id="step-label" class="step-label">Крок 1 з 2: анфас</p>
+        <div class="preview-wrap mirror">
+          <video id="video" playsinline autoplay muted></video>
+          <canvas id="overlay" class="overlay" aria-hidden="true"></canvas>
+          <div
+            id="countdown-overlay"
+            class="countdown-overlay"
+            hidden
+            aria-live="assertive"
+            aria-atomic="true"
+          ></div>
+        </div>
+        <div class="actions capture-live-actions">
+          <button type="button" id="btn-start" class="btn primary">Увімкнути камеру</button>
+          <button type="button" id="btn-capture" class="btn" disabled>Зробити фото</button>
+          <button type="button" id="btn-capture-timer" class="btn" disabled>Фото через 10 с</button>
+          <button type="button" id="btn-stop" class="btn ghost" disabled>Зупинити камеру</button>
+        </div>
+        <p id="pose-status" class="pose-status" role="status" aria-live="polite"></p>
+        <p id="status" class="status" role="status"></p>
+        <div class="thumbs-wrap" id="thumbs-wrap">
+          <div class="thumbs" id="thumbs-inner">
+            <figure>
+              <figcaption>Анфас</figcaption>
+              <img id="thumb-front" alt="Попередній перегляд анфас" width="112" height="84" hidden />
+            </figure>
+            <figure>
+              <figcaption>Профіль</figcaption>
+              <img id="thumb-side" alt="Попередній перегляд профіль" width="112" height="84" hidden />
+            </figure>
+          </div>
+          <div class="retake-actions" id="retake-actions" hidden>
+            <button type="button" id="btn-retake-front" class="btn">Перезняти анфас</button>
+            <button type="button" id="btn-retake-side" class="btn">Перезняти профіль</button>
+          </div>
+        </div>
+        <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки (mock)</button>
+        <button type="button" id="btn-measure-test" class="btn wide">Тест результатів без фото</button>
+      </section>
+
+      <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
+        <h2 id="results-heading">Результат</h2>
+
+        <div class="tailoring-intro" id="tailoring-intro" hidden></div>
+
+        <div class="garment-strip-wrap" id="garment-strip-wrap" hidden>
+          <p class="tailoring-hint" id="garment-strip-label">Тип одягу</p>
+          <div class="garment-strip" id="garment-strip" role="radiogroup" aria-labelledby="garment-strip-label"></div>
+        </div>
+
+        <div class="tailoring-panels" id="tailoring-panels" hidden>
+          <div class="tailoring-col">
+            <h3 class="tailoring-sub">Мірки для обраного виробу</h3>
+            <table class="measures measures-compact" id="tailoring-measures-table">
+              <thead>
+                <tr>
+                  <th>Показник</th>
+                  <th>см</th>
+                  <th>Дост.</th>
+                </tr>
+              </thead>
+              <tbody id="tailoring-measures-body"></tbody>
+            </table>
+          </div>
+          <div class="tailoring-col">
+            <h3 class="tailoring-sub">Розмірні сітки (довідково)</h3>
+            <div class="size-tabs" role="tablist" aria-label="Регіональні сітки">
+              <button type="button" class="size-tab" role="tab" id="tab-ua" aria-selected="true" aria-controls="panel-ua" tabindex="0">Україна (орієнт.)</button>
+              <button type="button" class="size-tab" role="tab" id="tab-eu" aria-selected="false" aria-controls="panel-eu" tabindex="-1">Європа (орієнт.)</button>
+              <button type="button" class="size-tab" role="tab" id="tab-us" aria-selected="false" aria-controls="panel-us" tabindex="-1">США (орієнт.)</button>
+            </div>
+            <div id="panel-ua" class="size-panel" role="tabpanel" aria-labelledby="tab-ua"></div>
+            <div id="panel-eu" class="size-panel" role="tabpanel" aria-labelledby="tab-eu" hidden></div>
+            <div id="panel-us" class="size-panel" role="tabpanel" aria-labelledby="tab-us" hidden></div>
+          </div>
+        </div>
+
+        <details class="pattern-details" id="pattern-details" hidden>
+          <summary>Індивідуальні мірки для пошиття</summary>
+          <div class="pattern-grid">
+            <div class="pattern-col">
+              <h4>Базові розміри (тіло + припуски на вільність)</h4>
+              <table class="measures measures-compact">
+                <thead>
+                  <tr><th>Параметр</th><th>см</th></tr>
+                </thead>
+                <tbody id="pattern-raw-body"></tbody>
+              </table>
+            </div>
+            <div class="pattern-col">
+              <h4>З припусками на шви</h4>
+              <table class="measures measures-compact">
+                <thead>
+                  <tr><th>Параметр</th><th>см</th></tr>
+                </thead>
+                <tbody id="pattern-seam-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="pattern-hint">Ці величини використовуються для індивідуального пошиття. Всі значення приблизні.</p>
+        </details>
+
+        <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden>
+          Розміри на вкладках — орієнтовні
+        </p>
+
+        <details class="all-measures-details" id="all-measures-details">
+          <summary>Усі мірки (повна таблиця)</summary>
+          <table class="measures" id="results-table">
+            <thead>
+              <tr>
+                <th>Показник</th>
+                <th>Значення (см)</th>
+                <th>Достовірність</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </details>
+      </section>
+    </main>
+
+    <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
+    <script type="module" src="/static/js/app.js?v=auto-capture1"></script>
+  </body>
+</html>

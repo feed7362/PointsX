@@ -12,3 +12,5 @@ build/
 .idea/
 data/
 /assets/hdri/
+
+/.cursor
