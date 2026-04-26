@@ -1,17 +1,33 @@
-"""FastAPI app: static capture UI + mock body-measurement endpoint."""
+"""FastAPI app: static capture UI + real body-measurement endpoint.
+
+Configuration (environment variables, all optional):
+    POINTSX_POSE_MODEL        path to YOLO11n-pose .pt (default: models/yolo11n-pose.pt)
+    POINTSX_SEG_MODEL         path to YOLO11n-seg .pt  (default: models/yolo11n-seg.pt)
+    POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt (optional; falls back
+                              to the Ramanujan ellipse approximation if unset/missing)
+    POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
+
+If model loading fails, the server still starts; `/api/measure` returns 503 until
+the issue is fixed.
+"""
 
 from __future__ import annotations
 
-import math
+import logging
+import os
 import uuid
-from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import cv2
+import numpy as np
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -31,53 +47,8 @@ def _looks_like_raster_image(data: bytes) -> bool:
     return False
 
 
-# Canonical IDs for the 18 outputs (stable API); map later to pipeline / schema fields.
-MEASUREMENT_SPECS: list[tuple[str, str, float]] = [
-    ("chest_circumference",          "Обхват грудей",                                        0.52),
-    ("waist_circumference",          "Обхват талії",                                         0.38),
-    ("hip_circumference",            "Обхват стегон",                                        0.54),
-    ("neck_circumference",           "Обхват шиї",                                           0.22),
-    ("neck_base_height",             "Висота точки основи шиї",                              0.08),
-    ("shoulder_slope_width",         "Ширина плечового ската",                               0.13),
-    ("back_width_scapular",          "Ширина спини (між лопатками)",                         0.18),
-    ("chest_width_front",            "Ширина грудей (між пахвами спереду)",                  0.24),
-    ("back_length_to_waist",         "Довжина спини до талії (по хребту)",                   0.26),
-    ("front_length_to_waist",        "Довжина переду до талії (через найвищу точку грудей)", 0.28),
-    ("arm_length_shoulder_to_wrist", "Довжина руки (від плеча до зап'ястя)",                 0.36),
-    ("upper_arm_circumference",      "Обхват плеча (біцепс)",                                0.15),
-    ("wrist_circumference",          "Обхват зап'ястя",                                      0.065),
-    ("leg_length_inner_seam",        "Довжина ноги по внутрішньому шву",                     0.45),
-    ("leg_length_outer_seam",        "Довжина ноги по зовнішньому шву",                      0.52),
-    ("thigh_circumference",          "Обхват стегна",                                        0.28),
-    ("calf_circumference",           "Обхват гомілки (литки)",                               0.19),
-    ("ankle_circumference",          "Обхват щиколотки",                                     0.09),
-]
-
-# Which view each measurement is primarily derived from (for v2 envelope)
-MEASUREMENT_SOURCE: dict[str, str] = {
-    "chest_circumference":          "fused",
-    "waist_circumference":          "fused",
-    "hip_circumference":            "fused",
-    "neck_circumference":           "front",
-    "neck_base_height":             "front",
-    "shoulder_slope_width":         "front",
-    "back_width_scapular":          "side",
-    "chest_width_front":            "front",
-    "back_length_to_waist":         "side",
-    "front_length_to_waist":        "side",
-    "arm_length_shoulder_to_wrist": "side",
-    "upper_arm_circumference":      "fused",
-    "wrist_circumference":          "fused",
-    "leg_length_inner_seam":        "side",
-    "leg_length_outer_seam":        "side",
-    "thigh_circumference":          "fused",
-    "calf_circumference":           "side",
-    "ankle_circumference":          "fused",
-}
-
-
 # ---------------------------------------------------------------------------
-# Pydantic models — v2 MeasurementEnvelope
+# Pydantic models — v2 MeasurementEnvelope (kept here because envelope.py imports them)
 # ---------------------------------------------------------------------------
 
 class MeasurementItem(BaseModel):
@@ -91,8 +62,8 @@ class MeasurementItem(BaseModel):
 
 
 class PipelineInfo(BaseModel):
-    source: Literal["mock", "mediapipe", "regression"] = "mock"
-    model_version: str = "mock-0.1.0"
+    source: Literal["mock", "mediapipe", "regression"] = "regression"
+    model_version: str = "regression-0.1"
     unit_system: Literal["metric"] = "metric"
 
 
@@ -131,63 +102,82 @@ class MeasurementEnvelope(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Mock measurement builder
+# Pipeline lifespan — load models once at startup
 # ---------------------------------------------------------------------------
 
-def _sex_scale(sex: Literal["male", "female", "other"]) -> float:
-    if sex == "male":
-        return 1.0
-    if sex == "female":
-        return 0.97
-    return 0.985
+def _resolve_path(env_var: str, default: str) -> str:
+    raw = os.environ.get(env_var, default).strip()
+    return raw or default
 
 
-def build_mock_measurements(
-    height_cm: float,
-    sex: Literal["male", "female", "other"],
-) -> list[MeasurementItem]:
-    """Deterministic mock measurements from height and sex (not real anthropometry)."""
-    scale = _sex_scale(sex)
-    h = height_cm
-    out: list[MeasurementItem] = []
-    for i, (mid, label_uk, ratio) in enumerate(MEASUREMENT_SPECS):
-        base = h * ratio * scale
-        tweak = 1.0 + 0.01 * math.sin(i + h * 0.1)
-        value = round(base * tweak, 1)
-        conf = round(0.75 + 0.04 * math.cos(i * 0.7), 2)
-        conf = min(0.95, max(0.5, conf))
-        uncertainty = round((1.0 - conf) * value * 0.05, 2)
-        out.append(MeasurementItem(
-            id=mid,
-            label_uk=label_uk,
-            value_cm=value,
-            uncertainty_cm=uncertainty,
-            confidence=conf,
-            source=MEASUREMENT_SOURCE.get(mid, "fused"),
-            quality_flags=[],
-        ))
-    return out
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load the WebuiPipeline once, store on app.state.pipeline.
+
+    Failures are logged but do not crash the server — the endpoint will return
+    503 until env vars are corrected and the server is restarted.
+    """
+    pose_path = _resolve_path("POINTSX_POSE_MODEL", "models/yolo11n-pose.pt")
+    seg_path  = _resolve_path("POINTSX_SEG_MODEL",  "models/yolo11n-seg.pt")
+    reg_path  = os.environ.get("POINTSX_REGRESSION_MODEL", "").strip() or None
+    device    = _resolve_path("POINTSX_DEVICE", "auto")
+
+    app.state.pipeline = None
+    app.state.pipeline_load_error = None
+
+    try:
+        from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
+
+        app.state.pipeline = WebuiPipeline(
+            pose_model_path=pose_path,
+            seg_model_path=seg_path,
+            regression_model_path=reg_path,
+            device=device,
+        )
+        logger.info(
+            "Pipeline loaded — pose=%s seg=%s regressor=%s device=%s",
+            pose_path, seg_path, reg_path or "<ellipse-fallback>", device,
+        )
+    except Exception as exc:  # noqa: BLE001 — we want the server to keep running
+        app.state.pipeline_load_error = str(exc)
+        logger.error(
+            "Failed to load WebuiPipeline (endpoint will return 503): %s", exc,
+        )
+
+    yield
+
+    app.state.pipeline = None
 
 
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="PointsX WebUI", version="0.2.0")
+app = FastAPI(title="PointsX WebUI", version="0.3.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-async def _validate_image_upload(upload: UploadFile, label: str) -> None:
+async def _validate_and_decode(upload: UploadFile, label: str) -> np.ndarray:
+    """Validate upload bytes and decode to a BGR ndarray (cv2 convention)."""
     data = await upload.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail=f"{label}: empty file")
     if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail=f"{label}: file too large (max {MAX_UPLOAD_BYTES} bytes)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label}: file too large (max {MAX_UPLOAD_BYTES} bytes)",
+        )
     ct = upload.content_type or ""
     if any(ct.startswith(p) for p in DISALLOWED_CONTENT_PREFIXES):
         raise HTTPException(status_code=400, detail=f"{label}: invalid Content-Type {ct!r}")
     if not _looks_like_raster_image(data):
         raise HTTPException(status_code=400, detail=f"{label}: body is not a JPEG, PNG, or WebP image")
+
+    arr = np.frombuffer(data, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None or img.size == 0:
+        raise HTTPException(status_code=400, detail=f"{label}: failed to decode image")
+    return img
 
 
 @app.get("/")
@@ -198,38 +188,45 @@ async def index() -> FileResponse:
     return FileResponse(index_path)
 
 
-@app.post("/api/measure/mock", response_model=MeasurementEnvelope)
-async def measure_mock(
+@app.post("/api/measure", response_model=MeasurementEnvelope)
+async def measure(
+    request: Request,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
     front: UploadFile = File(...),
     side: UploadFile = File(...),
 ) -> MeasurementEnvelope:
-    """
-    Return MeasurementEnvelope v2; images are validated but not analysed
-    (drop-in for the real MeasurementPipeline).
-    """
-    await _validate_image_upload(front, "front")
-    await _validate_image_upload(side, "side")
+    """Run pose + seg + (optional) regression on the supplied photo pair.
 
-    measurements = build_mock_measurements(height_cm, sex)
-    now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    request_id = str(uuid.uuid4())
+    Returns a `MeasurementEnvelope` with up to 18 canonical body measurements.
+    Measurements that the pipeline cannot derive are simply omitted; the
+    frontend size engine tolerates a small number of missing values.
+    """
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline is None:
+        err = getattr(request.app.state, "pipeline_load_error", None) or "pipeline not initialised"
+        raise HTTPException(
+            status_code=503,
+            detail=f"Pipeline unavailable: {err}",
+        )
 
-    return MeasurementEnvelope(
-        **{
-            "schema": "pointsx.measurement.envelope",
-            "schema_version": 2,
-            "request_id": request_id,
-            "created_at": now,
-            "pipeline": PipelineInfo(),
-            "subject": SubjectInfo(height_cm=height_cm, sex=sex),
-            "capture": CaptureInfo(
-                front=CaptureQuality(quality=0.85, pose_ok=True),
-                side=CaptureQuality(quality=0.82, pose_ok=True),
-            ),
-            "measurements": measurements,
-            "derived": {},
-            "warnings": [],
-        }
+    front_img = await _validate_and_decode(front, "front")
+    side_img  = await _validate_and_decode(side,  "side")
+
+    try:
+        result = pipeline.measure(front_img, side_img, height_cm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — surface unexpected errors to client
+        logger.exception("Pipeline failed")
+        raise HTTPException(status_code=500, detail=f"Inference failed: {exc}") from exc
+
+    from webui.envelope import body_to_envelope
+
+    envelope = body_to_envelope(
+        result=result,
+        subject_height_cm=height_cm,
+        sex=sex,
+        request_id=str(uuid.uuid4()),
     )
+    return envelope
