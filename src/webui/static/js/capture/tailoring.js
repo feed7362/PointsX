@@ -1,7 +1,7 @@
 /**
  * Tailoring UI — garment strip, regional size tabs, and measurement table.
  *
- * /api/measure/mock → MeasurementEnvelope v2
+ * /api/measure → MeasurementEnvelope v2
  * → sizeAndPatternHandler → SizingReport
  * → renderConsensusBlock (UA / EU / US panels)
  */
@@ -528,7 +528,7 @@ export function attachMeasureHandler() {
     }
 
     try {
-      const res = await fetch("/api/measure/mock", { method: "POST", body: fd });
+      const res = await fetch("/api/measure", { method: "POST", body: fd });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || res.statusText);
@@ -590,8 +590,14 @@ export function attachMeasureHandler() {
   });
 
   if (btnMeasureTest) {
-    btnMeasureTest.addEventListener("click", async () => {
-      await runMeasureRequest("test");
+    // Test mode used to POST 1×1 placeholder PNGs to /api/measure/mock.
+    // The real /api/measure pipeline rejects those (no person detected),
+    // so the button now just shows a hint instead of producing 400 errors.
+    btnMeasureTest.addEventListener("click", () => {
+      setStatus(
+        "Тестовий режим вимкнено: справжній конвеєр потребує реальних фото. " +
+          "Зробіть знімки спереду й збоку, потім натисніть «Виміряти».",
+      );
     });
   }
 }

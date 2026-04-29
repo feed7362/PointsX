@@ -3,7 +3,6 @@
 import os
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 from scipy.io import loadmat
 from tqdm import tqdm

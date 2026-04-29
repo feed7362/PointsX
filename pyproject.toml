@@ -22,6 +22,8 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     # smpl-anthropometry is not on PyPI — install manually:
     # pip install git+https://github.com/DavidBoja/SMPL-Anthropometry.git
+    "rich>=15.0.0",
+    "python-multipart>=0.0.26",
 ]
 
 [project.scripts]
