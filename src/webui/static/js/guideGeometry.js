@@ -1,10 +1,29 @@
 /**
  * Configurable guide-frame polygons, head/foot anchors, and guideBox parameters.
  * Persistence: localStorage (STORAGE_KEY). Import/export as JSON.
- * Optional repo file: when localStorage is empty, OPTIONAL_STATIC_DATA_URL may be loaded.
+ * Optional repo file: fetched only when localStorage has no saved geometry (see applyReloadGuideQueryParam).
  */
 
-export const STORAGE_KEY = "pointsx_guide_v1";
+import guideDefaultPayload from "./guide-default.json" with { type: "json" };
+
+export const STORAGE_KEY = "pointsx_guide_v2";
+
+/**
+ * If the page URL contains `reloadGuide=1`, clears saved geometry so the next load pulls from
+ * OPTIONAL_STATIC_DATA_URL (browser cache may still apply; use hard refresh if needed).
+ * Call once before loadGuideGeometry().
+ */
+export function applyReloadGuideQueryParam() {
+  if (typeof localStorage === "undefined" || typeof location === "undefined") return;
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("reloadGuide") === "1") {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Optional static JSON (version: 1) served with the app when users have no localStorage entry. */
 export const OPTIONAL_STATIC_DATA_URL = "/static/data/guide-geometry.json";
@@ -12,193 +31,11 @@ export const OPTIONAL_STATIC_DATA_URL = "/static/data/guide-geometry.json";
 /** @typedef {{ x: number, y: number }} Anchor */
 /** @typedef {[number, number][]} PtList */
 
-export const DEFAULT_GUIDE = {
-  version: 1,
-  headAnchorFront: { x: 0.5, y: 0.048 },
-  headAnchorProfile: { x: 0.524, y: 0.071 },
-  footAnchorFront: { x: 0.5, y: 0.992 },
-  footAnchorProfile: { x: 0.52, y: 0.994 },
-  guideFrame: {
-    sidePadRatio: 0.08,
-    bodyTopFrac: 0.02,
-    marginXRatio: 0.02,
-    marginYRatio: 0.02,
-    smoothFactor: 0.82,
-    smoothBlend: 0.18,
-    decayNoLm: 0.88,
-    decayLowVis: 0.9,
-    noseVisMin: 0.22,
-    snapEps: 0.4,
-    fhHeightMinCm: 150,
-    fhHeightMaxCm: 200,
-    fhAtMin: 0.82,
-    fhAtMax: 0.92,
-    verticalFitMinFrac: 0.5,
-    verticalFitMaxFrac: 0.93,
-    ankleVisMin: 0.14,
-  },
-  /** @type {PtList} */
-  frontPts: [
-    [0.5, 0.005],
-    [0.56, 0.015],
-    [0.58, 0.04],
-    [0.57, 0.075],
-    [0.535, 0.095],
-    [0.55, 0.115],
-    [0.66, 0.13],
-    [0.73, 0.155],
-    [0.81, 0.19],
-    [0.88, 0.225],
-    [0.935, 0.26],
-    [0.96, 0.29],
-    [0.919973544973545, 0.3105329304919909],
-    [0.8637566137566138, 0.28431248808161713],
-    [0.8108465608465608, 0.26285939883676585],
-    [0.7380952380952381, 0.22472057351258584],
-    [0.671957671957672, 0.19850013110221207],
-    [0.62, 0.2],
-    [0.59, 0.28],
-    [0.565, 0.37],
-    [0.6, 0.43],
-    [0.62, 0.47],
-    [0.625, 0.54],
-    [0.62, 0.62],
-    [0.62, 0.7],
-    [0.615, 0.78],
-    [0.61, 0.855],
-    [0.61, 0.91],
-    [0.62, 0.95],
-    [0.64, 0.975],
-    [0.62, 0.99],
-    [0.57, 0.99],
-    [0.56, 0.96],
-    [0.555, 0.91],
-    [0.555, 0.855],
-    [0.56, 0.78],
-    [0.565, 0.7],
-    [0.565, 0.62],
-    [0.56, 0.54],
-    [0.545, 0.47],
-    [0.5, 0.45],
-    [0.455, 0.47],
-    [0.44, 0.54],
-    [0.435, 0.62],
-    [0.435, 0.7],
-    [0.44, 0.78],
-    [0.445, 0.855],
-    [0.445, 0.91],
-    [0.44, 0.96],
-    [0.43, 0.99],
-    [0.38, 0.99],
-    [0.36, 0.975],
-    [0.39, 0.95],
-    [0.39, 0.91],
-    [0.39, 0.855],
-    [0.385, 0.78],
-    [0.38, 0.7],
-    [0.38, 0.62],
-    [0.375, 0.54],
-    [0.375, 0.47],
-    [0.38, 0.43],
-    [0.380952380952381, 0.4297167596300534],
-    [0.43716931216931215, 0.37012484506102217],
-    [0.41, 0.28],
-    [0.38, 0.2],
-    [0.3412698412698413, 0.18419807160564455],
-    [0.26851851851851855, 0.21995322034706333],
-    [0.208994708994709, 0.24378998617467584],
-    [0.13624338624338625, 0.2747777817505721],
-    [0.08664021164021164, 0.30814925390922965],
-    [0.04, 0.29],
-    [0.065, 0.26],
-    [0.12, 0.225],
-    [0.19, 0.19],
-    [0.27, 0.155],
-    [0.34, 0.13],
-    [0.45, 0.115],
-    [0.465, 0.095],
-    [0.43, 0.075],
-    [0.42, 0.04],
-    [0.44, 0.015],
-  ],
-  /** @type {PtList} */
-  profilePts: [
-    [0.5066137566137566, 0.01973816802536232],
-    [0.4636243386243386, 0.028796139039855072],
-    [0.5099206349206349, 0.01973816802536232],
-    [0.5066137566137566, 0.01973816802536232],
-    [0.5529100529100529, 0.012944689764492753],
-    [0.5529100529100529, 0.015209182518115942],
-    [0.5529100529100529, 0.015209182518115942],
-    [0.5529100529100529, 0.015209182518115942],
-    [0.5595238095238095, 0.015209182518115942],
-    [0.5892857142857143, 0.03558961730072464],
-    [0.5992063492063492, 0.05823454483695652],
-    [0.6058201058201058, 0.0786149796195652],
-    [0.5992063492063492, 0.09446642889492753],
-    [0.5859788359788359, 0.1012599071557971],
-    [0.5694444444444444, 0.11031787817028985],
-    [0.5595238095238095, 0.12843382019927535],
-    [0.6058201058201058, 0.14654976222826085],
-    [0.6190476190476191, 0.1805171535326087],
-    [0.6223544973544973, 0.2178812839673913],
-    [0.6223544973544973, 0.26317113903985506],
-    [0.6190476190476191, 0.2880805593297101],
-    [0.6025132275132276, 0.34242838541666665],
-    [0.59, 0.39],
-    [0.6, 0.42],
-    [0.595, 0.46],
-    [0.59, 0.5],
-    [0.585, 0.54],
-    [0.58, 0.58],
-    [0.575, 0.62],
-    [0.57, 0.66],
-    [0.56, 0.72],
-    [0.55, 0.79],
-    [0.545, 0.85],
-    [0.5363756613756614, 0.8969173698512586],
-    [0.5529100529100529, 0.9279051654271548],
-    [0.5826719576719577, 0.9538414288949275],
-    [0.6521164021164021, 0.9606349071557971],
-    [0.671957671957672, 0.9810153419384058],
-    [0.6554232804232805, 0.9946022984601449],
-    [0.4669312169312169, 0.9900733129528986],
-    [0.4669312169312169, 0.9231378122616323],
-    [0.4669312169312169, 0.901684723016781],
-    [0.445, 0.85],
-    [0.45, 0.79],
-    [0.45, 0.72],
-    [0.44, 0.66],
-    [0.435, 0.62],
-    [0.44, 0.58],
-    [0.445, 0.54],
-    [0.45, 0.5],
-    [0.46, 0.46],
-    [0.465, 0.42],
-    [0.47, 0.39],
-    [0.46, 0.355],
-    [0.4437830687830688, 0.3236431516971778],
-    [0.4305555555555555, 0.297422709286804],
-    [0.43386243386243384, 0.2640512371281465],
-    [0.4305555555555555, 0.23067976496948897],
-    [0.4305555555555555, 0.21161035230739894],
-    [0.43386243386243384, 0.19015726306254768],
-    [0.4437830687830688, 0.1663204972349352],
-    [0.4470899470899471, 0.14248373140732265],
-    [0.4966931216931217, 0.12164034193840578],
-    [0.4636243386243386, 0.10578889266304348],
-    [0.4437830687830688, 0.0808794723731884],
-    [0.4503968253968254, 0.05144106657608695],
-    [0.5033068783068783, 0.024267153532608696],
-    [0.5099206349206349, 0.02200266077898551],
-    [0.5099206349206349, 0.01973816802536232],
-  ],
-  /** @type {PtList} */
-  profileArmPts: [
-    [0.6223544973544973, 0.18062255673150268],
-    [0.876984126984127, 0.27596962004195275],
-  ],
-};
+/**
+ * Built-in defaults from `./guide-default.json` (copied from `static/data/guide-geometry.json`).
+ * After editing the data file, sync: `cp src/webui/static/data/guide-geometry.json src/webui/static/js/guide-default.json`
+ */
+export const DEFAULT_GUIDE = structuredClone(guideDefaultPayload);
 
 function cloneGuide() {
   return structuredClone(DEFAULT_GUIDE);
@@ -223,6 +60,31 @@ export function guidePtsToRefSvgPoints(pts, vbW = 100, vbH = 160) {
       return `${xr},${yr}`;
     })
     .join(" ");
+}
+
+function _mapGuidePtsToSvgSpace(pts, vbW, vbH) {
+  return pts.map(([x, y]) => [x * vbW, y * vbH]);
+}
+
+/**
+ * Smooth closed contour path for SVG `<path d="...">` (matches canvas smoothing).
+ */
+export function guidePtsToRefSvgPathClosed(pts, vbW = 100, vbH = 160) {
+  if (!Array.isArray(pts) || pts.length < 3) return "";
+  const mapped = _mapGuidePtsToSvgSpace(pts, vbW, vbH);
+  const first = mapped[0];
+  const second = mapped[1];
+  const sx = (first[0] + second[0]) * 0.5;
+  const sy = (first[1] + second[1]) * 0.5;
+  let d = `M ${sx.toFixed(4)} ${sy.toFixed(4)}`;
+  for (let i = 1; i < mapped.length; i++) {
+    const cur = mapped[i];
+    const next = mapped[(i + 1) % mapped.length];
+    const mx = (cur[0] + next[0]) * 0.5;
+    const my = (cur[1] + next[1]) * 0.5;
+    d += ` Q ${cur[0].toFixed(4)} ${cur[1].toFixed(4)} ${mx.toFixed(4)} ${my.toFixed(4)}`;
+  }
+  return `${d} Z`;
 }
 
 export function videoNormToPreviewLocal(nx, ny, cw, ch, vw, vh) {
@@ -423,20 +285,22 @@ export function computeGuideBoxWithDelta(cssW, cssH, heightCmStr, smoothDelta, g
 
 export function drawPoly(ctx, pts, box) {
   if (!pts.length) return;
+  if (pts.length < 3) return;
   ctx.beginPath();
-  ctx.moveTo(box.left + pts[0][0] * box.width, box.top + pts[0][1] * box.height);
-  for (let i = 1; i < pts.length; i++)
-    ctx.lineTo(box.left + pts[i][0] * box.width, box.top + pts[i][1] * box.height);
+  const mapped = pts.map(([x, y]) => [box.left + x * box.width, box.top + y * box.height]);
+  const first = mapped[0];
+  const second = mapped[1];
+  const startX = (first[0] + second[0]) * 0.5;
+  const startY = (first[1] + second[1]) * 0.5;
+  ctx.moveTo(startX, startY);
+  for (let i = 1; i < mapped.length; i++) {
+    const cur = mapped[i];
+    const next = mapped[(i + 1) % mapped.length];
+    const midX = (cur[0] + next[0]) * 0.5;
+    const midY = (cur[1] + next[1]) * 0.5;
+    ctx.quadraticCurveTo(cur[0], cur[1], midX, midY);
+  }
   ctx.closePath();
-}
-
-export function drawOpenStroke(ctx, pts, box) {
-  if (pts.length < 2) return;
-  ctx.beginPath();
-  ctx.moveTo(box.left + pts[0][0] * box.width, box.top + pts[0][1] * box.height);
-  for (let i = 1; i < pts.length; i++)
-    ctx.lineTo(box.left + pts[i][0] * box.width, box.top + pts[i][1] * box.height);
-  ctx.stroke();
 }
 
 /**
@@ -444,28 +308,29 @@ export function drawOpenStroke(ctx, pts, box) {
  * @param {{ left: number, top: number, width: number, height: number }} box From computeGuideBoxTracked or computeGuideBoxWithDelta.
  */
 export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideGeom) {
-  const cw = ctx.canvas && ctx.canvas.width ? ctx.canvas.width : box.width;
-  ctx.strokeStyle = "rgba(91, 140, 255, 0.92)";
-  ctx.lineWidth = Math.max(2, cw * 0.014);
+  const cw = box.width || (ctx.canvas && ctx.canvas.width ? ctx.canvas.width : 0);
+  const lineWidth = Math.max(2, cw * 0.0125);
+  ctx.strokeStyle = "rgba(165, 202, 255, 0.92)";
+  ctx.lineWidth = lineWidth;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.setLineDash([8, 6]);
+  ctx.shadowColor = "rgba(66, 147, 255, 0.25)";
+  ctx.shadowBlur = Math.max(3, cw * 0.008);
+  ctx.setLineDash([]);
   if (currentStep === 1) {
     drawPoly(ctx, geom.frontPts, box);
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(91, 140, 255, 0.07)";
+    ctx.fillStyle = "rgba(118, 170, 255, 0.12)";
     ctx.fill();
   } else {
     drawPoly(ctx, geom.profilePts, box);
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(91, 140, 255, 0.07)";
+    ctx.fillStyle = "rgba(118, 170, 255, 0.12)";
     ctx.fill();
-    ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = "rgba(120, 170, 255, 0.95)";
-    drawOpenStroke(ctx, geom.profileArmPts, box);
-    ctx.setLineDash([]);
   }
 }
 
@@ -505,9 +370,6 @@ export function applyGuidePayload(o) {
   }
   if (isPtList(o.frontPts)) guideGeom.frontPts = o.frontPts.map((p) => [p[0], p[1]]);
   if (isPtList(o.profilePts)) guideGeom.profilePts = o.profilePts.map((p) => [p[0], p[1]]);
-  if (isPtList(o.profileArmPts, 2)) {
-    guideGeom.profileArmPts = o.profileArmPts.map((p) => [p[0], p[1]]);
-  }
   return true;
 }
 
@@ -551,7 +413,6 @@ export function saveGuideGeometry() {
     guideFrame: { ...guideGeom.guideFrame },
     frontPts: guideGeom.frontPts.map((p) => [p[0], p[1]]),
     profilePts: guideGeom.profilePts.map((p) => [p[0], p[1]]),
-    profileArmPts: guideGeom.profileArmPts.map((p) => [p[0], p[1]]),
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -574,7 +435,6 @@ export function exportGuideGeometryJson() {
       guideFrame: { ...guideGeom.guideFrame },
       frontPts: guideGeom.frontPts,
       profilePts: guideGeom.profilePts,
-      profileArmPts: guideGeom.profileArmPts,
     },
     null,
     2

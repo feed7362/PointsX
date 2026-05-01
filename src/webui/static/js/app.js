@@ -4,9 +4,10 @@
  */
 import {
   guideGeom,
+  applyReloadGuideQueryParam,
   loadGuideGeometry,
   loadGuideGeometryFromOptionalStaticFile,
-  guidePtsToRefSvgPoints,
+  drawGuideSilhouetteOnCanvas,
 } from "./guideGeometry.js";
 import { getCaptureDom } from "./capture/dom.js";
 import { captureState } from "./capture/state.js";
@@ -15,20 +16,45 @@ import * as overlay from "./capture/overlay.js";
 import * as ui from "./capture/ui.js";
 import * as tailoring from "./capture/tailoring.js";
 
-/** Sync reference SVG polygons at the top of the page with the live guide geometry. */
-function syncReferenceGuideSvgs() {
-  const pf = document.getElementById("ref-poly-front");
-  const pp = document.getElementById("ref-poly-profile");
-  const pa = document.getElementById("ref-poly-arm");
-  if (pf) pf.setAttribute("points", guidePtsToRefSvgPoints(guideGeom.frontPts));
-  if (pp) pp.setAttribute("points", guidePtsToRefSvgPoints(guideGeom.profilePts));
-  if (pa) pa.setAttribute("points", guidePtsToRefSvgPoints(guideGeom.profileArmPts));
+/** Render top reference canvases using the same drawing code as live overlay. */
+function renderReferenceGuides() {
+  const canvases = [
+    { id: "ref-canvas-front", step: 1 },
+    { id: "ref-canvas-profile", step: 2 },
+  ];
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const item of canvases) {
+    const canvas = /** @type {HTMLCanvasElement | null} */ (document.getElementById(item.id));
+    if (!canvas) continue;
+    const cssW = Math.max(1, canvas.clientWidth || 260);
+    const cssH = Math.max(1, canvas.clientHeight || Math.round(cssW * 1.6));
+    const bw = Math.round(cssW * dpr);
+    const bh = Math.round(cssH * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = cssW * 0.07;
+    const box = {
+      left: pad,
+      top: cssH * 0.02,
+      width: cssW - pad * 2,
+      height: cssH * 0.94,
+    };
+    drawGuideSilhouetteOnCanvas(ctx, box, item.step, guideGeom);
+  }
 }
 
+applyReloadGuideQueryParam();
 loadGuideGeometry();
-syncReferenceGuideSvgs();
+renderReferenceGuides();
 void loadGuideGeometryFromOptionalStaticFile().then(() => {
-  syncReferenceGuideSvgs();
+  renderReferenceGuides();
 });
 
 function initCaptureApp() {
@@ -57,6 +83,21 @@ function initCaptureApp() {
   });
   dom.btnCaptureTimer.addEventListener("click", () => session.startCaptureTimer());
 
+  const uploadFrontInput = document.getElementById("upload-front");
+  const uploadSideInput = document.getElementById("upload-side");
+  uploadFrontInput?.addEventListener("change", async (e) => {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const f = input.files?.[0];
+    if (f) await session.applyUploadedImage("front", f);
+    input.value = "";
+  });
+  uploadSideInput?.addEventListener("change", async (e) => {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const f = input.files?.[0];
+    if (f) await session.applyUploadedImage("side", f);
+    input.value = "";
+  });
+
   tailoring.ensureSizeTabsWired();
   tailoring.attachMeasureHandler();
 
@@ -69,7 +110,10 @@ function initCaptureApp() {
   if (previewWrap && typeof ResizeObserver !== "undefined") {
     new ResizeObserver(() => overlay.drawOverlay()).observe(previewWrap);
   }
-  window.addEventListener("resize", () => overlay.drawOverlay());
+  window.addEventListener("resize", () => {
+    overlay.drawOverlay();
+    renderReferenceGuides();
+  });
 
   ui.updateUiStep();
   session.resetTimerButtonLabel();

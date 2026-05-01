@@ -9,10 +9,16 @@ It also defines how guide geometry is persisted and imported/exported.
 
 - Runtime module: `src/webui/static/js/guideGeometry.js`
 - Optional bootstrap payload: `src/webui/static/data/guide-geometry.json`
-- Browser storage key: `pointsx_guide_v1`
+- Browser storage key: `pointsx_guide_v2`
 
 The module exports a mutable `guideGeom` object initialized from `DEFAULT_GUIDE`.  
 Most callers should rely on this live binding instead of copying geometry.
+
+Edits to `guide-geometry.json` do **not** appear in the browser until saved geometry is cleared: by default `loadGuideGeometry()` reads `pointsx_guide_v2` from `localStorage` and **skips** the static file when that key exists. Use either:
+
+- Open the app or frame editor with **`?reloadGuide=1`** once (clears the key, then loads `/static/data/guide-geometry.json`), or  
+- DevTools → Application → Local Storage → delete **`pointsx_guide_v2`**, or  
+- Frame editor **reset** control (also clears the key).
 
 ---
 
@@ -26,7 +32,6 @@ Top-level fields:
 - `guideFrame`: tracking and sizing coefficients
 - `frontPts`: closed normalized polygon for front pose
 - `profilePts`: closed normalized polygon for side pose
-- `profileArmPts`: open polyline for side-pose arm guide
 
 All points are normalized `[x, y]` with expected range `[0..1]`.
 
@@ -79,9 +84,9 @@ The function may run in two modes:
 `drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom)` renders:
 
 - Step 1 (front): filled and stroked `frontPts` polygon
-- Step 2 (profile): filled/stroked `profilePts` plus dashed `profileArmPts`
+- Step 2 (profile): filled and stroked `profilePts` polygon
 
-Visual style is embedded in the renderer (stroke alpha, dash arrays, fill alpha).
+Visual style is embedded in the renderer (stroke width, stroke/fill alpha).
 
 ---
 
@@ -109,8 +114,6 @@ Validation entry point: `applyGuidePayload(o)`.
 - Merges only finite numeric values into `guideFrame`
 - Accepts anchors only when numeric `x` and `y` are present
 - Accepts point arrays only when each point is exactly two finite numbers
-- Requires at least:
-  - `3` points for polygons (`frontPts`, `profilePts`)
-  - `2` points for `profileArmPts`
+- Requires at least `3` points for polygons (`frontPts`, `profilePts`)
 
 This keeps malformed imports from corrupting runtime geometry.

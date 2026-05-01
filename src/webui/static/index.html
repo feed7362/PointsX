@@ -27,40 +27,13 @@
           <figure class="ref-figure">
             <figcaption>Анфас (A-поза)</figcaption>
             <div class="ref-svg-wrap" aria-hidden="true">
-              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
-                <polygon
-                  id="ref-poly-front"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linejoin="round"
-                  stroke-linecap="round"
-                />
-              </svg>
+              <canvas id="ref-canvas-front" class="ref-canvas" width="300" height="480"></canvas>
             </div>
           </figure>
           <figure class="ref-figure">
             <figcaption>Профіль</figcaption>
             <div class="ref-svg-wrap" aria-hidden="true">
-              <svg viewBox="0 0 100 160" class="ref-svg" xmlns="http://www.w3.org/2000/svg">
-                <polygon
-                  id="ref-poly-profile"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linejoin="round"
-                  stroke-linecap="round"
-                />
-                <polyline
-                  id="ref-poly-arm"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linejoin="round"
-                  stroke-linecap="round"
-                  stroke-dasharray="4 3"
-                />
-              </svg>
+              <canvas id="ref-canvas-profile" class="ref-canvas" width="300" height="480"></canvas>
             </div>
           </figure>
         </div>
@@ -105,6 +78,31 @@
         </div>
         <p id="pose-status" class="pose-status" role="status" aria-live="polite"></p>
         <p id="status" class="status" role="status"></p>
+        <div class="upload-row" id="upload-row">
+          <p class="upload-intro">
+            Або завантажте готові фото (JPEG, PNG, WebP; до 5&nbsp;МБ). Поза на завантажених знімках не перевіряється.
+          </p>
+          <div class="upload-actions">
+            <label class="btn upload-file-label">
+              Завантажити анфас
+              <input
+                type="file"
+                id="upload-front"
+                class="upload-file-input"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              />
+            </label>
+            <label class="btn upload-file-label">
+              Завантажити профіль
+              <input
+                type="file"
+                id="upload-side"
+                class="upload-file-input"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              />
+            </label>
+          </div>
+        </div>
         <div class="thumbs-wrap" id="thumbs-wrap">
           <div class="thumbs" id="thumbs-inner">
             <figure>
@@ -127,6 +125,12 @@
 
       <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
         <h2 id="results-heading">Результат</h2>
+
+        <div class="model-viz" id="model-viz" hidden>
+          <h3 class="tailoring-sub">Візуалізація моделей</h3>
+          <p class="model-viz-hint">YOLO pose та сегментація по кожному знімку (як бачить сервер).</p>
+          <div class="model-viz-grid" id="model-viz-grid" role="group" aria-label="Поза та силует"></div>
+        </div>
 
         <div class="tailoring-intro" id="tailoring-intro" hidden></div>
 

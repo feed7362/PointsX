@@ -15,6 +15,7 @@ from pointsx.keypoints import KP, distance, is_valid, midpoint
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints
 
 from webui.inference import InferenceResult
+from webui.visualize import pipeline_visualizations_b64
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +219,8 @@ def body_to_envelope(
     subject_height_cm: float,
     sex: Literal["male", "female", "other"],
     request_id: str,
+    front_bgr: Any | None = None,
+    side_bgr: Any | None = None,
 ) -> Any:
     """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult."""
     (
@@ -256,6 +259,14 @@ def body_to_envelope(
             quality_flags=flags,
         ))
 
+    derived: dict[str, Any] = {}
+    if front_bgr is not None and side_bgr is not None:
+        try:
+            derived = pipeline_visualizations_b64(front_bgr, side_bgr, result)
+        except Exception:
+            # Keep API response valid even if debug visualization generation fails.
+            derived = {}
+
     return MeasurementEnvelope(
         schema="pointsx.measurement.envelope",
         schema_version=2,
@@ -276,6 +287,6 @@ def body_to_envelope(
             side=CaptureQuality(quality=1.0, pose_ok=True, occlusions=[]),
         ),
         measurements=items,
-        derived={},
+        derived=derived,
         warnings=list(bm.warnings),
     )

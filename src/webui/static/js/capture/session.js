@@ -5,7 +5,7 @@
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { checkPoseForStep } from "./poseGate.js";
-import { logPoseDebugCapture } from "./poseDebug.js";
+import { logPoseGateCheck, logPoseDebugCapture } from "./poseDebug.js";
 import { syncOverlaySize } from "./overlay.js";
 import {
   cancelSpeechSynthesis,
@@ -23,10 +23,27 @@ export const POSE_MP_MIN_TRACKING_CONF = 0.38;
 export const CAPTURE_TIMER_SECONDS = 10;
 export const STABLE_POSE_MS = 700;
 
+/** Match server `MAX_UPLOAD_BYTES` in webui/app.py */
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const UPLOAD_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const MP_PKG = "https://esm.sh/@mediapipe/tasks-vision@0.10.14";
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+/**
+ * VIDEO-mode PoseLandmarker requires strictly monotonic timestamp_ms on every detectForVideo call
+ * (same instance). Mixing 0 for uploads with camera frames causes graph errors and a wedged UI.
+ */
+let lastPoseVideoTimestampMs = -1;
+
+function nextPoseVideoTimestampMs() {
+  let t = Math.floor(performance.now());
+  if (t <= lastPoseVideoTimestampMs) t = lastPoseVideoTimestampMs + 1;
+  lastPoseVideoTimestampMs = t;
+  return t;
+}
 
 /** Verify camera track exists and resolution meets MIN_VIDEO_DIMENSION. */
 export function checkCaptureReadiness() {
@@ -81,6 +98,45 @@ export async function loadPoseLandmarker() {
   }
 }
 
+/** Release upload landmarker so the next file gets a clean WASM graph (avoids odd state across runs). */
+function disposePoseLandmarkerImage() {
+  const m = captureState.poseLandmarkerImage;
+  if (m) {
+    try {
+      m.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  captureState.poseLandmarkerImage = null;
+  captureState.poseImageLoadError = null;
+}
+
+/** Lazy-load a second PoseLandmarker in IMAGE mode for file uploads (no video timestamps / tracking). */
+export async function loadPoseLandmarkerImage() {
+  if (captureState.poseLandmarkerImage || captureState.poseImageLoadError) return;
+  try {
+    const { FilesetResolver, PoseLandmarker } = await import(MP_PKG);
+    const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
+    const opts = (delegate) => ({
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      runningMode: "IMAGE",
+      numPoses: 1,
+      minPoseDetectionConfidence: POSE_MP_MIN_DETECTION_CONF,
+      minPosePresenceConfidence: POSE_MP_MIN_PRESENCE_CONF,
+      minTrackingConfidence: POSE_MP_MIN_TRACKING_CONF,
+    });
+    try {
+      captureState.poseLandmarkerImage = await PoseLandmarker.createFromOptions(vision, opts("GPU"));
+    } catch {
+      captureState.poseLandmarkerImage = await PoseLandmarker.createFromOptions(vision, opts("CPU"));
+    }
+  } catch (e) {
+    captureState.poseImageLoadError = e;
+    console.error(e);
+  }
+}
+
 /** Clear the stable-OK pose timer (starts fresh on next OK frame). */
 export function resetPoseStableHold() {
   captureState.poseStableOkSinceMs = null;
@@ -116,6 +172,130 @@ export function clearCaptureTimer(setNeutralStatus = false) {
   captureState.captureTimerRemaining = 0;
   resetTimerButtonLabel();
   if (setNeutralStatus) setStatus("");
+}
+
+/**
+ * Run the same pose gate on a still using the IMAGE landmarker (independent of VIDEO session state).
+ * @param {1|2} viewStep 1 = front, 2 = profile
+ * @param {ImageBitmap} bitmap
+ * @returns {{ ok: boolean, reason?: string, landmarks?: any, world?: any, gate?: { ok: boolean, reason?: string } }}
+ */
+function gatePoseOnBitmap(viewStep, bitmap) {
+  const marker = captureState.poseLandmarkerImage;
+  if (!marker) {
+    return { ok: false, reason: "Модель пози ще не готова. Зачекайте або оновіть сторінку." };
+  }
+  const result = marker.detect(bitmap);
+  const lm = result.landmarks && result.landmarks[0];
+  const worldLm = result.worldLandmarks && result.worldLandmarks[0];
+  if (!lm) {
+    return { ok: false, reason: "На фото не видно людину" };
+  }
+  const gate = checkPoseForStep(viewStep, lm, worldLm);
+  if (!gate.ok) {
+    return {
+      ok: false,
+      reason: gate.reason || "Поза не відповідає вимогам",
+      landmarks: lm,
+      world: worldLm,
+      gate,
+    };
+  }
+  return { ok: true, landmarks: lm, world: worldLm, gate };
+}
+
+/**
+ * Use a user-picked file as front or side capture; rejects if pose gate fails (same rules as camera).
+ * `File` is a `Blob` — compatible with `/api/measure` FormData.
+ */
+export async function applyUploadedImage(which, file) {
+  const { thumbFront, thumbSide } = getCaptureDom();
+  if (!file) return;
+  if (!UPLOAD_MIME.has(file.type)) {
+    setStatus("Оберіть зображення JPEG, PNG або WebP.", true);
+    return;
+  }
+  if (file.size > UPLOAD_MAX_BYTES) {
+    setStatus("Файл завеликий (максимум 5 МБ).", true);
+    return;
+  }
+
+  const viewStep = which === "front" ? 1 : 2;
+  let bitmap = null;
+  try {
+    await loadPoseLandmarkerImage();
+    if (captureState.poseImageLoadError) {
+      setStatus("Не вдалося завантажити MediaPipe. Перевірте мережу та оновіть сторінку.", true);
+      setPoseStatus(
+        "Не вдалося завантажити MediaPipe. Перевірте мережу та оновіть сторінку.",
+        "bad"
+      );
+      return;
+    }
+
+    try {
+      bitmap = await createImageBitmap(file);
+    } catch {
+      setStatus("Не вдалося прочитати зображення.", true);
+      return;
+    }
+    try {
+      const poseChk = gatePoseOnBitmap(viewStep, bitmap);
+      logPoseGateCheck(
+        "upload",
+        viewStep,
+        poseChk.landmarks ?? null,
+        poseChk.world ?? null,
+        { ok: poseChk.ok, reason: poseChk.reason }
+      );
+      if (!poseChk.ok) {
+        setStatus(poseChk.reason || "Поза не відповідає вимогам.", true);
+        setPoseStatus(poseChk.reason || "Поза не відповідає вимогам.", "bad");
+        return;
+      }
+    } finally {
+      bitmap.close();
+    }
+
+    resetAutoCaptureUi();
+    cancelSpeechSynthesis();
+    setPoseStatus("Поза на фото підходить", "ok");
+    const url = URL.createObjectURL(file);
+    if (which === "front") {
+      captureState.suspendPoseLoopAfterComplete = false;
+      revokeThumbUrl(thumbFront);
+      captureState.frontBlob = file;
+      thumbFront.src = url;
+      thumbFront.hidden = false;
+      if (captureState.sideBlob) {
+        captureState.step = 2;
+        captureState.suspendPoseLoopAfterComplete = true;
+        stopCamera();
+        setStatus("Анфас завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
+      } else {
+        captureState.step = 2;
+        setStatus("Анфас завантажено. Додайте профіль (завантаження або камера).");
+      }
+    } else {
+      revokeThumbUrl(thumbSide);
+      captureState.sideBlob = file;
+      thumbSide.src = url;
+      thumbSide.hidden = false;
+      if (captureState.frontBlob) {
+        captureState.step = 2;
+        captureState.suspendPoseLoopAfterComplete = true;
+        stopCamera();
+        setStatus("Профіль завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
+      } else {
+        captureState.step = 1;
+        captureState.suspendPoseLoopAfterComplete = false;
+        setStatus("Профіль завантажено. Додайте анфас (завантаження або камера).");
+      }
+    }
+    updateUiStep();
+  } finally {
+    disposePoseLandmarkerImage();
+  }
 }
 
 /** Revoke an object URL on a thumbnail img element. */
@@ -196,7 +376,7 @@ export function runPoseIfNeeded() {
     return;
   }
 
-  const result = captureState.poseLandmarker.detectForVideo(video, Math.floor(now));
+  const result = captureState.poseLandmarker.detectForVideo(video, nextPoseVideoTimestampMs());
   const lm = result.landmarks && result.landmarks[0];
   const worldLm = result.worldLandmarks && result.worldLandmarks[0];
   if (!lm) {
@@ -213,6 +393,7 @@ export function runPoseIfNeeded() {
 
   const gate = checkPoseForStep(captureState.step, lm, worldLm);
   captureState.lastPoseGate = gate;
+  logPoseGateCheck("video", captureState.step, lm, worldLm, gate);
 
   if (captureState.autoPoseCountdownIntervalId) {
     if (!gate.ok) {
@@ -344,7 +525,7 @@ export function captureFrameToBlob(callback) {
   let captureDebugWorld = null;
   let captureDebugGate = null;
   if (captureState.poseLandmarker && captureState.stream) {
-    const snap = captureState.poseLandmarker.detectForVideo(video, Math.floor(performance.now()));
+    const snap = captureState.poseLandmarker.detectForVideo(video, nextPoseVideoTimestampMs());
     const snapLm = snap.landmarks && snap.landmarks[0];
     const snapWorld = snap.worldLandmarks && snap.worldLandmarks[0];
     if (!snapLm) {

@@ -1,0 +1,2418 @@
+{
+  "version": 2,
+  "ordinal_scales": {
+    "top.women": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "top.men": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "bottom.women": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "bottom.men": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ]
+  },
+  "ease_profiles": {
+    "close": {
+      "chest_circumference": [
+        4,
+        6,
+        5
+      ],
+      "waist_circumference": [
+        1,
+        2,
+        1
+      ],
+      "hip_circumference": [
+        2,
+        4,
+        3
+      ],
+      "thigh_circumference": [
+        2,
+        4,
+        3
+      ]
+    },
+    "regular": {
+      "chest_circumference": [
+        8,
+        12,
+        10
+      ],
+      "waist_circumference": [
+        4,
+        6,
+        5
+      ],
+      "hip_circumference": [
+        4,
+        6,
+        5
+      ],
+      "thigh_circumference": [
+        4,
+        6,
+        5
+      ]
+    },
+    "loose": {
+      "chest_circumference": [
+        14,
+        18,
+        16
+      ],
+      "waist_circumference": [
+        8,
+        10,
+        9
+      ],
+      "hip_circumference": [
+        8,
+        10,
+        9
+      ],
+      "thigh_circumference": [
+        6,
+        10,
+        8
+      ]
+    },
+    "tailored": {
+      "chest_circumference": [
+        10,
+        14,
+        12
+      ],
+      "waist_circumference": [
+        6,
+        8,
+        7
+      ],
+      "hip_circumference": [
+        6,
+        8,
+        7
+      ],
+      "thigh_circumference": [
+        4,
+        6,
+        5
+      ]
+    },
+    "outerwear": {
+      "chest_circumference": [
+        16,
+        22,
+        18
+      ],
+      "waist_circumference": [
+        12,
+        14,
+        13
+      ],
+      "hip_circumference": [
+        10,
+        14,
+        12
+      ],
+      "thigh_circumference": [
+        8,
+        12,
+        10
+      ]
+    },
+    "pants": {
+      "chest_circumference": [
+        0,
+        0,
+        0
+      ],
+      "waist_circumference": [
+        2,
+        3,
+        2
+      ],
+      "hip_circumference": [
+        4,
+        6,
+        5
+      ],
+      "thigh_circumference": [
+        4,
+        6,
+        5
+      ]
+    },
+    "skirt": {
+      "chest_circumference": [
+        0,
+        0,
+        0
+      ],
+      "waist_circumference": [
+        1,
+        2,
+        1
+      ],
+      "hip_circumference": [
+        2,
+        4,
+        3
+      ],
+      "thigh_circumference": [
+        2,
+        4,
+        3
+      ]
+    }
+  },
+  "seam_allowances": {
+    "upper": {
+      "side_seam": 1,
+      "shoulder_seam": 1,
+      "neckline": 0.7,
+      "armhole": 1,
+      "sleeve_cap": 0.7,
+      "sleeve_underarm": 1,
+      "hem_sleeve": 2.5,
+      "hem_body": 2.5,
+      "cb_seam": 1
+    },
+    "lower": {
+      "side_seam": 1,
+      "waistband": 1,
+      "inseam": 1,
+      "crotch_seam": 1.5,
+      "hem_body": 4
+    },
+    "dress": {
+      "side_seam": 1,
+      "shoulder_seam": 1,
+      "neckline": 0.7,
+      "armhole": 1,
+      "sleeve_cap": 0.7,
+      "sleeve_underarm": 1,
+      "hem_body": 3,
+      "cb_seam": 1.5
+    },
+    "full": {
+      "side_seam": 1,
+      "shoulder_seam": 1,
+      "neckline": 0.7,
+      "armhole": 1,
+      "sleeve_underarm": 1,
+      "inseam": 1,
+      "hem_body": 3.5,
+      "cb_seam": 1
+    },
+    "default": {
+      "side_seam": 1,
+      "shoulder_seam": 1,
+      "hem_body": 2.5
+    }
+  },
+  "grids": [
+    {
+      "id": "ua_women_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — груди (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 78,
+          "max_cm": 82,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 86,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 86,
+          "max_cm": 90,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 90,
+          "max_cm": 94,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 94,
+          "max_cm": 100,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 116,
+          "code": "46/48",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_women_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — талія (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "46/48",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_women_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегна (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "46/48",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — груди (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 78,
+          "max_cm": 82,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 86,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 86,
+          "max_cm": 90,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 90,
+          "max_cm": 94,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 94,
+          "max_cm": 100,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 116,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — талія (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегна (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "США — груди (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 78,
+          "max_cm": 82,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 86,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 86,
+          "max_cm": 90,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 90,
+          "max_cm": 94,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 94,
+          "max_cm": 100,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 116,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "США — талія (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "США — стегна (верх, жінки)",
+      "sex": "female",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_men_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — груди (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 86,
+          "max_cm": 96,
+          "code": "44/46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 112,
+          "code": "52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 112,
+          "max_cm": 120,
+          "code": "54/56",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 120,
+          "max_cm": 130,
+          "code": "58",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "ua_men_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — талія (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "44/46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 92,
+          "code": "48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 100,
+          "code": "52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 108,
+          "code": "54/56",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 108,
+          "max_cm": 118,
+          "code": "58",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "ua_men_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегна (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 88,
+          "max_cm": 98,
+          "code": "44/46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "54/56",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "58",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — груди (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 86,
+          "max_cm": 96,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "EU 48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 112,
+          "code": "EU 52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 112,
+          "max_cm": 120,
+          "code": "EU 54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 120,
+          "max_cm": 130,
+          "code": "EU 56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — талія (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 92,
+          "code": "EU 48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 100,
+          "code": "EU 52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 108,
+          "code": "EU 54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 108,
+          "max_cm": 118,
+          "code": "EU 56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегна (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 88,
+          "max_cm": 98,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "EU 48/50",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "EU 52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "EU 54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "EU 56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_chest_top",
+      "kind": "consensus_band",
+      "label_uk": "США — груди (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "chest_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 86,
+          "max_cm": 96,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 112,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 112,
+          "max_cm": 120,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 120,
+          "max_cm": 130,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "США — талія (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 92,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 100,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 100,
+          "max_cm": 108,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 108,
+          "max_cm": 118,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "США — стегна (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 88,
+          "max_cm": 98,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "ua_women_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — талія (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "46",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_women_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегна (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "46",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_women_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегно (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 46,
+          "max_cm": 50,
+          "code": "36",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 50,
+          "max_cm": 54,
+          "code": "38",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 58,
+          "code": "40",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 58,
+          "max_cm": 64,
+          "code": "42",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 64,
+          "max_cm": 72,
+          "code": "44",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 72,
+          "max_cm": 84,
+          "code": "46",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — талія (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегна (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "eu_women_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегно (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 46,
+          "max_cm": 50,
+          "code": "EU 34",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 50,
+          "max_cm": 54,
+          "code": "EU 36",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 58,
+          "code": "EU 38",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 58,
+          "max_cm": 64,
+          "code": "EU 40",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 64,
+          "max_cm": 72,
+          "code": "EU 42",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 72,
+          "max_cm": 84,
+          "code": "EU 44",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — талія (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 58,
+          "max_cm": 62,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 62,
+          "max_cm": 66,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 66,
+          "max_cm": 70,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 70,
+          "max_cm": 76,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 84,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 84,
+          "max_cm": 96,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — стегна (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 84,
+          "max_cm": 88,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 92,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 92,
+          "max_cm": 96,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 102,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 124,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "us_women_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — стегно (низ, жінки)",
+      "sex": "female",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.women",
+      "bands": [
+        {
+          "min_cm": 46,
+          "max_cm": 50,
+          "code": "XS",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 50,
+          "max_cm": 54,
+          "code": "S",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 58,
+          "code": "M",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 58,
+          "max_cm": 64,
+          "code": "L",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 64,
+          "max_cm": 72,
+          "code": "XL",
+          "ordinal": 4
+        },
+        {
+          "min_cm": 72,
+          "max_cm": 84,
+          "code": "XXL",
+          "ordinal": 5
+        }
+      ]
+    },
+    {
+      "id": "ua_men_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — талія (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 82,
+          "code": "46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 88,
+          "code": "48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 96,
+          "code": "50/52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 114,
+          "code": "56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "ua_men_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегна (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 90,
+          "max_cm": 98,
+          "code": "46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "50/52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "ua_men_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Україна — стегно (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 48,
+          "max_cm": 54,
+          "code": "46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 60,
+          "code": "48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 60,
+          "max_cm": 68,
+          "code": "50/52",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 68,
+          "max_cm": 76,
+          "code": "54",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 86,
+          "code": "56",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — талія (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 82,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 88,
+          "code": "EU 48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 96,
+          "code": "EU 50",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "EU 52",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 114,
+          "code": "EU 54",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегна (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 90,
+          "max_cm": 98,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "EU 48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "EU 50",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "EU 52",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "EU 54",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "eu_men_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "Європа — стегно (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 48,
+          "max_cm": 54,
+          "code": "EU 46",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 60,
+          "code": "EU 48",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 60,
+          "max_cm": 68,
+          "code": "EU 50",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 68,
+          "max_cm": 76,
+          "code": "EU 52",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 86,
+          "code": "EU 54",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_waist_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — талія (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "waist_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 82,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 88,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 88,
+          "max_cm": 96,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 96,
+          "max_cm": 104,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 104,
+          "max_cm": 114,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_hip_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — стегна (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "hip_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 90,
+          "max_cm": 98,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 114,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 114,
+          "max_cm": 122,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 122,
+          "max_cm": 132,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_thigh_bottom",
+      "kind": "consensus_band",
+      "label_uk": "США — стегно (низ, чоловіки)",
+      "sex": "male",
+      "family": "bottom",
+      "measurement_key": "thigh_circumference",
+      "scale_key": "bottom.men",
+      "bands": [
+        {
+          "min_cm": 48,
+          "max_cm": 54,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 54,
+          "max_cm": 60,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 60,
+          "max_cm": 68,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 68,
+          "max_cm": 76,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 76,
+          "max_cm": 86,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    }
+  ],
+  "garments": [
+    {
+      "id": "shirt",
+      "label_uk": "Сорочка",
+      "category": "upper",
+      "fit_preference_default": "regular",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.9,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.8,
+          "family": "top"
+        }
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M12 3.2c.9.1 1.7.5 2.3 1l.9.8h5.3l.5 1.2-1.8 1.4-2.1-.3V20H6.9V7.3l-2.1.3-1.8-1.4.5-1.2h5.3l.9-.8c.6-.5 1.4-.9 2.3-1zm-4.3 3.4V18h8.6V6.6l-1.2.2-1.1 2.2h-5l-1.1-2.2-1.2-.2z\"/>",
+      "measurement_ids": [
+        "neck_circumference",
+        "chest_circumference",
+        "waist_circumference",
+        "shoulder_slope_width",
+        "arm_length_shoulder_to_wrist",
+        "wrist_circumference",
+        "back_length_to_waist",
+        "front_length_to_waist"
+      ],
+      "audience": "unisex"
+    },
+    {
+      "id": "tshirt",
+      "label_uk": "Футболка",
+      "category": "upper",
+      "fit_preference_default": "regular",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.7,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M7.5 5.5 9 4h6l1.5 1.5L18 7v12H6V7l1.5-1.5zm1.2 1.3L8.2 7.2V17h7.6V7.2L15.3 6.8 14.2 5.2H9.8L8.7 6.8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "polo",
+      "label_uk": "Поло",
+      "category": "upper",
+      "fit_preference_default": "regular",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.7,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M7.5 5.5 9 4h6l1.5 1.5L18 7v12H6V7l1.5-1.5zm1.2 1.3L8.2 7.2V17h7.6V7.2L15.3 6.8 14.2 5.2H9.8L8.7 6.8zm3.3 2.2h2v1.2h-2V8.8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "blouse",
+      "label_uk": "Блузка",
+      "category": "upper",
+      "fit_preference_default": "close",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.8,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M8 4.5 9.5 3.5h5L16 4.5l2 1.8V19H6V6.3l2-1.8zm1.1 1.5L8.5 7v10.5h7V7l-.6-.5-1.2-1H10.7l-1.2 1-.4.5zm2.9 2.5 1.2 3.5h-2.4l1.2-3.5z\"/>",
+      "audience": "female"
+    },
+    {
+      "id": "jacket",
+      "label_uk": "Піджак",
+      "category": "upper",
+      "fit_preference_default": "tailored",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.9,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "measurement_ids": [
+        "back_width_scapular",
+        "hip_circumference"
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M7 4.5 9 3h6l2 1.5 1 2V19H6V7.5l1-2zm1.3 1.8L8.2 7.5V17.5h7.6V7.5L15.7 6.3 14.5 5h-5L9.5 6.3zm1.2 3.2h5.8v7H9.5v-7zm-.5 7.5h6.8v1.8H9v-1.8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "coat",
+      "label_uk": "Пальто",
+      "category": "upper",
+      "fit_preference_default": "outerwear",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "top"
+        }
+      ],
+      "extends": "jacket",
+      "svg": "<path fill=\"currentColor\" d=\"M6.5 3.5 9 2.5h6l2.5 1 1.5 2.5V20h-15V6l1.5-2.5zm1.8 1.7L8 6.2V18.5h8V6.2L15.7 5.2 14 4.2H10L8.3 5.2zm1.5 4h4.4v8h-4.4v-8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "vest",
+      "label_uk": "Жилет",
+      "category": "upper",
+      "fit_preference_default": "tailored",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.9,
+          "family": "top"
+        }
+      ],
+      "extends": "jacket",
+      "measurement_ids": [],
+      "svg": "<path fill=\"currentColor\" d=\"M8 4.5 9.5 3.5h5L16 4.5V19H8V4.5zm1.2 1.5V17.5h5.6V6H9.2zm1.3 2.5h3v6h-3v-6z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "hoodie",
+      "label_uk": "Худі",
+      "category": "upper",
+      "fit_preference_default": "loose",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.7,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.7,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M8 5.5 9.5 4h5l1.5 1.5 1 2V19H7V7.5l1-2zm1.2 1.3L8.2 7.5V17.5h7.6V7.5L14.8 6.8 13.8 5.5h-3.6L9.2 6.8zm3.8-2.3c.8 0 1.4.6 1.4 1.3s-.6 1.3-1.4 1.3-1.4-.6-1.4-1.3.6-1.3 1.4-1.3z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "cardigan",
+      "label_uk": "Кардиган",
+      "category": "upper",
+      "fit_preference_default": "regular",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.8,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M8 4.5h8V19H8V4.5zm1.2 1.5v11.5h2.2V6H9.2zm4.4 0v11.5h2.2V6h-2.2zM6.5 6.5h1.5v10H6.5v-10zm9.5 0H17.5v10H16v-10z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "sport_top",
+      "label_uk": "Спортивний верх",
+      "category": "upper",
+      "fit_preference_default": "loose",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.7,
+          "family": "top"
+        }
+      ],
+      "extends": "tshirt",
+      "measurement_ids": [
+        "upper_arm_circumference"
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M8 5.5 9.5 4.5h5L16 5.5V18H8V5.5zm1.2 1.3V16.5h5.6V6.8H9.2zm2.4 3.2h.8l.6 2.8h-2l.6-2.8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "raincoat",
+      "label_uk": "Дощовик",
+      "category": "upper",
+      "fit_preference_default": "outerwear",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "top"
+        }
+      ],
+      "extends": "coat",
+      "svg": "<path fill=\"currentColor\" d=\"M6 4.5 9 3h6l3 1.5 1 3V19H5V8.5l1-3zm1.5 1.8L7.5 8V17.5h9V8L16.5 6.3 14.5 5h-5L7.5 6.3zm1.5 4h6v6h-6v-6z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "pajama_top",
+      "label_uk": "Піжама (верх)",
+      "category": "upper",
+      "fit_preference_default": "loose",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 0.8,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.7,
+          "family": "top"
+        }
+      ],
+      "extends": "shirt",
+      "svg": "<path fill=\"currentColor\" d=\"M9 5h6l1 1v11H8V6l1-1zm.8 1.5V15.5h4.4V6.5H9.8zm1.7 3h1v3h-1v-3z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "pants",
+      "label_uk": "Брюки",
+      "category": "lower",
+      "fit_preference_default": "pants",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 0.8,
+          "family": "bottom"
+        }
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M9 4.5h6v2H9v-2zm-1.5 3h9v12h-2.2l-1.3-12H9.8l-1.3 12H6.5v-12zm2.7 0v10h1.8V7.5h-1.8zm4.8 0v10h1.8V7.5h-1.8z\"/>",
+      "measurement_ids": [
+        "waist_circumference",
+        "hip_circumference",
+        "leg_length_inner_seam",
+        "leg_length_outer_seam",
+        "thigh_circumference",
+        "calf_circumference",
+        "ankle_circumference"
+      ],
+      "audience": "unisex"
+    },
+    {
+      "id": "jeans",
+      "label_uk": "Джинси",
+      "category": "lower",
+      "fit_preference_default": "pants",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 0.8,
+          "family": "bottom"
+        }
+      ],
+      "extends": "pants",
+      "svg": "<path fill=\"currentColor\" d=\"M9 4.5h6v1.8H9V4.5zm-1.2 2.5h8.4v11.2h-1.9l-1-11H9.7l-1 11H7.8V7zm2.1 0v9.5h1.6V7H10.7zm3 0v9.5h1.6V7h-1.6z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "shorts",
+      "label_uk": "Шорти",
+      "category": "lower",
+      "fit_preference_default": "pants",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 0.9,
+          "family": "bottom"
+        }
+      ],
+      "extends": "pants",
+      "svg": "<path fill=\"currentColor\" d=\"M9 4.5h6v2H9v-2zm-1.5 3h9v6h-2l-1.2-6H9.7l-1.2 6h-2v-6zm2.5 0v4.5h1.8V7.5h-1.8zm3.2 0v4.5h1.8V7.5h-1.8z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "pajama_bottom",
+      "label_uk": "Піжама (низ)",
+      "category": "lower",
+      "fit_preference_default": "pants",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 0.7,
+          "family": "bottom"
+        }
+      ],
+      "extends": "pants",
+      "svg": "<path fill=\"currentColor\" d=\"M9.5 5h5v1.5h-5V5zm-1 2.5h7v9h-1.8l-.9-9h-1.9l-.9 9H8.5v-9zm2 0v7.5h1.3V7.5H10.5zm2.7 0v7.5h1.3V7.5h-1.3z\"/>",
+      "audience": "unisex"
+    },
+    {
+      "id": "skirt",
+      "label_uk": "Спідниця",
+      "category": "lower",
+      "fit_preference_default": "skirt",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 0.7,
+          "family": "bottom"
+        }
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M8 8h8l-.5 10H8.5L8 8zm1.2 1.5 5.6 0-.4 7H9.6l-.4-7z\"/>",
+      "measurement_ids": [
+        "waist_circumference",
+        "hip_circumference",
+        "leg_length_outer_seam",
+        "thigh_circumference"
+      ],
+      "audience": "female"
+    },
+    {
+      "id": "pencil_skirt",
+      "label_uk": "Спідниця-олівець",
+      "category": "lower",
+      "fit_preference_default": "skirt",
+      "sizing_measurements": [
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "bottom"
+        },
+        {
+          "id": "thigh_circumference",
+          "weight": 1,
+          "family": "bottom"
+        }
+      ],
+      "extends": "skirt",
+      "svg": "<path fill=\"currentColor\" d=\"M8.5 7.5h7l-.3 10.5H8.8L8.5 7.5zm1.2 1.5h4.6l-.2 7.5H9.9l-.2-7.5z\"/>",
+      "audience": "female"
+    },
+    {
+      "id": "dress",
+      "label_uk": "Сукня",
+      "category": "dress",
+      "fit_preference_default": "close",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "top"
+        }
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M12 3.2c1 .2 1.8.8 2.2 1.7l.3 1.1H9.5l.3-1.1c.4-.9 1.2-1.5 2.2-1.7zm-2.8 4h5.6l1.2 11.8H8l1.2-11.8z\"/>",
+      "measurement_ids": [
+        "chest_circumference",
+        "waist_circumference",
+        "hip_circumference",
+        "back_length_to_waist",
+        "front_length_to_waist",
+        "arm_length_shoulder_to_wrist",
+        "shoulder_slope_width",
+        "neck_circumference"
+      ],
+      "audience": "female"
+    },
+    {
+      "id": "dress_fitted",
+      "label_uk": "Сукня приталена",
+      "category": "dress",
+      "fit_preference_default": "close",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 1,
+          "family": "top"
+        }
+      ],
+      "extends": "dress",
+      "svg": "<path fill=\"currentColor\" d=\"M12 3.2c1 .2 1.8.8 2.2 1.7l.3 1.1H9.5l.3-1.1c.4-.9 1.2-1.5 2.2-1.7zm-2.5 4h5l1.5 11.8H8.5L9.5 7.2z\"/>",
+      "audience": "female"
+    },
+    {
+      "id": "overalls",
+      "label_uk": "Комбінезон",
+      "category": "full",
+      "fit_preference_default": "regular",
+      "sizing_measurements": [
+        {
+          "id": "chest_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "waist_circumference",
+          "weight": 1,
+          "family": "top"
+        },
+        {
+          "id": "hip_circumference",
+          "weight": 0.9,
+          "family": "top"
+        }
+      ],
+      "svg": "<path fill=\"currentColor\" d=\"M9 4.5h6v3H9v-3zm-2 4.5h10V19h-2v-6h-1.5v6h-2v-6H9v6H7V9zm3.5 0V17h1V9h-1zm4 0V17h1V9h-1z\"/>",
+      "measurement_ids": [
+        "chest_circumference",
+        "waist_circumference",
+        "hip_circumference",
+        "shoulder_slope_width",
+        "arm_length_shoulder_to_wrist",
+        "leg_length_inner_seam",
+        "back_length_to_waist",
+        "neck_circumference"
+      ],
+      "audience": "unisex"
+    }
+  ]
+}

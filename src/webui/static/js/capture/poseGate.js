@@ -251,18 +251,18 @@ function checkFrontPose(lm, rawWorldLm) {
     const torsoLen = hipY - shoulderY;
     const legLen = ankleY - hipY;
     const kneeGap = kneeY - hipY;
-    const minGap = minKneeFlexDeg3d != null ? 0.072 : 0.082;
+    const minGap = minKneeFlexDeg3d != null ? 0.066 : 0.076;
     if (
       kneeFlexForStanding != null &&
-      (kneeFlexForStanding < 148 ||
-        (kneeFlexSamples3d === 2 && kneeFlexForStanding < 155 && kneeGap < minGap + 0.01))
+      (kneeFlexForStanding < 142 ||
+        (kneeFlexSamples3d === 2 && kneeFlexForStanding < 150 && kneeGap < minGap + 0.012))
     ) {
       return {
         ok: false,
         reason: "Станьте повним зростом на прямих ногах, не присідайте",
       };
     }
-    if (torsoLen > 0.06 && legLen > 0 && legLen / torsoLen < 1.22) {
+    if (torsoLen > 0.06 && legLen > 0 && legLen / torsoLen < 1.16) {
       return {
         ok: false,
         reason: "Станьте повним зростом на прямих ногах, не присідайте",
@@ -409,13 +409,17 @@ function checkProfilePose(lm) {
       };
     }
   }
-
-  if (shoulderW < 0.03 && eyeLv > 0.45 && eyeRv > 0.45 && eyeSepX > 0.008) {
-    return {
-      ok: false,
-      reason: "Не повертайте голову до камери",
-    };
+  // Strong profile => very narrow shoulders; eye separation alone is unreliable (projection + model).
+  if (shoulderW < 0.03 && eyeLv > 0.45 && eyeRv > 0.45) {
+    const eyeSepTurnThreshold = 0.009 + shoulderW * 0.22;
+    if (eyeSepX > eyeSepTurnThreshold) {
+      return {
+        ok: false,
+        reason: "Не повертайте голову до камери",
+      };
+    }
   }
+
   if (eyeLv > 0.45 && eyeRv > 0.45) {
     const eyeSepMax =
       shoulderW < 0.11
@@ -505,14 +509,15 @@ function checkProfilePose(lm) {
   const ra = lm[28];
   if ((rh?.visibility ?? 0) > 0.32 && (rk?.visibility ?? 0) > 0.32 && (ra?.visibility ?? 0) > 0.32) {
     const rightKneeAngle = (angleAtVertexRad(rh, rk, ra) * 180) / Math.PI;
-    if (rightKneeAngle < 172) {
+    // 2D profile angle is noisy vs true knee extension; allow margin below ~180°.
+    if (rightKneeAngle < 155) {
       return {
         ok: false,
         reason: "Станьте на рівних ногах",
       };
     }
     const rightLegTilt = Math.atan2(Math.abs((ra?.x ?? 0) - (rh?.x ?? 0)), Math.max(1e-4, (ra?.y ?? 0) - (rh?.y ?? 0)));
-    if (rightLegTilt > DEG(11)) {
+    if (rightLegTilt > DEG(14)) {
       return {
         ok: false,
         reason: "Станьте на рівних ногах",

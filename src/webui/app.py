@@ -228,5 +228,7 @@ async def measure(
         subject_height_cm=height_cm,
         sex=sex,
         request_id=str(uuid.uuid4()),
+        front_bgr=front_img,
+        side_bgr=side_img,
     )
     return envelope

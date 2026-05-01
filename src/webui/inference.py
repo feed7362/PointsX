@@ -22,7 +22,7 @@ from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
 from pointsx.models import BodyModels
 from pointsx.postprocess import validate_measurements
-from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints
+from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,8 @@ class InferenceResult:
     body: BodyMeasurements
     front_kp: Keypoints
     side_kp: Keypoints
+    front_mask: SilhouetteMask
+    side_mask: SilhouetteMask
     cal: CalibrationInfo
     has_regressor: bool
 
@@ -124,6 +126,8 @@ class WebuiPipeline:
             body=bm,
             front_kp=front_kp,
             side_kp=side_kp,
+            front_mask=front_mask,
+            side_mask=side_mask,
             cal=cal,
             has_regressor=self.regressor is not None,
         )

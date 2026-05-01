@@ -45,6 +45,38 @@ export function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+const PIPELINE_VIZ_KEYS = [
+  ["viz_front_pose_png_b64", "Анфас — поза (YOLO pose)"],
+  ["viz_front_seg_png_b64", "Анфас — силует (YOLO seg)"],
+  ["viz_side_pose_png_b64", "Профіль — поза (YOLO pose)"],
+  ["viz_side_seg_png_b64", "Профіль — силует (YOLO seg)"],
+];
+
+/** Show base64 PNGs from envelope `derived` (server pipeline debug). */
+function renderPipelineModelViz(derived) {
+  const wrap = document.getElementById("model-viz");
+  const grid = document.getElementById("model-viz-grid");
+  if (!wrap || !grid) return;
+  grid.innerHTML = "";
+  const d = derived && typeof derived === "object" ? derived : {};
+  let any = false;
+  for (const [key, caption] of PIPELINE_VIZ_KEYS) {
+    const b64 = d[key];
+    if (typeof b64 !== "string" || !b64.length) continue;
+    any = true;
+    const fig = document.createElement("figure");
+    fig.className = "model-viz-item";
+    const cap = document.createElement("figcaption");
+    cap.textContent = caption;
+    const img = document.createElement("img");
+    img.src = "data:image/png;base64," + b64;
+    img.alt = caption;
+    fig.append(cap, img);
+    grid.appendChild(fig);
+  }
+  wrap.hidden = !any;
+}
+
 /**
  * Local, license-safe garment icons.
  * These are app-owned static assets under /static/images/garments.
@@ -513,6 +545,8 @@ export function attachMeasureHandler() {
     }
     setStatus(useTestImages ? "Тестовий розрахунок…" : "Обчислення…");
     resultsSection.hidden = true;
+    const modelVizEl = document.getElementById("model-viz");
+    if (modelVizEl) modelVizEl.hidden = true;
 
     const fd = new FormData();
     fd.append("height_cm", String(heightInput.value));
@@ -523,8 +557,16 @@ export function attachMeasureHandler() {
       fd.append("front", dummyFront, "front-test.png");
       fd.append("side",  dummySide,  "side-test.png");
     } else {
-      fd.append("front", captureState.frontBlob, "front.jpg");
-      fd.append("side",  captureState.sideBlob,  "side.jpg");
+      const frontName =
+        captureState.frontBlob instanceof File && captureState.frontBlob.name
+          ? captureState.frontBlob.name
+          : "front.jpg";
+      const sideName =
+        captureState.sideBlob instanceof File && captureState.sideBlob.name
+          ? captureState.sideBlob.name
+          : "side.jpg";
+      fd.append("front", captureState.frontBlob, frontName);
+      fd.append("side", captureState.sideBlob, sideName);
     }
 
     try {
@@ -535,6 +577,7 @@ export function attachMeasureHandler() {
       }
       const data = await res.json();
       captureState.lastMockResponse = data;
+      renderPipelineModelViz(data.derived);
 
       const sex      = data.subject?.sex ?? sexSelect.value;
       const heightCm = data.subject?.height_cm ?? heightInput.value;
@@ -581,6 +624,8 @@ export function attachMeasureHandler() {
       resultsSection.hidden = false;
       setStatus("Готово.");
     } catch (e) {
+      const mv = document.getElementById("model-viz");
+      if (mv) mv.hidden = true;
       setStatus("Помилка запиту: " + (e?.message ?? String(e)), true);
     }
   }

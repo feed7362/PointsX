@@ -1,5 +1,8 @@
 /**
- * Optional pose gate debug logging after capture.
+ * Optional pose gate debug: enable with URL `?poseDebug=1` or `localStorage.poseDebug = "1"`.
+ *
+ * Landmarker `visibility` is model confidence (0–1), not “visible in the photo”; occluded ears
+ * can still score ~1. Use earSepX / geometry together with earVisMP when interpreting profile.
  */
 
 import { flipLandmarks, angleAtVertexRad, angleAtVertexRad3 } from "./poseGate.js";
@@ -15,14 +18,19 @@ export function isPoseDebug() {
 }
 
 /**
- * Log one debug line after capture using the same landmarks and gate as the JPEG.
- * @param {number} step
- * @param {any[]} rawLm Raw landmarks before horizontal flip.
- * @param {any[]|null|undefined} worldLm worldLandmarks[0] from detectForVideo.
+ * Log one pose gate result and derived metrics (pass or fail).
+ * @param {"upload" | "video" | "capture"} source
+ * @param {number} step 1 = front, 2 = profile
+ * @param {any[] | null | undefined} rawLm Raw landmarks before horizontal flip (MediaPipe output).
+ * @param {any[] | null | undefined} worldLm worldLandmarks[0] when available (front knee flex in 3D).
  * @param {{ ok: boolean, reason?: string }} gate
  */
-export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
-  if (!isPoseDebug() || !rawLm?.length) return;
+export function logPoseGateCheck(source, step, rawLm, worldLm, gate) {
+  if (!isPoseDebug()) return;
+  if (!rawLm?.length) {
+    console.debug("[poseDebug:gate]", { source, step, ok: gate?.ok, reason: gate?.reason, landmarks: false });
+    return;
+  }
   const lm = flipLandmarks(rawLm);
   const ls = lm[11];
   const rs = lm[12];
@@ -37,6 +45,9 @@ export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
   const rk = lm[26];
   const hipY = (lh.y + rh.y) / 2;
   const kneeY = (lk.y + rk.y) / 2;
+  const ankleY = ((lm[27]?.y ?? 0) + (lm[28]?.y ?? 0)) / 2;
+  const torsoLen = hipY - (ls.y + rs.y) / 2;
+  const legLen = ankleY - hipY;
   const kneeKneeFlex2d =
     (lk.visibility ?? 0) > 0.2 && (rk.visibility ?? 0) > 0.2
       ? {
@@ -45,6 +56,7 @@ export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
         }
       : null;
   let kneeFlexDeg3d = null;
+  let kneeFlexAvg3d = null;
   if (step === 1 && worldLm && worldLm.length > 28) {
     const wPt = (wm, i) => {
       const p = wm[i];
@@ -64,15 +76,32 @@ export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
       const c = wPt(worldLm, 28);
       if (a && b && c) kf.push((angleAtVertexRad3(a, b, c) * 180) / Math.PI);
     }
-    if (kf.length) kneeFlexDeg3d = Number(Math.min(...kf).toFixed(1));
+    if (kf.length) {
+      kneeFlexDeg3d = Number(Math.min(...kf).toFixed(1));
+      kneeFlexAvg3d = Number((kf.reduce((s, v) => s + v, 0) / kf.length).toFixed(1));
+    }
   }
   const earL = lm[7]?.visibility ?? 0;
   const earR = lm[8]?.visibility ?? 0;
   const eyeL = lm[2]?.visibility ?? 0;
   const eyeR = lm[5]?.visibility ?? 0;
-  const eyeSepX =
-    step === 2 && eyeL > 0.45 && eyeR > 0.45 ? Number(Math.abs(lm[2].x - lm[5].x).toFixed(4)) : null;
-  console.debug("[poseDebug:capture]", {
+  const eyeSepXNorm =
+    step === 2 ? Number(Math.abs((lm[2]?.x ?? 0) - (lm[5]?.x ?? 0)).toFixed(4)) : null;
+  const earSepXNorm =
+    step === 2 ? Number(Math.abs((lm[7]?.x ?? 0) - (lm[8]?.x ?? 0)).toFixed(4)) : null;
+  /** Profile: knee angle and shin tilt (same geometry as poseGate checkProfilePose). */
+  let profileRightKneeDeg = null;
+  let profileRightLegTiltDeg = null;
+  if (step === 2 && (rh?.visibility ?? 0) > 0.32 && (rk?.visibility ?? 0) > 0.32 && (lm[28]?.visibility ?? 0) > 0.32) {
+    const ra = lm[28];
+    profileRightKneeDeg = Number(((angleAtVertexRad(rh, rk, ra) * 180) / Math.PI).toFixed(1));
+    profileRightLegTiltDeg = Number(
+      ((Math.atan2(Math.abs((ra?.x ?? 0) - (rh?.x ?? 0)), Math.max(1e-4, (ra?.y ?? 0) - (rh?.y ?? 0))) * 180) /
+        Math.PI).toFixed(1)
+    );
+  }
+  console.debug("[poseDebug:gate]", {
+    source,
     step,
     ok: gate.ok,
     reason: gate.reason,
@@ -80,10 +109,26 @@ export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
     frontalWidth: Number(frontalWidth.toFixed(4)),
     noseShoulderDx: Number(Math.abs(nose.x - shoulderMidX).toFixed(4)),
     hipKneeDy: Number((kneeY - hipY).toFixed(4)),
+    legTorsoRatio: torsoLen > 0.06 && legLen > 0 ? Number((legLen / torsoLen).toFixed(3)) : null,
     kneeFlexDeg2d: kneeKneeFlex2d,
     kneeFlexMinDeg3d: kneeFlexDeg3d,
-    eyeSepX,
-    earVis: { L: Number(earL.toFixed(2)), R: Number(earR.toFixed(2)) },
-    eyeVis: { L: Number(eyeL.toFixed(2)), R: Number(eyeR.toFixed(2)) },
+    kneeFlexAvgDeg3d: kneeFlexAvg3d,
+    profileRightKneeDeg,
+    profileRightLegTiltDeg,
+    eyeSepX: eyeSepXNorm,
+    earSepX: earSepXNorm,
+    earVisMP: { L: Number(earL.toFixed(3)), R: Number(earR.toFixed(3)) },
+    eyeVisMP: { L: Number(eyeL.toFixed(3)), R: Number(eyeR.toFixed(3)) },
   });
+}
+
+/**
+ * Log after mirrored JPEG capture (same as logPoseGateCheck with source "capture").
+ * @param {number} step
+ * @param {any[]} rawLm Raw landmarks before horizontal flip.
+ * @param {any[]|null|undefined} worldLm worldLandmarks[0] from detectForVideo.
+ * @param {{ ok: boolean, reason?: string }} gate
+ */
+export function logPoseDebugCapture(step, rawLm, worldLm, gate) {
+  logPoseGateCheck("capture", step, rawLm, worldLm, gate);
 }

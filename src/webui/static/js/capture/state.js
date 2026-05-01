@@ -13,6 +13,9 @@ export const captureState = {
   /** @type {any} */
   poseLandmarker: null,
   poseLoadError: null,
+  /** IMAGE-mode landmarker for upload pose checks only. @type {any} */
+  poseLandmarkerImage: null,
+  poseImageLoadError: null,
   lastPoseCheck: 0,
   /** @type {{ ok: boolean, reason?: string }} */
   lastPoseGate: { ok: false, reason: "Завантаження…" },
