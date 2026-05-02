@@ -14,6 +14,7 @@ import {
   speakCountdownDigit,
 } from "./speech.js";
 import { setStatus, setPoseStatus, setPoseStatusVisual, updateUiStep } from "./ui.js";
+import { clearThumbSlotPhoto, syncThumbSlotToImage } from "./thumbLayout.js";
 
 export const MIN_VIDEO_DIMENSION = 480;
 export const POSE_MIN_INTERVAL_MS = 120;
@@ -37,6 +38,38 @@ const MODEL_URL =
  * (same instance). Mixing 0 for uploads with camera frames causes graph errors and a wedged UI.
  */
 let lastPoseVideoTimestampMs = -1;
+
+async function readImageBitmapHorizontallyFlipped(bitmap) {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D unavailable");
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(bitmap, 0, 0);
+  return createImageBitmap(canvas);
+}
+
+async function imageBitmapToBlob(bitmap, preferredMime) {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0);
+  const types =
+    preferredMime && /^image\/(jpeg|png|webp)$/i.test(preferredMime)
+      ? [preferredMime, "image/jpeg"]
+      : ["image/jpeg"];
+  for (const mime of types) {
+    const q = mime === "image/jpeg" ? 0.92 : undefined;
+    /** @type {Blob | null} */
+    const blob = await new Promise((res) => canvas.toBlob((b) => res(b), mime, q));
+    if (blob && blob.size > 0) return blob;
+  }
+  return null;
+}
 
 function nextPoseVideoTimestampMs() {
   let t = Math.floor(performance.now());
@@ -205,11 +238,69 @@ function gatePoseOnBitmap(viewStep, bitmap) {
 }
 
 /**
+ * Store uploaded blob(s), update thumbs and wizard step (shared by pose-validated and debug-skip paths).
+ * @param {"front"|"side"} which
+ * @param {File} file
+ * @param {Blob} storageBlob  side may be a flipped re-encode; front path stores `file` as frontBlob
+ * @param {string} poseLine     copy for `#pose-status`
+ */
+function commitUploadedImage(which, file, storageBlob, poseLine) {
+  const { thumbFront, thumbSide } = getCaptureDom();
+  resetAutoCaptureUi();
+  cancelSpeechSynthesis();
+  setPoseStatus(poseLine, "ok");
+  const displayBlob = which === "front" ? file : storageBlob;
+  const url = URL.createObjectURL(displayBlob);
+  if (which === "front") {
+    captureState.suspendPoseLoopAfterComplete = false;
+    revokeThumbUrl(thumbFront);
+    captureState.frontBlob = file;
+    thumbFront.src = url;
+    thumbFront.hidden = false;
+    syncThumbSlotToImage(thumbFront);
+    if (captureState.sideBlob) {
+      captureState.step = 2;
+      captureState.suspendPoseLoopAfterComplete = true;
+      stopCamera();
+      setStatus("Анфас завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
+    } else {
+      captureState.step = 2;
+      captureState.guideSmoothDelta.dx = 0;
+      captureState.guideSmoothDelta.dy = 0;
+      captureState.guideSmoothDelta.fitHeight = null;
+      captureState.guideSmoothDelta.fitTop = null;
+      captureState.guideSmoothDelta.fitLeft = null;
+      setStatus("Анфас завантажено. Додайте профіль (завантаження або камера).");
+    }
+  } else {
+    revokeThumbUrl(thumbSide);
+    captureState.sideBlob = storageBlob;
+    thumbSide.src = url;
+    thumbSide.hidden = false;
+    syncThumbSlotToImage(thumbSide);
+    const flipHint = storageBlob !== file ? " Фото віддзеркалено автоматично." : "";
+    if (captureState.frontBlob) {
+      captureState.step = 2;
+      captureState.suspendPoseLoopAfterComplete = true;
+      stopCamera();
+      setStatus(
+        `Профіль завантажено.${flipHint} Обидва знімки готові — натисніть «Розрахувати мірки».`
+      );
+    } else {
+      captureState.step = 1;
+      captureState.suspendPoseLoopAfterComplete = false;
+      setStatus(`Профіль завантажено.${flipHint} Додайте анфас (завантаження або камера).`);
+    }
+  }
+  updateUiStep();
+  syncOverlaySize();
+}
+
+/**
  * Use a user-picked file as front or side capture; rejects if pose gate fails (same rules as camera).
  * `File` is a `Blob` — compatible with `/api/measure` FormData.
  */
 export async function applyUploadedImage(which, file) {
-  const { thumbFront, thumbSide } = getCaptureDom();
   if (!file) return;
   if (!UPLOAD_MIME.has(file.type)) {
     setStatus("Оберіть зображення JPEG, PNG або WebP.", true);
@@ -220,8 +311,12 @@ export async function applyUploadedImage(which, file) {
     return;
   }
 
+  if (captureState.debugSkipUploadPoseGate) {
+    commitUploadedImage(which, file, file, "Debug: файл прийнято без перевірки пози");
+    return;
+  }
+
   const viewStep = which === "front" ? 1 : 2;
-  let bitmap = null;
   try {
     await loadPoseLandmarkerImage();
     if (captureState.poseImageLoadError) {
@@ -233,14 +328,18 @@ export async function applyUploadedImage(which, file) {
       return;
     }
 
+    let bitmap;
     try {
       bitmap = await createImageBitmap(file);
     } catch {
       setStatus("Не вдалося прочитати зображення.", true);
       return;
     }
+
+    /** @type {Blob} */
+    let storageBlob = file;
     try {
-      const poseChk = gatePoseOnBitmap(viewStep, bitmap);
+      let poseChk = gatePoseOnBitmap(viewStep, bitmap);
       logPoseGateCheck(
         "upload",
         viewStep,
@@ -248,51 +347,47 @@ export async function applyUploadedImage(which, file) {
         poseChk.world ?? null,
         { ok: poseChk.ok, reason: poseChk.reason }
       );
+
+      if (!poseChk.ok && viewStep === 2) {
+        let flipped = null;
+        try {
+          flipped = await readImageBitmapHorizontallyFlipped(bitmap);
+          const poseChkF = gatePoseOnBitmap(viewStep, flipped);
+          logPoseGateCheck(
+            "upload",
+            viewStep,
+            poseChkF.landmarks ?? null,
+            poseChkF.world ?? null,
+            { ok: poseChkF.ok, reason: poseChkF.reason }
+          );
+          if (poseChkF.ok) {
+            bitmap.close();
+            bitmap = flipped;
+            flipped = null;
+            poseChk = poseChkF;
+            const flippedBlob = await imageBitmapToBlob(bitmap, file.type);
+            if (!flippedBlob) {
+              setStatus("Не вдалося зберегти дзеркальне фото.", true);
+              setPoseStatus("", "bad");
+              return;
+            }
+            storageBlob = flippedBlob;
+          }
+        } finally {
+          if (flipped) flipped.close();
+        }
+      }
+
       if (!poseChk.ok) {
         setStatus(poseChk.reason || "Поза не відповідає вимогам.", true);
         setPoseStatus(poseChk.reason || "Поза не відповідає вимогам.", "bad");
         return;
       }
     } finally {
-      bitmap.close();
+      if (bitmap) bitmap.close();
     }
 
-    resetAutoCaptureUi();
-    cancelSpeechSynthesis();
-    setPoseStatus("Поза на фото підходить", "ok");
-    const url = URL.createObjectURL(file);
-    if (which === "front") {
-      captureState.suspendPoseLoopAfterComplete = false;
-      revokeThumbUrl(thumbFront);
-      captureState.frontBlob = file;
-      thumbFront.src = url;
-      thumbFront.hidden = false;
-      if (captureState.sideBlob) {
-        captureState.step = 2;
-        captureState.suspendPoseLoopAfterComplete = true;
-        stopCamera();
-        setStatus("Анфас завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
-      } else {
-        captureState.step = 2;
-        setStatus("Анфас завантажено. Додайте профіль (завантаження або камера).");
-      }
-    } else {
-      revokeThumbUrl(thumbSide);
-      captureState.sideBlob = file;
-      thumbSide.src = url;
-      thumbSide.hidden = false;
-      if (captureState.frontBlob) {
-        captureState.step = 2;
-        captureState.suspendPoseLoopAfterComplete = true;
-        stopCamera();
-        setStatus("Профіль завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
-      } else {
-        captureState.step = 1;
-        captureState.suspendPoseLoopAfterComplete = false;
-        setStatus("Профіль завантажено. Додайте анфас (завантаження або камера).");
-      }
-    }
-    updateUiStep();
+    commitUploadedImage(which, file, storageBlob, "Поза на фото підходить");
   } finally {
     disposePoseLandmarkerImage();
   }
@@ -301,6 +396,7 @@ export async function applyUploadedImage(which, file) {
 /** Revoke an object URL on a thumbnail img element. */
 export function revokeThumbUrl(imgEl) {
   if (!imgEl || !imgEl.src) return;
+  clearThumbSlotPhoto(imgEl);
   if (imgEl.src.startsWith("blob:")) {
     try {
       URL.revokeObjectURL(imgEl.src);
@@ -590,6 +686,7 @@ export function onCaptureReady(blob) {
     captureState.frontBlob = blob;
     thumbFront.src = url;
     thumbFront.hidden = false;
+    syncThumbSlotToImage(thumbFront);
     if (captureState.sideBlob) {
       captureState.step = 2;
       captureState.suspendPoseLoopAfterComplete = true;
@@ -599,7 +696,9 @@ export function onCaptureReady(blob) {
     } else {
       captureState.step = 2;
       updateUiStep();
-      void startCamera();
+      void startCamera().then(() => {
+        syncOverlaySize();
+      });
       setStatus("Увімкніть камеру знову для знімка в профіль.");
     }
   } else {
@@ -607,6 +706,7 @@ export function onCaptureReady(blob) {
     captureState.sideBlob = blob;
     thumbSide.src = url;
     thumbSide.hidden = false;
+    syncThumbSlotToImage(thumbSide);
     captureState.suspendPoseLoopAfterComplete = true;
     stopCamera();
     updateUiStep();

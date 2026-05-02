@@ -19,13 +19,13 @@
       <section class="card references" aria-labelledby="ref-heading" id="section-references">
         <h2 id="ref-heading">Приклади правильної пози</h2>
         <p class="ref-intro">
-          <strong>Анфас (A-поза):</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
-          <strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки вперед на ~45°.
-          Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
+          <strong>Анфас:</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+          <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки вперед на ~45°.
+          <br>Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
         </p>
         <div class="ref-grid">
           <figure class="ref-figure">
-            <figcaption>Анфас (A-поза)</figcaption>
+            <figcaption>Анфас</figcaption>
             <div class="ref-svg-wrap" aria-hidden="true">
               <canvas id="ref-canvas-front" class="ref-canvas" width="300" height="480"></canvas>
             </div>
@@ -80,7 +80,7 @@
         <p id="status" class="status" role="status"></p>
         <div class="upload-row" id="upload-row">
           <p class="upload-intro">
-            Або завантажте готові фото (JPEG, PNG, WebP; до 5&nbsp;МБ). Поза на завантажених знімках не перевіряється.
+            Або завантажте готові фото (JPEG, PNG, WebP; до 5&nbsp;МБ)
           </p>
           <div class="upload-actions">
             <label class="btn upload-file-label">
@@ -102,16 +102,26 @@
               />
             </label>
           </div>
+          <label class="upload-debug">
+            <input type="checkbox" id="debug-upload-skip-pose" />
+            <span>Не перевіряти позу при завантаженні файлу</span>
+          </label>
         </div>
         <div class="thumbs-wrap" id="thumbs-wrap">
           <div class="thumbs" id="thumbs-inner">
-            <figure>
+            <figure class="thumb-figure">
               <figcaption>Анфас</figcaption>
-              <img id="thumb-front" alt="Попередній перегляд анфас" width="112" height="84" hidden />
+              <div class="thumb-slot">
+                <canvas id="thumb-placeholder-front" class="thumb-placeholder" width="1" height="1" aria-hidden="true"></canvas>
+                <img id="thumb-front" class="thumb-photo" alt="Попередній перегляд анфас" hidden />
+              </div>
             </figure>
-            <figure>
+            <figure class="thumb-figure">
               <figcaption>Профіль</figcaption>
-              <img id="thumb-side" alt="Попередній перегляд профіль" width="112" height="84" hidden />
+              <div class="thumb-slot">
+                <canvas id="thumb-placeholder-side" class="thumb-placeholder" width="1" height="1" aria-hidden="true"></canvas>
+                <img id="thumb-side" class="thumb-photo" alt="Попередній перегляд профіль" hidden />
+              </div>
             </figure>
           </div>
           <div class="retake-actions" id="retake-actions" hidden>
@@ -119,7 +129,7 @@
             <button type="button" id="btn-retake-side" class="btn">Перезняти профіль</button>
           </div>
         </div>
-        <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки (mock)</button>
+        <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки</button>
         <button type="button" id="btn-measure-test" class="btn wide">Тест результатів без фото</button>
       </section>
 

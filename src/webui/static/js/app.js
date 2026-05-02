@@ -15,6 +15,7 @@ import * as session from "./capture/session.js";
 import * as overlay from "./capture/overlay.js";
 import * as ui from "./capture/ui.js";
 import * as tailoring from "./capture/tailoring.js";
+import { resyncVisibleCaptureThumbs } from "./capture/thumbLayout.js";
 
 /** Render top reference canvases using the same drawing code as live overlay. */
 function renderReferenceGuides() {
@@ -50,17 +51,83 @@ function renderReferenceGuides() {
   }
 }
 
+const THUMB_PLACEHOLDER_SILHOUETTE = {
+  strokeStyle: "rgba(113, 168, 255, 0.5)",
+  fillStyle: "rgba(118, 170, 255, 0.07)",
+  shadowColor: "transparent",
+  shadowBlur: 0,
+  lineWidthScale: 0.72,
+};
+
+/** Empty photo slots: same guide polygons as live preview, muted (not clipped like object-fit). */
+function renderThumbPlaceholders() {
+  const items = [
+    { id: "thumb-placeholder-front", step: 1 },
+    { id: "thumb-placeholder-side", step: 2 },
+  ];
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const item of items) {
+    const canvas = /** @type {HTMLCanvasElement | null} */ (document.getElementById(item.id));
+    if (!canvas) continue;
+    const slot = canvas.closest(".thumb-slot");
+    const cssW = Math.max(1, slot?.clientWidth ?? canvas.clientWidth ?? 220);
+    const cssH = Math.max(1, slot?.clientHeight ?? Math.round((cssW * 160) / 100));
+    const bw = Math.round(cssW * dpr);
+    const bh = Math.round(cssH * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = cssW * 0.07;
+    const box = {
+      left: pad,
+      top: cssH * 0.02,
+      width: cssW - pad * 2,
+      height: cssH * 0.94,
+    };
+    drawGuideSilhouetteOnCanvas(ctx, box, item.step, guideGeom, THUMB_PLACEHOLDER_SILHOUETTE);
+  }
+}
+
 applyReloadGuideQueryParam();
 loadGuideGeometry();
 renderReferenceGuides();
+renderThumbPlaceholders();
 void loadGuideGeometryFromOptionalStaticFile().then(() => {
   renderReferenceGuides();
+  renderThumbPlaceholders();
 });
+
+const DEBUG_UPLOAD_POSE_LS = "pointsx.debugSkipUploadPoseGate";
 
 function initCaptureApp() {
   getCaptureDom();
 
   const dom = getCaptureDom();
+
+  const dbgUpload = dom.debugSkipUploadPose;
+  if (dbgUpload) {
+    try {
+      dbgUpload.checked = localStorage.getItem(DEBUG_UPLOAD_POSE_LS) === "1";
+    } catch {
+      dbgUpload.checked = false;
+    }
+    captureState.debugSkipUploadPoseGate = dbgUpload.checked;
+    dbgUpload.addEventListener("change", () => {
+      captureState.debugSkipUploadPoseGate = dbgUpload.checked;
+      try {
+        if (dbgUpload.checked) localStorage.setItem(DEBUG_UPLOAD_POSE_LS, "1");
+        else localStorage.removeItem(DEBUG_UPLOAD_POSE_LS);
+      } catch {
+        /* ignore quota / private mode */
+      }
+    });
+  }
 
   dom.btnToCapture.addEventListener("click", () => {
     const target = dom.sectionParams || dom.heightInput?.closest("section");
@@ -106,6 +173,14 @@ function initCaptureApp() {
     else if (captureState.poseLoadError) ui.setPoseStatus("Модель пози не завантажена (офлайн?).", "bad");
   });
 
+  const thumbsWrap = document.getElementById("thumbs-wrap");
+  if (thumbsWrap && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => renderThumbPlaceholders()).observe(thumbsWrap);
+  }
+  requestAnimationFrame(() => {
+    renderThumbPlaceholders();
+  });
+
   const previewWrap = dom.video.parentElement;
   if (previewWrap && typeof ResizeObserver !== "undefined") {
     new ResizeObserver(() => overlay.drawOverlay()).observe(previewWrap);
@@ -113,6 +188,8 @@ function initCaptureApp() {
   window.addEventListener("resize", () => {
     overlay.drawOverlay();
     renderReferenceGuides();
+    renderThumbPlaceholders();
+    resyncVisibleCaptureThumbs();
   });
 
   ui.updateUiStep();

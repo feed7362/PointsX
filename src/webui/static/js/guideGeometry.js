@@ -125,6 +125,38 @@ export function anklePreviewBottomY(lm, cssW, cssH, vw, vh, visMin = 0.14) {
 }
 
 /**
+ * Landmark used to pin the guide horizontally (and vertically) to the head.
+ * Profile: nose is often low-confidence; fall back to ears or eyes so the frame keeps tracking.
+ * @returns {{ x: number, y: number, vis: number } | null}
+ */
+function headLandmarkForGuide(step, lm, noseVisMin) {
+  const nose = lm[0];
+  const noseVis = nose?.visibility ?? 1;
+  if (nose && noseVis >= noseVisMin) {
+    return { x: nose.x, y: nose.y, vis: noseVis };
+  }
+  if (step !== 2) return null;
+  const cands = [];
+  for (const id of [7, 8]) {
+    const p = lm[id];
+    const v = p?.visibility ?? 0;
+    if (p && v >= 0.14) cands.push({ x: p.x, y: p.y, vis: v });
+  }
+  if (cands.length) {
+    cands.sort((a, b) => b.vis - a.vis);
+    return cands[0];
+  }
+  const le = lm[2];
+  const re = lm[5];
+  const lv = le?.visibility ?? 0;
+  const rv = re?.visibility ?? 0;
+  if (le && re && lv >= 0.12 && rv >= 0.12) {
+    return { x: (le.x + re.x) * 0.5, y: (le.y + re.y) * 0.5, vis: Math.min(lv, rv) };
+  }
+  return null;
+}
+
+/**
  * Guide box with optional vertical fit from nose and ankles; mutates smoothDelta for smoothing
  * (dx/dy when ankles are weak; fitHeight/fitTop/fitLeft when stretching to feet).
  */
@@ -186,14 +218,14 @@ export function computeGuideBoxTracked(
     return decayLegacyAndMaybeFit();
   }
 
-  const nose = lastRawLandmarks[0];
-  if ((nose.visibility ?? 1) < gf.noseVisMin) {
+  const headLm = headLandmarkForGuide(step, lastRawLandmarks, gf.noseVisMin);
+  if (!headLm) {
     smoothDelta.dx *= gf.decayLowVis;
     smoothDelta.dy *= gf.decayLowVis;
     return decayLegacyAndMaybeFit();
   }
 
-  const { x: px, y: py } = videoNormToPreviewLocal(nose.x, nose.y, cssW, cssH, vw, vh);
+  const { x: px, y: py } = videoNormToPreviewLocal(headLm.x, headLm.y, cssW, cssH, vw, vh);
   const ankleY = anklePreviewBottomY(lastRawLandmarks, cssW, cssH, vw, vh, vMin);
   const denom = footA.y - headA.y;
 
@@ -306,30 +338,34 @@ export function drawPoly(ctx, pts, box) {
 /**
  * Draw the silhouette on a canvas that already uses the same mirror transform as drawImage(video).
  * @param {{ left: number, top: number, width: number, height: number }} box From computeGuideBoxTracked or computeGuideBoxWithDelta.
+ * @param {{ strokeStyle?: string, fillStyle?: string, shadowColor?: string, shadowBlur?: number, lineWidthScale?: number } | undefined} style Optional; omit for live preview colors.
  */
-export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideGeom) {
+export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideGeom, style) {
   const cw = box.width || (ctx.canvas && ctx.canvas.width ? ctx.canvas.width : 0);
-  const lineWidth = Math.max(2, cw * 0.0125);
-  ctx.strokeStyle = "rgba(165, 202, 255, 0.92)";
+  const lineWScale = style?.lineWidthScale ?? 1;
+  const lineFloor = style ? 1.15 : 2;
+  const lineWidth = Math.max(lineFloor, cw * 0.0125 * lineWScale);
+  ctx.strokeStyle = style?.strokeStyle ?? "rgba(165, 202, 255, 0.92)";
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(66, 147, 255, 0.25)";
-  ctx.shadowBlur = Math.max(3, cw * 0.008);
+  ctx.shadowColor = style?.shadowColor ?? "rgba(66, 147, 255, 0.25)";
+  ctx.shadowBlur =
+    style?.shadowBlur !== undefined ? style.shadowBlur : Math.max(3, cw * 0.008);
   ctx.setLineDash([]);
   if (currentStep === 1) {
     drawPoly(ctx, geom.frontPts, box);
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(118, 170, 255, 0.12)";
+    ctx.fillStyle = style?.fillStyle ?? "rgba(118, 170, 255, 0.12)";
     ctx.fill();
   } else {
     drawPoly(ctx, geom.profilePts, box);
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(118, 170, 255, 0.12)";
+    ctx.fillStyle = style?.fillStyle ?? "rgba(118, 170, 255, 0.12)";
     ctx.fill();
   }
 }

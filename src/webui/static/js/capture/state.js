@@ -39,4 +39,6 @@ export const captureState = {
   cachedUkVoice: undefined,
   voicesChangeHooked: false,
   sizeTabsWired: false,
+  /** Debug: accept file uploads without MediaPipe pose gate (checkbox + localStorage). */
+  debugSkipUploadPoseGate: false,
 };

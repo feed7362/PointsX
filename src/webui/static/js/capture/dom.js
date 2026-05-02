@@ -29,6 +29,9 @@ function buildDom() {
     thumbSide: /** @type {HTMLImageElement} */ (document.getElementById("thumb-side")),
     btnRetakeFront: /** @type {HTMLButtonElement | null} */ (document.getElementById("btn-retake-front")),
     btnRetakeSide: /** @type {HTMLButtonElement | null} */ (document.getElementById("btn-retake-side")),
+    debugSkipUploadPose: /** @type {HTMLInputElement | null} */ (
+      document.getElementById("debug-upload-skip-pose")
+    ),
     resultsSection: /** @type {HTMLElement | null} */ (document.getElementById("results-section")),
     resultsBody: /** @type {HTMLElement | null} */ (document.getElementById("results-body")),
     tailoringIntro: /** @type {HTMLElement | null} */ (document.getElementById("tailoring-intro")),

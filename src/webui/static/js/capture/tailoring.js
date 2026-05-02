@@ -510,32 +510,6 @@ export function attachMeasureHandler() {
     tailoringDisclaimer,
   } = getCaptureDom();
 
-  /**
-   * Build a tiny placeholder image blob for mock endpoint testing.
-   * Used by "test without photos" button to bypass capture flow.
-   * @returns {Promise<Blob>}
-   */
-  async function makePlaceholderImageBlob() {
-    const c = document.createElement("canvas");
-    c.width = 32;
-    c.height = 32;
-    const ctx = c.getContext("2d");
-    if (!ctx) throw new Error("Не вдалося підготувати тестове зображення");
-    ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = "#2563eb";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
-    ctx.fillStyle = "#2563eb";
-    ctx.fillRect(10, 10, 12, 12);
-    return await new Promise((resolve, reject) => {
-      c.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Не вдалося згенерувати тестове зображення"));
-      }, "image/png");
-    });
-  }
-
   async function runMeasureRequest(mode = "capture") {
     const useTestImages = mode === "test";
     if (!useTestImages && (!captureState.frontBlob || !captureState.sideBlob)) return;
@@ -551,12 +525,8 @@ export function attachMeasureHandler() {
     const fd = new FormData();
     fd.append("height_cm", String(heightInput.value));
     fd.append("sex",       sexSelect.value);
-    if (useTestImages) {
-      const dummyFront = await makePlaceholderImageBlob();
-      const dummySide  = await makePlaceholderImageBlob();
-      fd.append("front", dummyFront, "front-test.png");
-      fd.append("side",  dummySide,  "side-test.png");
-    } else {
+    const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
+    if (!useTestImages) {
       const frontName =
         captureState.frontBlob instanceof File && captureState.frontBlob.name
           ? captureState.frontBlob.name
@@ -570,7 +540,7 @@ export function attachMeasureHandler() {
     }
 
     try {
-      const res = await fetch("/api/measure", { method: "POST", body: fd });
+      const res = await fetch(measureUrl, { method: "POST", body: fd });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || res.statusText);
@@ -635,14 +605,8 @@ export function attachMeasureHandler() {
   });
 
   if (btnMeasureTest) {
-    // Test mode used to POST 1×1 placeholder PNGs to /api/measure/mock.
-    // The real /api/measure pipeline rejects those (no person detected),
-    // so the button now just shows a hint instead of producing 400 errors.
-    btnMeasureTest.addEventListener("click", () => {
-      setStatus(
-        "Тестовий режим вимкнено: справжній конвеєр потребує реальних фото. " +
-          "Зробіть знімки спереду й збоку, потім натисніть «Виміряти».",
-      );
+    btnMeasureTest.addEventListener("click", async () => {
+      await runMeasureRequest("test");
     });
   }
 }
