@@ -9,8 +9,9 @@ dependencies = [
     "ultralytics>=8.1.0",
     "jupyter>=1.0.0",
     "ipykernel>=6.29.0",
-    "numpy>=1.26.0",
-    "opencv-python>=4.9.0",
+    # NumPy 2.x breaks many PyTorch wheels (torch C extension expects 1.x ABI).
+    "numpy>=1.26.0,<2",
+    "opencv-python>=4.9.0,<4.12",
     "matplotlib>=3.8.0",
     "pillow>=10.2.0",
     "tqdm>=4.66.0",

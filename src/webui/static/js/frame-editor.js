@@ -4,6 +4,7 @@
 
 import {
   guideGeom,
+  applyReloadGuideQueryParam,
   loadGuideGeometry,
   loadGuideGeometryFromOptionalStaticFile,
   saveGuideGeometry,
@@ -12,11 +13,9 @@ import {
   importGuideGeometryJson,
   computeGuideBox,
   drawPoly,
-  drawOpenStroke,
 } from "./guideGeometry.js";
 
 const MIN_MAIN_POLY = 3;
-const MIN_ARM_POLY = 2;
 const EDGE_HIT_PX = 12;
 
 const cv = document.getElementById("cv");
@@ -42,6 +41,7 @@ function setMsg(text, isErr) {
   msg.classList.toggle("err", Boolean(isErr));
 }
 
+applyReloadGuideQueryParam();
 loadGuideGeometry();
 void loadGuideGeometryFromOptionalStaticFile().then((fromFile) => {
   if (fromFile) {
@@ -53,10 +53,8 @@ void loadGuideGeometryFromOptionalStaticFile().then((fromFile) => {
 /** @type {number} */
 let editorStep = 1;
 /** @type {number | null} */
-let dragPoly = null;
-/** @type {number | null} */
 let dragIdx = null;
-/** @type {{ kind: string, idx: number } | null} */
+/** @type {number | null} */
 let selectedVertex = null;
 
 const GF_KEYS = [
@@ -156,7 +154,7 @@ function clientToCanvas(clientX, clientY) {
   return { x: (clientX - r.left) * sx, y: (clientY - r.top) * sy };
 }
 
-/** Hit-test a vertex on the main polygon or profile arm stroke. */
+/** Hit-test a vertex on the main polygon (front or profile). */
 function pickVertex(mx, my) {
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
@@ -172,17 +170,7 @@ function pickVertex(mx, my) {
       best = i;
     }
   }
-  if (best >= 0 && bestD < 14 * 14) return { kind: "main", idx: best };
-
-  if (editorStep === 2) {
-    const arm = guideGeom.profileArmPts;
-    for (let i = 0; i < arm.length; i++) {
-      const px = box.left + arm[i][0] * box.width;
-      const py = box.top + arm[i][1] * box.height;
-      const d = (mx - px) ** 2 + (my - py) ** 2;
-      if (d < 14 * 14) return { kind: "arm", idx: i };
-    }
-  }
+  if (best >= 0 && bestD < 14 * 14) return best;
   return null;
 }
 
@@ -230,105 +218,31 @@ function findInsertClosed(pts, mx, my, box, threshPx) {
   return { afterIdx: bestI, nx, ny };
 }
 
-/** Find edge insert position on an open polyline near (mx, my). */
-function findInsertOpen(pts, mx, my, box, threshPx) {
-  if (pts.length < 2) return null;
-  const thr2 = threshPx * threshPx;
-  let bestI = -1;
-  let bestD = Infinity;
-  let bestPx = 0;
-  let bestPy = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const ax = box.left + pts[i][0] * box.width;
-    const ay = box.top + pts[i][1] * box.height;
-    const bx = box.left + pts[i + 1][0] * box.width;
-    const by = box.top + pts[i + 1][1] * box.height;
-    const { distSq, px, py } = closestOnSeg(mx, my, ax, ay, bx, by);
-    if (distSq < bestD) {
-      bestD = distSq;
-      bestI = i;
-      bestPx = px;
-      bestPy = py;
-    }
-  }
-  if (bestI < 0 || bestD > thr2) return null;
-  const nx = Math.min(1, Math.max(0, (bestPx - box.left) / box.width));
-  const ny = Math.min(1, Math.max(0, (bestPy - box.top) / box.height));
-  return { afterIdx: bestI, nx, ny };
-}
-
 /**
- * Shift-click: insert a point on the nearest edge (main closed polygon or profile arm stroke).
+ * Shift-click: insert a point on the nearest edge of the main closed polygon.
  */
 function tryInsertShiftClick(mx, my) {
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
-  if (editorStep === 1) {
-    const r = findInsertClosed(guideGeom.frontPts, mx, my, box, EDGE_HIT_PX);
-    if (r) {
-      guideGeom.frontPts.splice(r.afterIdx + 1, 0, [r.nx, r.ny]);
-      return true;
-    }
-  } else {
-    const rMain = findInsertClosed(guideGeom.profilePts, mx, my, box, EDGE_HIT_PX);
-    const rArm = findInsertOpen(guideGeom.profileArmPts, mx, my, box, EDGE_HIT_PX);
-    let useArm = false;
-    if (rMain && rArm) {
-      const dMain = edgeDistSqAt(mx, my, guideGeom.profilePts, rMain.afterIdx, box, true);
-      const dArm = edgeDistSqAt(mx, my, guideGeom.profileArmPts, rArm.afterIdx, box, false);
-      useArm = dArm < dMain;
-    } else if (rArm && !rMain) {
-      useArm = true;
-    } else if (rMain) {
-      useArm = false;
-    } else {
-      return false;
-    }
-    if (useArm && rArm) {
-      guideGeom.profileArmPts.splice(rArm.afterIdx + 1, 0, [rArm.nx, rArm.ny]);
-      return true;
-    }
-    if (rMain) {
-      guideGeom.profilePts.splice(rMain.afterIdx + 1, 0, [rMain.nx, rMain.ny]);
-      return true;
-    }
-  }
-  return false;
-}
-
-/** Squared distance from (mx,my) to edge starting at segStart. */
-function edgeDistSqAt(mx, my, pts, segStart, box, closed) {
-  const i = segStart;
-  const j = closed ? (i + 1) % pts.length : i + 1;
-  const ax = box.left + pts[i][0] * box.width;
-  const ay = box.top + pts[i][1] * box.height;
-  const bx = box.left + pts[j][0] * box.width;
-  const by = box.top + pts[j][1] * box.height;
-  return closestOnSeg(mx, my, ax, ay, bx, by).distSq;
+  const pts = editorStep === 1 ? guideGeom.frontPts : guideGeom.profilePts;
+  const r = findInsertClosed(pts, mx, my, box, EDGE_HIT_PX);
+  if (!r) return false;
+  pts.splice(r.afterIdx + 1, 0, [r.nx, r.ny]);
+  return true;
 }
 
 /** Delete the selected vertex if counts stay above minimums. */
 function removeSelectedVertex() {
-  if (!selectedVertex) {
+  if (selectedVertex == null) {
     setMsg("Спочатку клацніть по точці на контуру, щоб її виділити.", true);
     return false;
   }
-  const { kind, idx } = selectedVertex;
-  if (kind === "main") {
-    const pts = currentMainPoly();
-    if (pts.length <= MIN_MAIN_POLY) {
-      setMsg(`Мінімум ${MIN_MAIN_POLY} точки для замкненого контуру.`, true);
-      return false;
-    }
-    pts.splice(idx, 1);
-  } else {
-    const arm = guideGeom.profileArmPts;
-    if (arm.length <= MIN_ARM_POLY) {
-      setMsg(`Лінія руки: мінімум ${MIN_ARM_POLY} точки.`, true);
-      return false;
-    }
-    arm.splice(idx, 1);
+  const pts = currentMainPoly();
+  if (pts.length <= MIN_MAIN_POLY) {
+    setMsg(`Мінімум ${MIN_MAIN_POLY} точки для замкненого контуру.`, true);
+    return false;
   }
+  pts.splice(selectedVertex, 1);
   selectedVertex = null;
   return true;
 }
@@ -362,17 +276,13 @@ function draw() {
     ctx.setLineDash([]);
     ctx.fillStyle = "rgba(91, 140, 255, 0.08)";
     ctx.fill();
-    ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = "rgba(120, 170, 255, 0.95)";
-    drawOpenStroke(ctx, guideGeom.profileArmPts, box);
-    ctx.setLineDash([]);
   }
 
   const pts = currentMainPoly();
   for (let i = 0; i < pts.length; i++) {
     const px = box.left + pts[i][0] * box.width;
     const py = box.top + pts[i][1] * box.height;
-    const sel = selectedVertex && selectedVertex.kind === "main" && selectedVertex.idx === i;
+    const sel = selectedVertex != null && selectedVertex === i;
     ctx.beginPath();
     ctx.arc(px, py, sel ? 6 : 4, 0, Math.PI * 2);
     ctx.fillStyle = sel ? "#7dffb3" : "#fff";
@@ -381,23 +291,6 @@ function draw() {
       ctx.strokeStyle = "#0a3";
       ctx.lineWidth = 2;
       ctx.stroke();
-    }
-  }
-  if (editorStep === 2) {
-    for (let i = 0; i < guideGeom.profileArmPts.length; i++) {
-      const p = guideGeom.profileArmPts[i];
-      const px = box.left + p[0] * box.width;
-      const py = box.top + p[1] * box.height;
-      const sel = selectedVertex && selectedVertex.kind === "arm" && selectedVertex.idx === i;
-      ctx.beginPath();
-      ctx.arc(px, py, sel ? 6 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = sel ? "#7dffb3" : "#ffd27a";
-      ctx.fill();
-      if (sel) {
-        ctx.strokeStyle = "#0a3";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
     }
   }
 
@@ -474,16 +367,15 @@ cv.addEventListener("mousedown", (e) => {
     return;
   }
   const hit = pickVertex(x, y);
-  if (hit) selectedVertex = hit;
+  if (hit != null) selectedVertex = hit;
   else selectedVertex = null;
-  if (!hit) return;
-  dragPoly = hit.kind === "main" ? 1 : 2;
-  dragIdx = hit.idx;
+  if (hit == null) return;
+  dragIdx = hit;
   draw();
 });
 
 window.addEventListener("mousemove", (e) => {
-  if (dragIdx == null || dragPoly == null) return;
+  if (dragIdx == null) return;
   const { x, y } = clientToCanvas(e.clientX, e.clientY);
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
@@ -491,20 +383,14 @@ window.addEventListener("mousemove", (e) => {
   let ny = (y - box.top) / box.height;
   nx = Math.min(1, Math.max(0, nx));
   ny = Math.min(1, Math.max(0, ny));
-  if (dragPoly === 1) {
-    const pts = currentMainPoly();
-    pts[dragIdx][0] = nx;
-    pts[dragIdx][1] = ny;
-  } else {
-    guideGeom.profileArmPts[dragIdx][0] = nx;
-    guideGeom.profileArmPts[dragIdx][1] = ny;
-  }
+  const pts = currentMainPoly();
+  pts[dragIdx][0] = nx;
+  pts[dragIdx][1] = ny;
   draw();
 });
 
 window.addEventListener("mouseup", () => {
   dragIdx = null;
-  dragPoly = null;
 });
 
 window.addEventListener("keydown", (e) => {

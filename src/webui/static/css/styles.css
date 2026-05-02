@@ -84,16 +84,26 @@ body {
 }
 
 .ref-svg-wrap {
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.75rem;
-  background: var(--bg);
-  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 18px;
+  padding: 0.9rem;
+  background:
+    radial-gradient(120% 120% at 10% 0%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 88%, var(--bg)), color-mix(in srgb, var(--card) 60%, var(--bg)));
+  color: color-mix(in srgb, var(--accent) 85%, #cfe0ff);
   max-width: 260px;
   margin: 0 auto;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .ref-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 100 / 160;
+}
+
+.ref-canvas {
   display: block;
   width: 100%;
   height: auto;
@@ -166,11 +176,23 @@ body {
   width: 100%;
   max-width: min(92vw, 520px);
   margin: 0 auto 1rem;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   background: #000;
   aspect-ratio: 3 / 4;
+}
+
+.preview-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 95% at 50% 0%, rgba(113, 168, 255, 0.18), transparent 60%),
+    linear-gradient(180deg, rgba(10, 18, 34, 0.14), rgba(10, 18, 34, 0.45));
+  z-index: 0;
 }
 
 .countdown-overlay {
@@ -186,7 +208,7 @@ body {
   text-shadow: 0 0 0.35rem rgba(0, 0, 0, 0.85), 0 0 1.2rem rgba(91, 140, 255, 0.55);
   background: rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 /* Undo selfie mirror for the countdown overlay so digits read correctly. */
@@ -210,11 +232,15 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.capture--review .thumbs img {
-  width: min(92vw, 280px);
-  height: auto;
-  aspect-ratio: 4 / 3;
-  max-height: 50vh;
+.capture--review .thumb-slot:not(.thumb-slot--photo) {
+  width: min(92vw, 400px);
+  max-height: min(65vh, 520px);
+  aspect-ratio: 100 / 160;
+}
+
+.capture--review .thumb-slot.thumb-slot--photo {
+  max-width: min(400px, 92vw);
+  max-height: min(520px, 65vh);
 }
 
 .retake-actions {
@@ -229,6 +255,8 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
 }
 
 .overlay {
@@ -238,6 +266,7 @@ body {
   height: 100%;
   pointer-events: none;
   object-fit: fill;
+  z-index: 2;
 }
 
 .actions {
@@ -300,7 +329,8 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.thumbs figure {
+.thumbs figure,
+.thumbs .thumb-figure {
   margin: 0;
 }
 
@@ -310,14 +340,47 @@ body {
   margin-bottom: 0.35rem;
 }
 
-.thumbs img {
-  display: block;
-  width: 112px;
-  height: 84px;
+.thumb-slot {
+  position: relative;
+  width: min(220px, 44vw);
+  aspect-ratio: 100 / 160;
   border-radius: 8px;
   border: 1px solid var(--border);
-  object-fit: cover;
   background: var(--bg);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.thumb-slot .thumb-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.thumb-slot.thumb-slot--photo {
+  width: auto;
+  height: auto;
+  aspect-ratio: unset;
+  max-width: min(220px, 44vw);
+  max-height: min(360px, 40vh);
+}
+
+.thumb-slot .thumb-photo {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  object-fit: fill;
+  object-position: center;
+  background: var(--bg);
+  z-index: 1;
 }
 
 .measures {
@@ -661,4 +724,104 @@ body {
   border-left: 2px solid #f0a030;
   padding-left: 0.5rem;
   line-height: 1.4;
+}
+
+.upload-row {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.upload-intro {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.upload-debug {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.upload-debug input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+/**
+ * Overlay the whole “button” (label) with a transparent file input — works in
+ * Safari/WebKit where display:none / hidden inputs often fail to open the picker.
+ */
+.upload-file-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin: 0;
+  overflow: hidden;
+}
+
+.upload-file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1.5rem;
+}
+
+.model-viz {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-viz-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.model-viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.model-viz-item {
+  margin: 0;
+}
+
+.model-viz-item figcaption {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.model-viz-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }

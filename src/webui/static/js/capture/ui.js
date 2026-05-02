@@ -5,6 +5,7 @@
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { speakPoseHint } from "./speech.js";
+import { resyncVisibleCaptureThumbs } from "./thumbLayout.js";
 
 export function setStatus(msg, isError) {
   const { statusEl } = getCaptureDom();
@@ -48,13 +49,14 @@ export function updateUiStep() {
   const { stepLabel, btnMeasure } = getCaptureDom();
   if (captureState.frontBlob && captureState.sideBlob && captureState.suspendPoseLoopAfterComplete) {
     stepLabel.textContent =
-      "Обидва знімки в превʼю — «Розрахувати мірки» або перезняти анфас / профіль за потреби.";
+      "Обидва знімки в превʼю";
   } else if (captureState.step === 1) {
-    stepLabel.textContent = "Крок 1 з 2: анфас — A-поза (пахви відкриті, ноги на ширині плечей)";
+    stepLabel.textContent = "Крок 1 з 2: анфас — пахви відкриті, ноги на ширині плечей";
   } else {
     stepLabel.textContent =
-      "Крок 2 з 2: профіль — права рука вперед ~45° (не вздовж тіла; перевіряється кут правої руки)";
+      "Крок 2 з 2: профіль — боком до камери, руки вперед на ~45° ";
   }
   btnMeasure.disabled = !(captureState.frontBlob && captureState.sideBlob);
   updateCaptureReviewUi();
+  resyncVisibleCaptureThumbs();
 }
