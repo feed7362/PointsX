@@ -49,30 +49,6 @@ function clamp(n, lo, hi) {
 }
 
 /**
- * Horizontal clamp for the guide box so nose/foot anchors can align with landmarks across the
- * full letterboxed video rect (object-fit: cover). Using only canvas margins blocks movement
- * when the desired `left` is left of the letterbox (common on profile step).
- */
-function clampGuideBoxLeft(rawLeft, cssW, cssH, vw, vh, w, headAx, footAx, marginX) {
-  if (!Number.isFinite(rawLeft) || !Number.isFinite(w) || w <= 0) return rawLeft;
-  if (!vw || !vh || vw <= 0 || vh <= 0) {
-    return clamp(rawLeft, marginX, cssW - marginX - w);
-  }
-  const scale = Math.max(cssW / vw, cssH / vh);
-  const dispW = vw * scale;
-  const offX = (cssW - dispW) / 2;
-  const axHi = Math.max(headAx, footAx);
-  const axLo = Math.min(headAx, footAx);
-  const leftMinAlign = offX - axHi * w;
-  const leftMaxAlign = offX + dispW - axLo * w;
-  const minL = Math.min(marginX, leftMinAlign);
-  const maxL = Math.max(cssW - marginX - w, leftMaxAlign);
-  const lo = Math.min(minL, maxL);
-  const hi = Math.max(minL, maxL);
-  return clamp(rawLeft, lo, hi);
-}
-
-/**
  * Convert normalized frame points to an SVG `points` attribute (ref SVG viewBox 0 0 100×160).
  * Maps video-normalized (nx, ny) through object-fit: cover; see videoNormToPreviewLocal.
  */
@@ -128,12 +104,12 @@ export function frameHeightFromCm(heightCm, gf = guideGeom.guideFrame) {
 }
 
 /**
- * Horizontal map for profile silhouette + anchors: widens the narrow side-view hull in the guide box.
+ * Horizontal map for profile silhouette + anchors: optional X scale about a pivot (default 1.3).
  * Pivot defaults to silhouette midline (~0.5); optional shift nudges the whole figure left/right in norm space.
  */
 export function profileNormX(x, gf = guideGeom.guideFrame) {
   const rawS = Number(gf.profileDrawScaleX);
-  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.42;
+  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.3;
   const pv = Number(gf.profilePivotX);
   const sh = Number(gf.profileDrawShiftNormX);
   const pivot = (Number.isFinite(pv) ? pv : 0.5) + (Number.isFinite(sh) ? sh : 0);
@@ -144,12 +120,93 @@ export function profileNormX(x, gf = guideGeom.guideFrame) {
 /** Inverse of `profileNormX`: map silhouette/box-normalized X back to stored `profilePts` X. */
 export function profileDenormX(mappedX, gf = guideGeom.guideFrame) {
   const rawS = Number(gf.profileDrawScaleX);
-  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.42;
+  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.3;
   const pv = Number(gf.profilePivotX);
   const sh = Number(gf.profileDrawShiftNormX);
   const pivot = (Number.isFinite(pv) ? pv : 0.5) + (Number.isFinite(sh) ? sh : 0);
   if (Math.abs(scale - 1) < 1e-6) return mappedX;
   return pivot + (mappedX - pivot) / scale;
+}
+
+/** Min/max mapped X of profile art (for clamping box position so silhouette stays inside the canvas). */
+function profileMappedXExtent(geom, gf) {
+  if (!geom?.profilePts?.length) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const p of geom.profilePts) {
+    const mx = profileNormX(p[0], gf);
+    minX = Math.min(minX, mx);
+    maxX = Math.max(maxX, mx);
+  }
+  const paths = geom.profileInteriorPaths;
+  if (Array.isArray(paths)) {
+    for (const path of paths) {
+      if (!path?.length) continue;
+      for (const p of path) {
+        const mx = profileNormX(p[0], gf);
+        minX = Math.min(minX, mx);
+        maxX = Math.max(maxX, mx);
+      }
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
+  return { minX, maxX };
+}
+
+/**
+ * Horizontal clamp: letterbox-aware range (aligns with video crop) intersected on profile step with
+ * silhouette bounds so strokes stay on-screen without using the full box width as the stop edge.
+ */
+function clampGuideBoxLeft(rawLeft, cssW, cssH, vw, vh, w, headAx, footAx, marginX, step, geom) {
+  if (!Number.isFinite(rawLeft) || !Number.isFinite(w) || w <= 0) return rawLeft;
+  if (step !== 2) {
+    return clamp(rawLeft, marginX, cssW - marginX - w);
+  }
+
+  let lo;
+  let hi;
+  if (!vw || !vh || vw <= 0 || vh <= 0) {
+    lo = marginX;
+    hi = cssW - marginX - w;
+  } else {
+    const scale = Math.max(cssW / vw, cssH / vh);
+    const dispW = vw * scale;
+    const offX = (cssW - dispW) / 2;
+    const axHi = Math.max(headAx, footAx);
+    const axLo = Math.min(headAx, footAx);
+    const leftMinAlign = offX - axHi * w;
+    const leftMaxAlign = offX + dispW - axLo * w;
+    const minL = Math.min(marginX, leftMinAlign);
+    const maxL = Math.max(cssW - marginX - w, leftMaxAlign);
+    lo = Math.min(minL, maxL);
+    hi = Math.max(minL, maxL);
+  }
+
+  if (step === 2 && geom) {
+    const ext = profileMappedXExtent(geom, geom.guideFrame);
+    if (ext) {
+      const visualLo = marginX - ext.minX * w;
+      const visualHi = cssW - marginX - ext.maxX * w;
+      const nLo = Math.max(lo, visualLo);
+      const nHi = Math.min(hi, visualHi);
+      if (nLo <= nHi) {
+        lo = nLo;
+        hi = nHi;
+      } else {
+        lo = visualLo;
+        hi = visualHi;
+        if (lo > hi) {
+          const t = lo;
+          lo = hi;
+          hi = t;
+        }
+        lo = clamp(lo, 0, cssW - w);
+        hi = clamp(hi, 0, cssW - w);
+      }
+    }
+  }
+
+  return clamp(rawLeft, lo, hi);
 }
 
 export function computeGuideBox(cssW, cssH, heightCmStr, geom = guideGeom) {
@@ -330,7 +387,7 @@ export function computeGuideBoxTracked(
     let top = py - headA.y * H;
     let left = horizontalTrackedLeft(px, fpx);
     top = clamp(top, marginY, cssH - marginY - H);
-    left = clampGuideBoxLeft(left, cssW, cssH, vw, vh, w, headAnchorX, footAnchorX, marginX);
+    left = clampGuideBoxLeft(left, cssW, cssH, vw, vh, w, headAnchorX, footAnchorX, marginX, step, geom);
 
     if (smoothDelta.fitHeight == null) {
       smoothDelta.fitHeight = H;
@@ -371,7 +428,9 @@ export function computeGuideBoxTracked(
       w,
       headAnchorX,
       footAnchorX,
-      marginX
+      marginX,
+      step,
+      geom
     );
     rawTop = clamp(rawTop, marginY, cssH - marginY - base.height);
     const tgtDx = rawLeft - base.left;
