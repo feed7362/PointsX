@@ -266,9 +266,9 @@ def main() -> None:
     parser.add_argument("--pose-root", required=True, type=Path,
                         help="Synthetic pose dataset root (contains train/, val/, measurements/)")
     parser.add_argument("--pose-model", required=True, type=Path,
-                        help="Trained YOLO-pose weights (best.pt)")
+                        help="Trained YOLO-pose weights (yolo11n-pose.pt)")
     parser.add_argument("--seg-model", required=True, type=Path,
-                        help="Trained YOLO-seg weights (best.pt)")
+                        help="Trained YOLO-seg weights (yolo11n-pose.pt)")
     parser.add_argument("--output", type=Path, default=Path("data/regression_features.npz"))
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--device", type=str, default="auto",

@@ -1,10 +1,14 @@
 """FastAPI app: static capture UI + real body-measurement endpoint.
 
 Configuration (environment variables, all optional):
-    POINTSX_POSE_MODEL        path to YOLO11n-pose .pt (default: models/yolo11n-pose.pt)
-    POINTSX_SEG_MODEL         path to YOLO11n-seg .pt  (default: models/yolo11n-seg.pt)
-    POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt (optional; falls back
-                              to the Ramanujan ellipse approximation if unset/missing)
+    POINTSX_POSE_MODEL        path to YOLO11n-pose .pt
+                              default: runs/pose/best.pt (your fine-tuned weights)
+    POINTSX_SEG_MODEL         path to YOLO11n-seg .pt
+                              default: runs/seg/best.pt
+    POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt
+                              default: models/circumference_regressor.pt if present;
+                              set to an empty string to force the Ramanujan ellipse
+                              fallback instead.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
 
 If model loading fails, the server still starts; `/api/measure` returns 503 until
@@ -186,9 +190,16 @@ async def lifespan(app: FastAPI):
     Failures are logged but do not crash the server — the endpoint will return
     503 until env vars are corrected and the server is restarted.
     """
-    pose_path = _resolve_path("POINTSX_POSE_MODEL", "models/yolo11n-pose.pt")
-    seg_path  = _resolve_path("POINTSX_SEG_MODEL",  "models/yolo11n-seg.pt")
-    reg_path  = os.environ.get("POINTSX_REGRESSION_MODEL", "").strip() or None
+    pose_path = _resolve_path("POINTSX_POSE_MODEL", "runs/pose/best.pt")
+    seg_path  = _resolve_path("POINTSX_SEG_MODEL",  "runs/seg/best.pt")
+    # Auto-load the regressor when present; users can override via env var or
+    # disable it explicitly with POINTSX_REGRESSION_MODEL="" (empty string).
+    reg_default = "models/circumference_regressor.pt"
+    reg_raw = os.environ.get("POINTSX_REGRESSION_MODEL")
+    if reg_raw is None:
+        reg_path = reg_default if Path(reg_default).exists() else None
+    else:
+        reg_path = reg_raw.strip() or None
     device    = _resolve_path("POINTSX_DEVICE", "auto")
 
     app.state.pipeline = None

@@ -121,11 +121,25 @@ def _kp_to_midpoint_cm(
 
 
 def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
+    """Derive chest girth from front/side torso widths via Ramanujan ellipse.
+
+    Returns None when the input widths are outside anatomical ranges — usually a
+    sign that the silhouette was corrupted (e.g. arms outstretched intersecting
+    the torso slice). The regressor handles waist/hip/neck/etc. similarly by
+    being bounded; chest has no regressor output, so we sanity-check here.
+    """
     fw = bm.torso_width_front_cm
     sw = bm.torso_width_side_cm
     if fw is None or sw is None:
         return None
-    return ramanujan_ellipse_circumference(fw, sw)
+    # Plausible adult human torso (front) ≈ 22-50 cm; (side / depth) ≈ 14-38 cm
+    if not (22.0 <= fw <= 50.0) or not (14.0 <= sw <= 38.0):
+        return None
+    circ = ramanujan_ellipse_circumference(fw, sw)
+    # Final sanity cap on the resulting circumference (60-150 cm covers everyone)
+    if not (60.0 <= circ <= 150.0):
+        return None
+    return circ
 
 
 def _derive_back_length(side_kp: Keypoints, px_per_cm_side: float) -> float | None:
