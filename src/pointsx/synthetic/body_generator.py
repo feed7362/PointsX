@@ -78,17 +78,22 @@ def _sample_bmi_beta1() -> tuple[str, float]:
 
 # ── Pose definitions ──────────────────────────────────────────────────────
 def _a_pose() -> np.ndarray:
-    """A-Pose: arms at 15-20° from body, feet shoulder-width. Front view ideal."""
+    """A-Pose: arms hanging down ~10-25° from vertical (true A-pose).
+
+    SMPL-X's rest pose is T-pose (arms horizontal). To reach A-pose we have to
+    rotate each shoulder downward by ~65-80° from horizontal. We rotate around
+    the local Z-axis (axis-angle index 2 within the joint's 3 components),
+    which is the abduction/adduction axis for the shoulder joint.
+
+      L_shoulder = joint 16 → body_pose[(16-1)*3 + 2] = body_pose[47]
+      R_shoulder = joint 17 → body_pose[(17-1)*3 + 2] = body_pose[50]
+    """
     pose = np.zeros(63)
-    # Shoulder abduction ~15-20° (joints 16=L_shoulder, 17=R_shoulder → local indices 13,14 in body_pose)
-    # body_pose[j*3:(j+1)*3] = axis-angle for joint j+1 (joint 0=pelvis excluded)
-    # L_shoulder = joint 16 → body_pose index (16-1)*3 = 45
-    # R_shoulder = joint 17 → body_pose index (17-1)*3 = 48
-    arm_angle = np.radians(np.random.uniform(15, 20))
-    pose[45] = arm_angle  # L_shoulder z-axis (abduction)
-    pose[48] = -arm_angle  # R_shoulder z-axis (adduction = negative)
+    arm_drop = np.radians(np.random.uniform(65, 80))  # T-pose → A-pose
+    pose[47] = -arm_drop   # L_shoulder: rotate arm DOWN
+    pose[50] =  arm_drop   # R_shoulder: mirror
     # Slight hip outward rotation for visibility of crotch
-    pose[1] = np.radians(np.random.uniform(5, 10))  # L_hip
+    pose[1] = np.radians(np.random.uniform(5, 10))   # L_hip
     pose[4] = -np.radians(np.random.uniform(5, 10))  # R_hip
     return pose
 

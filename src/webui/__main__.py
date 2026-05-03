@@ -6,11 +6,12 @@ Server bind:
 
 Model loading (consumed by the FastAPI lifespan in webui.app):
     POINTSX_POSE_MODEL        path to YOLO11n-pose .pt
-                              default: models/yolo11n-pose.pt
+                              default: runs/pose/best.pt (your fine-tuned weights)
     POINTSX_SEG_MODEL         path to YOLO11n-seg .pt
-                              default: models/yolo11n-seg.pt
+                              default: runs/seg/best.pt
     POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt
-                              optional — falls back to ellipse approximation if unset
+                              default: models/circumference_regressor.pt if present;
+                              set to "" to force the Ramanujan ellipse fallback.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …
                               default: auto
 
@@ -27,12 +28,14 @@ import os
 _DESCRIPTION = """\
 PointsX measurement web UI (FastAPI + static assets).
 
-Configure model paths via environment variables before launch — see module
-docstring (`python -m webui --help`) for the full list. Example:
+Defaults assume your trained weights are at runs/pose/best.pt, runs/seg/best.pt,
+and models/circumference_regressor.pt — just run `pointsx-web --reload`.
+
+Override via env vars when needed:
 
   POINTSX_POSE_MODEL=runs/pose/best.pt \\
   POINTSX_SEG_MODEL=runs/seg/best.pt \\
-  POINTSX_REGRESSION_MODEL=runs/reg/circumference_regressor.pt \\
+  POINTSX_REGRESSION_MODEL=models/circumference_regressor.pt \\
   POINTSX_DEVICE=cpu \\
   pointsx-web --reload
 """

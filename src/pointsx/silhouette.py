@@ -31,6 +31,134 @@ def measure_width_at_y(mask: np.ndarray, y: float, margin: int = 3) -> float | N
     return float(np.mean(widths))
 
 
+def measure_width_in_band_at_y(
+    mask: np.ndarray,
+    y: float,
+    x_min: float,
+    x_max: float,
+    margin: int = 3,
+) -> float | None:
+    """Measure horizontal width inside an x-band [x_min, x_max] at a given y.
+
+    Used for body-girth slices (torso / waist / hip / neck) on the front view
+    so outstretched arms can't contaminate the measurement: the band is set
+    around the shoulders/hips, and any silhouette pixels outside it (i.e. arms
+    extended laterally) are ignored. Falls back to the unclipped width when
+    nothing is found inside the band — that way pure-frontal A-pose photos
+    where the arms are inside the band keep working unchanged.
+    """
+    h, w = mask.shape
+    y_int = int(round(y))
+    y_min = max(0, y_int - margin)
+    y_max = min(h - 1, y_int + margin)
+
+    x_lo = max(0, int(round(x_min)))
+    x_hi = min(w - 1, int(round(x_max)))
+    if x_hi <= x_lo:
+        return measure_width_at_y(mask, y, margin)
+
+    widths = []
+    for row in range(y_min, y_max + 1):
+        # Pick the cols that are simultaneously foreground AND inside the band.
+        row_mask = mask[row, x_lo : x_hi + 1]
+        cols = np.where(row_mask)[0]
+        if len(cols) >= 2:
+            # Cols are relative to the band, but the width is just (last-first).
+            widths.append(cols[-1] - cols[0])
+
+    if not widths:
+        # No foreground inside band at this y — fall back to the unclipped read
+        # so we don't drop a measurement entirely.
+        return measure_width_at_y(mask, y, margin)
+
+    return float(np.mean(widths))
+
+
+def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | None:
+    """Compute the [x_min, x_max] band that bounds the side-view torso depth.
+
+    On a side view we cannot use shoulders as a reference (left and right
+    shoulder project onto roughly the same x). Instead we use keypoints that
+    sit on the body's central column — UPPER_NECK, THORAX, PELVIS, midpoint of
+    the hips — and pad symmetrically by a fraction of the body's pixel height.
+    Arms extending laterally toward / away from the camera land outside this
+    band, so the silhouette slice we keep is the body's actual front-to-back
+    depth.
+    """
+    pts, conf = side_kp.points, side_kp.confidence
+
+    spine_xs: list[float] = []
+    for kp_idx in (KP.UPPER_NECK, KP.THORAX, KP.PELVIS):
+        if is_valid(conf, kp_idx):
+            spine_xs.append(float(pts[kp_idx, 0]))
+    if is_valid(conf, KP.LEFT_HIP, KP.RIGHT_HIP):
+        spine_xs.append(float((pts[KP.LEFT_HIP, 0] + pts[KP.RIGHT_HIP, 0]) / 2))
+
+    if not spine_xs:
+        return None
+
+    center_x = float(np.mean(spine_xs))
+
+    # Half-band width: 18 % of body pixel-height — typical adult torso depth is
+    # ~14 % of body height, plus a margin so we don't shave the silhouette.
+    body_h_px: float | None = None
+    head_y = pts[KP.HEAD_TOP, 1] if is_valid(conf, KP.HEAD_TOP) else None
+    ankle_ys: list[float] = []
+    if is_valid(conf, KP.LEFT_ANKLE):
+        ankle_ys.append(float(pts[KP.LEFT_ANKLE, 1]))
+    if is_valid(conf, KP.RIGHT_ANKLE):
+        ankle_ys.append(float(pts[KP.RIGHT_ANKLE, 1]))
+    if head_y is not None and ankle_ys:
+        body_h_px = abs(float(np.mean(ankle_ys)) - float(head_y))
+
+    if body_h_px is None or body_h_px <= 0:
+        # Fall back to 20 % of mask width, which is a generous-but-safe default.
+        half_band = 0.10 * mask_w
+    else:
+        half_band = 0.18 * body_h_px
+
+    return (
+        max(0.0, center_x - half_band),
+        min(float(mask_w - 1), center_x + half_band),
+    )
+
+
+def _front_torso_band(front_kp: Keypoints, mask_w: int) -> tuple[float, float] | None:
+    """Compute the [x_min, x_max] band that bounds the front-view torso.
+
+    Uses shoulders and hips when available (the body's lateral envelope is the
+    wider of those two), padded by ~10 % of body width on each side so the band
+    is generous enough to keep the torso silhouette but narrow enough to exclude
+    arms outstretched far to the sides.
+
+    Returns None when keypoints are insufficient — caller should fall back to
+    unclipped width measurement.
+    """
+    pts, conf = front_kp.points, front_kp.confidence
+
+    xs: list[float] = []
+    if is_valid(conf, KP.LEFT_SHOULDER):
+        xs.append(float(pts[KP.LEFT_SHOULDER, 0]))
+    if is_valid(conf, KP.RIGHT_SHOULDER):
+        xs.append(float(pts[KP.RIGHT_SHOULDER, 0]))
+    if is_valid(conf, KP.LEFT_HIP):
+        xs.append(float(pts[KP.LEFT_HIP, 0]))
+    if is_valid(conf, KP.RIGHT_HIP):
+        xs.append(float(pts[KP.RIGHT_HIP, 0]))
+
+    if len(xs) < 2:
+        return None
+
+    x_lo = min(xs)
+    x_hi = max(xs)
+    body_w = x_hi - x_lo
+    if body_w <= 0:
+        return None
+
+    pad = 0.10 * body_w  # 10 % padding so the band hugs the torso closely
+    return (max(0.0, x_lo - pad), min(float(mask_w - 1), x_hi + pad))
+
+
 def measure_limb_width_at_y(
     mask: np.ndarray, y: float, x_hint: float, margin: int = 3
 ) -> float | None:
@@ -84,60 +212,83 @@ def extract_all_widths(
     f_mask = front_mask.mask
     s_mask = side_mask.mask
 
+    # Pose-aware bands for body-girth slices: keeps outstretched / forward arms
+    # from contaminating torso / waist / hip / neck width slices. Each band
+    # falls back to unclipped width when keypoints are insufficient.
+    f_band = _front_torso_band(front_kp, f_mask.shape[1])
+    if f_band is not None:
+        x_lo_f, x_hi_f = f_band
+
+        def _front_torso_width(mask: np.ndarray, y: float) -> float | None:
+            return measure_width_in_band_at_y(mask, y, x_lo_f, x_hi_f)
+    else:
+        def _front_torso_width(mask: np.ndarray, y: float) -> float | None:
+            return measure_width_at_y(mask, y)
+
+    s_band = _side_torso_band(side_kp, s_mask.shape[1])
+    if s_band is not None:
+        x_lo_s, x_hi_s = s_band
+
+        def _side_torso_width(mask: np.ndarray, y: float) -> float | None:
+            return measure_width_in_band_at_y(mask, y, x_lo_s, x_hi_s)
+    else:
+        def _side_torso_width(mask: np.ndarray, y: float) -> float | None:
+            return measure_width_at_y(mask, y)
+
     widths: dict[str, tuple[float | None, float | None]] = {}
 
     # Head: midpoint between head_top and upper_neck
     if is_valid(f_conf, KP.HEAD_TOP, KP.UPPER_NECK):
         y_head_f = (f_pts[KP.HEAD_TOP, 1] + f_pts[KP.UPPER_NECK, 1]) / 2
-        widths["head"] = (measure_width_at_y(f_mask, y_head_f), None)
+        widths["head"] = (_front_torso_width(f_mask, y_head_f), None)
     if is_valid(s_conf, KP.HEAD_TOP, KP.UPPER_NECK):
         y_head_s = (s_pts[KP.HEAD_TOP, 1] + s_pts[KP.UPPER_NECK, 1]) / 2
         existing = widths.get("head", (None, None))
-        widths["head"] = (existing[0], measure_width_at_y(s_mask, y_head_s))
+        widths["head"] = (existing[0], _side_torso_width(s_mask, y_head_s))
 
     # Neck: at upper_neck y
     if is_valid(f_conf, KP.UPPER_NECK):
         y_neck_f = f_pts[KP.UPPER_NECK, 1]
-        widths["neck"] = (measure_width_at_y(f_mask, y_neck_f), None)
+        widths["neck"] = (_front_torso_width(f_mask, y_neck_f), None)
     if is_valid(s_conf, KP.UPPER_NECK):
         y_neck_s = s_pts[KP.UPPER_NECK, 1]
         existing = widths.get("neck", (None, None))
-        widths["neck"] = (existing[0], measure_width_at_y(s_mask, y_neck_s))
+        widths["neck"] = (existing[0], _side_torso_width(s_mask, y_neck_s))
 
     # Chest / torso: at thorax y
     if is_valid(f_conf, KP.THORAX):
         y_chest_f = f_pts[KP.THORAX, 1]
-        widths["torso"] = (measure_width_at_y(f_mask, y_chest_f), None)
+        widths["torso"] = (_front_torso_width(f_mask, y_chest_f), None)
     if is_valid(s_conf, KP.THORAX):
         y_chest_s = s_pts[KP.THORAX, 1]
         existing = widths.get("torso", (None, None))
-        widths["torso"] = (existing[0], measure_width_at_y(s_mask, y_chest_s))
+        widths["torso"] = (existing[0], _side_torso_width(s_mask, y_chest_s))
 
     # Waist: interpolated 60% between thorax and pelvis
     if is_valid(f_conf, KP.THORAX, KP.PELVIS):
         y_waist_f = interpolate_y(f_pts, KP.THORAX, KP.PELVIS, 0.6)
-        widths["waist"] = (measure_width_at_y(f_mask, y_waist_f), None)
+        widths["waist"] = (_front_torso_width(f_mask, y_waist_f), None)
     if is_valid(s_conf, KP.THORAX, KP.PELVIS):
         y_waist_s = interpolate_y(s_pts, KP.THORAX, KP.PELVIS, 0.6)
         existing = widths.get("waist", (None, None))
-        widths["waist"] = (existing[0], measure_width_at_y(s_mask, y_waist_s))
+        widths["waist"] = (existing[0], _side_torso_width(s_mask, y_waist_s))
 
     # Hip: at pelvis / midpoint of hips
     if is_valid(f_conf, KP.LEFT_HIP, KP.RIGHT_HIP):
         y_hip_f = (f_pts[KP.LEFT_HIP, 1] + f_pts[KP.RIGHT_HIP, 1]) / 2
-        widths["hip"] = (measure_width_at_y(f_mask, y_hip_f), None)
+        widths["hip"] = (_front_torso_width(f_mask, y_hip_f), None)
     elif is_valid(f_conf, KP.PELVIS):
         y_hip_f = f_pts[KP.PELVIS, 1]
-        widths["hip"] = (measure_width_at_y(f_mask, y_hip_f), None)
+        widths["hip"] = (_front_torso_width(f_mask, y_hip_f), None)
 
     if is_valid(s_conf, KP.LEFT_HIP, KP.RIGHT_HIP):
         y_hip_s = (s_pts[KP.LEFT_HIP, 1] + s_pts[KP.RIGHT_HIP, 1]) / 2
         existing = widths.get("hip", (None, None))
-        widths["hip"] = (existing[0], measure_width_at_y(s_mask, y_hip_s))
+        widths["hip"] = (existing[0], _side_torso_width(s_mask, y_hip_s))
     elif is_valid(s_conf, KP.PELVIS):
         y_hip_s = s_pts[KP.PELVIS, 1]
         existing = widths.get("hip", (None, None))
-        widths["hip"] = (existing[0], measure_width_at_y(s_mask, y_hip_s))
+        widths["hip"] = (existing[0], _side_torso_width(s_mask, y_hip_s))
 
     # Thigh: 25% between hip and knee (front: single-limb, side: full width)
     for side_name, kp_hip, kp_knee in [
@@ -154,7 +305,7 @@ def extract_all_widths(
     # Side thigh: use average of hip/knee midpoint
     if is_valid(s_conf, KP.RIGHT_HIP, KP.RIGHT_KNEE):
         y_thigh_s = interpolate_y(s_pts, KP.RIGHT_HIP, KP.RIGHT_KNEE, 0.25)
-        side_w = measure_width_at_y(s_mask, y_thigh_s)
+        side_w = _side_torso_width(s_mask, y_thigh_s)
         for key in ["thigh_right", "thigh_left"]:
             existing = widths.get(key, (None, None))
             widths[key] = (existing[0], side_w)
@@ -173,7 +324,7 @@ def extract_all_widths(
 
     if is_valid(s_conf, KP.RIGHT_KNEE, KP.RIGHT_ANKLE):
         y_calf_s = interpolate_y(s_pts, KP.RIGHT_KNEE, KP.RIGHT_ANKLE, 0.6)
-        side_w = measure_width_at_y(s_mask, y_calf_s)
+        side_w = _side_torso_width(s_mask, y_calf_s)
         for key in ["calf_right", "calf_left"]:
             existing = widths.get(key, (None, None))
             widths[key] = (existing[0], side_w)
@@ -192,7 +343,7 @@ def extract_all_widths(
 
     if is_valid(s_conf, KP.RIGHT_WRIST):
         y_wrist_s = s_pts[KP.RIGHT_WRIST, 1]
-        side_w = measure_width_at_y(s_mask, y_wrist_s)
+        side_w = _side_torso_width(s_mask, y_wrist_s)
         for key in ["wrist_right", "wrist_left"]:
             existing = widths.get(key, (None, None))
             widths[key] = (existing[0], side_w)
