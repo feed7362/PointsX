@@ -57,6 +57,7 @@ const THUMB_PLACEHOLDER_SILHOUETTE = {
   shadowColor: "transparent",
   shadowBlur: 0,
   lineWidthScale: 0.72,
+  profileInteriorStroke: "rgba(113, 168, 255, 0.42)",
 };
 
 /** Empty photo slots: same guide polygons as live preview, muted (not clipped like object-fit). */
@@ -181,7 +182,7 @@ function initCaptureApp() {
     renderThumbPlaceholders();
   });
 
-  const previewWrap = dom.video.parentElement;
+  const previewWrap = dom.previewWrap ?? dom.video?.parentElement;
   if (previewWrap && typeof ResizeObserver !== "undefined") {
     new ResizeObserver(() => overlay.drawOverlay()).observe(previewWrap);
   }

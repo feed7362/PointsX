@@ -56,7 +56,8 @@ function upperArmAbductionRad(shoulder, elbow) {
 }
 
 /**
- * Profile step: right upper arm (shoulder 12 — elbow 14) angle from vertical; target ~45° forward.
+ * Profile step: right upper arm roughly along the torso (~arms at sides mirror pose).
+ * `upperArmAbductionRad`: 0 = straight down behind/beside torso; larger = elbow forward in plane.
  */
 function checkProfileRightArmAngle(lm) {
   const rs = lm[12];
@@ -70,16 +71,10 @@ function checkProfileRightArmAngle(lm) {
       reason: "Покажіть правий лікоть",
     };
   }
-  if (rightAbd < DEG(18)) {
+  if (rightAbd > DEG(52)) {
     return {
       ok: false,
-      reason: "Відведіть праву руку вперед (~45°)",
-    };
-  }
-  if (rightAbd > DEG(80)) {
-    return {
-      ok: false,
-      reason: "Опустіть праву руку трохи нижче.",
+      reason: "Опустіть руку вздовж тіла",
     };
   }
   return { ok: true };
@@ -279,15 +274,6 @@ function checkFrontPose(lm, rawWorldLm) {
   return { ok: true };
 }
 
-/** True if wrist looks tucked along the torso in profile (blocks waist). */
-function wristHangingAlongBody(w, spineX, shoulderY, hipY) {
-  const vis = w.visibility ?? 0;
-  if (vis < 0.24) return false;
-  if (w.y < shoulderY + 0.05) return false;
-  if (w.y > hipY + 0.12) return false;
-  return Math.abs(w.x - spineX) < 0.11;
-}
-
 const FULL_BODY_PARTS = [
   { id: 0, name: "голову" },
   { id: 11, name: "ліве плече" },
@@ -357,6 +343,20 @@ function checkProfilePose(lm) {
   if (Math.max(lsV, rsV) < VIS_MIN || (nose.visibility ?? 1) < VIS_MIN) {
     return { ok: false, reason: "Підійдіть ближче" };
   }
+
+  const leftEye = lm[2];
+  const rightEye = lm[5];
+  const leftEar = lm[7];
+  const rightEar = lm[8];
+  const eyeVisMaxEarly = Math.max(leftEye?.visibility ?? 0, rightEye?.visibility ?? 0);
+  const earVisMaxEarly = Math.max(leftEar?.visibility ?? 0, rightEar?.visibility ?? 0);
+  if (eyeVisMaxEarly < 0.2 && earVisMaxEarly < 0.16) {
+    return { ok: false, reason: "Покажіть всю голову в кадрі" };
+  }
+  if (nose.y < 0.085 || ((leftEye?.y ?? 1) < 0.062 && (rightEye?.y ?? 1) < 0.062)) {
+    return { ok: false, reason: "Опустіть камеру або відійдіть трохи, вся голова має бути в кадрі" };
+  }
+
   const shoulderW = Math.abs(ls.x - rs.x);
   const hipW = Math.abs((lm[23]?.x ?? ls.x) - (lm[24]?.x ?? rs.x));
   const frontalWidth = Math.max(shoulderW, hipW);
@@ -380,10 +380,6 @@ function checkProfilePose(lm) {
       reason: "У профілі стійте правим боком до камери",
     };
   }
-  const leftEye = lm[2];
-  const rightEye = lm[5];
-  const leftEar = lm[7];
-  const rightEar = lm[8];
   const eyeLv = leftEye?.visibility ?? 0;
   const eyeRv = rightEye?.visibility ?? 0;
   const earLv = leftEar?.visibility ?? 0;
@@ -459,45 +455,13 @@ function checkProfilePose(lm) {
     return { ok: false, reason: "Не нахиляйте корпус у профіль" };
   }
 
-  const spineX = (ls.x + rs.x + lm[23].x + lm[24].x) / 4;
   const shoulderY = (ls.y + rs.y) / 2;
-  const hipY = (lm[23].y + lm[24].y) / 2;
 
-  const hangL = wristHangingAlongBody(lm[15], spineX, shoulderY, hipY);
-  const hangR = wristHangingAlongBody(lm[16], spineX, shoulderY, hipY);
-  if (hangL && hangR) {
-    return {
-      ok: false,
-      reason: "Витягніть руки вперед ~45°",
-    };
-  }
-
-  const wL = lm[15];
   const wR = lm[16];
-  const forwardL =
-    (wL.visibility ?? 0) > 0.24 &&
-    wL.y > shoulderY - 0.03 &&
-    wL.y < hipY + 0.1 &&
-    (Math.abs(wL.x - spineX) > 0.11 || (wL.y < hipY - 0.02 && Math.abs(wL.x - spineX) > 0.07));
-  const forwardR =
-    (wR.visibility ?? 0) > 0.24 &&
-    wR.y > shoulderY - 0.03 &&
-    wR.y < hipY + 0.1 &&
-    (Math.abs(wR.x - spineX) > 0.11 || (wR.y < hipY - 0.02 && Math.abs(wR.x - spineX) > 0.07));
-  const leV = lm[13].visibility ?? 0;
-  const reV = lm[14].visibility ?? 0;
-  const leNearSpine = leV < 0.2 || Math.abs(lm[13].x - spineX) < 0.12;
-  const reNearSpine = reV < 0.2 || Math.abs(lm[14].x - spineX) < 0.12;
-  const elbowsTucked =
-    leNearSpine &&
-    reNearSpine &&
-    (reV > 0.22 || leV > 0.22);
-
-  const armsOk = forwardL || forwardR || (elbowsTucked && !hangL && !hangR);
-  if (!armsOk) {
+  if ((wR.visibility ?? 0) > 0.24 && wR.y < shoulderY - 0.04) {
     return {
       ok: false,
-      reason: "Підніміть руки вперед ~45°",
+      reason: "Опустіть руку вздовж тулуба",
     };
   }
 
@@ -506,9 +470,13 @@ function checkProfilePose(lm) {
 
   const rk = lm[26];
   const rh = lm[24];
-  const ra = lm[28];
-  if ((rh?.visibility ?? 0) > 0.32 && (rk?.visibility ?? 0) > 0.32 && (ra?.visibility ?? 0) > 0.32) {
-    const rightKneeAngle = (angleAtVertexRad(rh, rk, ra) * 180) / Math.PI;
+  const rAnkle = lm[28];
+  if (
+    (rh?.visibility ?? 0) > 0.32 &&
+    (rk?.visibility ?? 0) > 0.32 &&
+    (rAnkle?.visibility ?? 0) > 0.32
+  ) {
+    const rightKneeAngle = (angleAtVertexRad(rh, rk, rAnkle) * 180) / Math.PI;
     // 2D profile angle is noisy vs true knee extension; allow margin below ~180°.
     if (rightKneeAngle < 155) {
       return {
@@ -516,7 +484,10 @@ function checkProfilePose(lm) {
         reason: "Станьте на рівних ногах",
       };
     }
-    const rightLegTilt = Math.atan2(Math.abs((ra?.x ?? 0) - (rh?.x ?? 0)), Math.max(1e-4, (ra?.y ?? 0) - (rh?.y ?? 0)));
+    const rightLegTilt = Math.atan2(
+      Math.abs((rAnkle?.x ?? 0) - (rh?.x ?? 0)),
+      Math.max(1e-4, (rAnkle?.y ?? 0) - (rh?.y ?? 0))
+    );
     if (rightLegTilt > DEG(14)) {
       return {
         ok: false,
@@ -525,10 +496,48 @@ function checkProfilePose(lm) {
     }
   }
 
-  const ankleVis = Math.max(lm[27].visibility ?? 0, lm[28].visibility ?? 0);
+  const la = lm[27];
+  const lav = la?.visibility ?? 0;
+  const rav = rAnkle?.visibility ?? 0;
+  const ankleVis = Math.max(lav, rav);
   if (ankleVis < VIS_ANKLE_MIN) {
     return { ok: false, reason: "Покажіть повний зріст" };
   }
+  const bothAnklesTracked = lav >= 0.14 && rav >= 0.14;
+  if (bothAnklesTracked) {
+    if (!inFrame(la) || !inFrame(rAnkle) || Math.max(la.y, rAnkle.y) > 0.985) {
+      return {
+        ok: false,
+        reason: "Стопи мають бути повністю в кадрі",
+      };
+    }
+  } else {
+    const dom = rav >= lav ? rAnkle : la;
+    if (!dom || !inFrame(dom) || dom.y > 0.986) {
+      return {
+        ok: false,
+        reason: "Стопи мають бути повністю в кадрі",
+      };
+    }
+  }
+
+  const lHeel = lm[29];
+  const rHeel = lm[30];
+  const lFootIndex = lm[31];
+  const rFootIndex = lm[32];
+  const footPts = [lHeel, rHeel, lFootIndex, rFootIndex].filter(Boolean);
+  if (footPts.length >= 2) {
+    const footVisiblePts = footPts.filter((p) => (p.visibility ?? 0) >= 0.18);
+    if (footVisiblePts.length >= 2) {
+      if (footVisiblePts.some((p) => !inFrame(p) || p.y > 0.992)) {
+        return {
+          ok: false,
+          reason: "Стопи мають бути повністю в кадрі",
+        };
+      }
+    }
+  }
+
   return { ok: true };
 }
 

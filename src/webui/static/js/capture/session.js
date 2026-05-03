@@ -10,11 +10,19 @@ import { syncOverlaySize } from "./overlay.js";
 import {
   cancelSpeechSynthesis,
   hideCountdownOverlay,
+  primeVoiceAfterUserGesture,
   showCountdownOverlay,
   speakCountdownDigit,
 } from "./speech.js";
 import { setStatus, setPoseStatus, setPoseStatusVisual, updateUiStep } from "./ui.js";
 import { clearThumbSlotPhoto, syncThumbSlotToImage } from "./thumbLayout.js";
+
+/** Camera off: idle art inside preview; camera on: show live feed. */
+function syncPreviewIdleState(cameraLive) {
+  const { previewWrap, previewIdle } = getCaptureDom();
+  previewWrap?.classList.toggle("preview-wrap--idle", !cameraLive);
+  previewIdle?.setAttribute("aria-hidden", cameraLive ? "true" : "false");
+}
 
 export const MIN_VIDEO_DIMENSION = 480;
 export const POSE_MIN_INTERVAL_MS = 120;
@@ -561,6 +569,7 @@ export async function startCamera() {
     });
     video.srcObject = captureState.stream;
     await video.play();
+    void primeVoiceAfterUserGesture();
     cancelAnimationFrame(captureState.raf);
     loop();
     btnStop.disabled = false;
@@ -568,8 +577,10 @@ export async function startCamera() {
     captureState.lastPoseGate = { ok: false, reason: "Аналіз пози…" };
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = true;
+    syncPreviewIdleState(true);
   } catch (e) {
     setStatus("Не вдалося отримати доступ до камери: " + (e && e.message ? e.message : String(e)), true);
+    syncPreviewIdleState(false);
   }
 }
 
@@ -595,6 +606,7 @@ export function stopCamera() {
   btnCaptureTimer.disabled = true;
   btnStop.disabled = true;
   setPoseStatus("", "");
+  syncPreviewIdleState(false);
 }
 
 /**

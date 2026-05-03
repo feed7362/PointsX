@@ -25,6 +25,8 @@ function buildDom() {
     sectionCapture: document.getElementById("section-capture"),
     sectionParams: document.getElementById("section-params"),
     countdownOverlay: document.getElementById("countdown-overlay"),
+    previewWrap: document.getElementById("preview-wrap"),
+    previewIdle: document.getElementById("preview-idle"),
     thumbFront: /** @type {HTMLImageElement} */ (document.getElementById("thumb-front")),
     thumbSide: /** @type {HTMLImageElement} */ (document.getElementById("thumb-side")),
     btnRetakeFront: /** @type {HTMLButtonElement | null} */ (document.getElementById("btn-retake-front")),

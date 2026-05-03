@@ -25,6 +25,7 @@ dependencies = [
     # pip install git+https://github.com/DavidBoja/SMPL-Anthropometry.git
     "rich>=15.0.0",
     "python-multipart>=0.0.26",
+    "edge-tts>=7.0.0",
 ]
 
 [project.scripts]

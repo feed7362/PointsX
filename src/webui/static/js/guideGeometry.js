@@ -103,6 +103,31 @@ export function frameHeightFromCm(heightCm, gf = guideGeom.guideFrame) {
   return gf.fhAtMin + t * (gf.fhAtMax - gf.fhAtMin);
 }
 
+/**
+ * Horizontal map for profile silhouette + anchors: widens the narrow side-view hull in the guide box.
+ * Pivot defaults to silhouette midline (~0.5); optional shift nudges the whole figure left/right in norm space.
+ */
+export function profileNormX(x, gf = guideGeom.guideFrame) {
+  const rawS = Number(gf.profileDrawScaleX);
+  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.42;
+  const pv = Number(gf.profilePivotX);
+  const sh = Number(gf.profileDrawShiftNormX);
+  const pivot = (Number.isFinite(pv) ? pv : 0.5) + (Number.isFinite(sh) ? sh : 0);
+  if (Math.abs(scale - 1) < 1e-6) return x;
+  return pivot + (x - pivot) * scale;
+}
+
+/** Inverse of `profileNormX`: map silhouette/box-normalized X back to stored `profilePts` X. */
+export function profileDenormX(mappedX, gf = guideGeom.guideFrame) {
+  const rawS = Number(gf.profileDrawScaleX);
+  const scale = Number.isFinite(rawS) && rawS > 0.05 ? rawS : 1.42;
+  const pv = Number(gf.profilePivotX);
+  const sh = Number(gf.profileDrawShiftNormX);
+  const pivot = (Number.isFinite(pv) ? pv : 0.5) + (Number.isFinite(sh) ? sh : 0);
+  if (Math.abs(scale - 1) < 1e-6) return mappedX;
+  return pivot + (mappedX - pivot) / scale;
+}
+
 export function computeGuideBox(cssW, cssH, heightCmStr, geom = guideGeom) {
   const gf = geom.guideFrame;
   const fh = frameHeightFromCm(heightCmStr, gf);
@@ -157,6 +182,35 @@ function headLandmarkForGuide(step, lm, noseVisMin) {
 }
 
 /**
+ * Best ankle landmark for horizontal guide alignment on profile step (prefer higher visibility).
+ * @returns {{ x: number, y: number, vis: number } | null}
+ */
+function profileAnkleLandmarkForGuide(lm, visMin) {
+  const a27 = lm[27];
+  const a28 = lm[28];
+  const v27 = a27?.visibility ?? 0;
+  const v28 = a28?.visibility ?? 0;
+  const pickRight = v28 >= v27;
+  const p = pickRight ? a28 : a27;
+  const v = pickRight ? v28 : v27;
+  if (!p || v < visMin * 0.82) return null;
+  return { x: p.x, y: p.y, vis: v };
+}
+
+/**
+ * Blend weight [0–1]: how much horizontal box position trusts the ankle vs head on profile step.
+ */
+function profileFootHorizBlend(footLm, headVis, visMin, gf) {
+  if (!footLm) return 0;
+  const minW = gf.profileFootHorizBlendMin ?? 0.22;
+  const maxW = gf.profileFootHorizBlendMax ?? 0.5;
+  if (footLm.vis < visMin * 0.85) return 0;
+  const v = clamp(footLm.vis + (headVis ?? 0) * 0.08, visMin, 1);
+  const t = (v - visMin) / (0.62 - visMin || 1e-3);
+  return clamp(minW + (maxW - minW) * clamp(t, 0, 1), minW, maxW);
+}
+
+/**
  * Guide box with optional vertical fit from nose and ankles; mutates smoothDelta for smoothing
  * (dx/dy when ankles are weak; fitHeight/fitTop/fitLeft when stretching to feet).
  */
@@ -177,6 +231,8 @@ export function computeGuideBoxTracked(
   const marginY = cssH * gf.marginYRatio;
   const headA = step === 1 ? geom.headAnchorFront : geom.headAnchorProfile;
   const footA = step === 1 ? geom.footAnchorFront : geom.footAnchorProfile;
+  const headAnchorX = step === 2 ? profileNormX(headA.x, gf) : headA.x;
+  const footAnchorX = step === 2 ? profileNormX(footA.x, gf) : footA.x;
   const w = base.width;
   const vMin = gf.ankleVisMin ?? 0.14;
   const hMinF = gf.verticalFitMinFrac ?? 0.5;
@@ -229,13 +285,26 @@ export function computeGuideBoxTracked(
   const ankleY = anklePreviewBottomY(lastRawLandmarks, cssW, cssH, vw, vh, vMin);
   const denom = footA.y - headA.y;
 
+  const footLmGuide = step === 2 ? profileAnkleLandmarkForGuide(lastRawLandmarks, vMin) : null;
+  const { x: fpx } = footLmGuide
+    ? videoNormToPreviewLocal(footLmGuide.x, footLmGuide.y, cssW, cssH, vw, vh)
+    : { x: px };
+  const fhBlend =
+    step === 2 ? profileFootHorizBlend(footLmGuide, headLm.vis, vMin, gf) : 0;
+
+  function horizontalTrackedLeft(pxHead, pxFoot) {
+    const leftH = pxHead - headAnchorX * w;
+    const leftF = pxFoot - footAnchorX * w;
+    return leftH * (1 - fhBlend) + leftF * fhBlend;
+  }
+
   const canStretch = ankleY != null && denom > 0.055 && ankleY > py + cssH * 0.07;
 
   if (canStretch) {
     let H = (ankleY - py) / denom;
     H = clamp(H, cssH * hMinF, cssH * hMaxF);
     let top = py - headA.y * H;
-    let left = px - headA.x * w;
+    let left = horizontalTrackedLeft(px, fpx);
     top = clamp(top, marginY, cssH - marginY - H);
     left = clamp(left, marginX, cssW - marginX - w);
 
@@ -263,9 +332,11 @@ export function computeGuideBoxTracked(
     smoothDelta.fitTop = smoothDelta.fitTop * 0.9 + base.top * 0.1;
     smoothDelta.fitLeft = smoothDelta.fitLeft * 0.9 + base.left * 0.1;
   } else {
-    const targetX = base.left + headA.x * w;
+    const targetXHead = base.left + headAnchorX * w;
+    const targetXFoot = base.left + footAnchorX * w;
     const targetY = base.top + headA.y * base.height;
-    let rawLeft = base.left + (px - targetX);
+    let rawLeft =
+      base.left + (px - targetXHead) * (1 - fhBlend) + (fpx - targetXFoot) * fhBlend;
     let rawTop = base.top + (py - targetY);
     rawLeft = clamp(rawLeft, marginX, cssW - marginX - w);
     rawTop = clamp(rawTop, marginY, cssH - marginY - base.height);
@@ -315,11 +386,24 @@ export function computeGuideBoxWithDelta(cssW, cssH, heightCmStr, smoothDelta, g
   };
 }
 
-export function drawPoly(ctx, pts, box) {
+export function drawPoly(ctx, pts, box, opts = {}) {
   if (!pts.length) return;
   if (pts.length < 3) return;
+  const linear = Boolean(opts.linear);
+  const mapPt = typeof opts.mapNormPt === "function" ? opts.mapNormPt : (p) => p;
   ctx.beginPath();
-  const mapped = pts.map(([x, y]) => [box.left + x * box.width, box.top + y * box.height]);
+  const mapped = pts.map((p) => {
+    const [x, y] = mapPt(p);
+    return [box.left + x * box.width, box.top + y * box.height];
+  });
+  if (linear) {
+    ctx.moveTo(mapped[0][0], mapped[0][1]);
+    for (let i = 1; i < mapped.length; i++) {
+      ctx.lineTo(mapped[i][0], mapped[i][1]);
+    }
+    ctx.closePath();
+    return;
+  }
   const first = mapped[0];
   const second = mapped[1];
   const startX = (first[0] + second[0]) * 0.5;
@@ -335,10 +419,38 @@ export function drawPoly(ctx, pts, box) {
   ctx.closePath();
 }
 
+/** @param {[number, number][][] | undefined} paths Closed loops in normalized coords. */
+export function drawProfileInteriorPaths(ctx, box, paths, style, mapNormPt) {
+  if (!paths || !paths.length) return;
+  const cw = box.width || (ctx.canvas && ctx.canvas.width ? ctx.canvas.width : 0);
+  const lineWScale = style?.lineWidthScale ?? 1;
+  const mapPt = typeof mapNormPt === "function" ? mapNormPt : (p) => p;
+  ctx.save();
+  ctx.strokeStyle = style?.profileInteriorStroke ?? "rgba(142, 196, 255, 0.78)";
+  ctx.lineWidth = Math.max(1, cw * 0.0042 * lineWScale);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([]);
+  for (const pts of paths) {
+    if (!pts || pts.length < 3) continue;
+    ctx.beginPath();
+    const p0 = mapPt(pts[0]);
+    ctx.moveTo(box.left + p0[0] * box.width, box.top + p0[1] * box.height);
+    for (let i = 1; i < pts.length; i++) {
+      const pi = mapPt(pts[i]);
+      ctx.lineTo(box.left + pi[0] * box.width, box.top + pi[1] * box.height);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /**
  * Draw the silhouette on a canvas that already uses the same mirror transform as drawImage(video).
  * @param {{ left: number, top: number, width: number, height: number }} box From computeGuideBoxTracked or computeGuideBoxWithDelta.
- * @param {{ strokeStyle?: string, fillStyle?: string, shadowColor?: string, shadowBlur?: number, lineWidthScale?: number } | undefined} style Optional; omit for live preview colors.
+ * @param {{ strokeStyle?: string, fillStyle?: string, shadowColor?: string, shadowBlur?: number, lineWidthScale?: number, skipProfileInteriorPaths?: boolean, profileInteriorStroke?: string } | undefined} style Optional; omit for live preview colors.
  */
 export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideGeom, style) {
   const cw = box.width || (ctx.canvas && ctx.canvas.width ? ctx.canvas.width : 0);
@@ -361,21 +473,24 @@ export function drawGuideSilhouetteOnCanvas(ctx, box, currentStep, geom = guideG
     ctx.fillStyle = style?.fillStyle ?? "rgba(118, 170, 255, 0.12)";
     ctx.fill();
   } else {
-    drawPoly(ctx, geom.profilePts, box);
+    const gf = geom.guideFrame;
+    const mapProfile = (/** @type {[number, number]} */ p) => [profileNormX(p[0], gf), p[1]];
+    drawPoly(ctx, geom.profilePts, box, { linear: true, mapNormPt: mapProfile });
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.setLineDash([]);
     ctx.fillStyle = style?.fillStyle ?? "rgba(118, 170, 255, 0.12)";
     ctx.fill();
+    if (!style?.skipProfileInteriorPaths && geom.profileInteriorPaths?.length) {
+      drawProfileInteriorPaths(ctx, box, geom.profileInteriorPaths, style, mapProfile);
+    }
   }
 }
 
 function mergeGuideFrame(target, src) {
   if (!src || typeof src !== "object") return;
-  for (const k of Object.keys(target)) {
-    if (k in src && typeof src[k] === "number" && Number.isFinite(src[k])) {
-      target[k] = src[k];
-    }
+  for (const [k, v] of Object.entries(src)) {
+    if (typeof v === "number" && Number.isFinite(v)) target[k] = v;
   }
 }
 
@@ -385,6 +500,10 @@ function isPtList(x, minPts = 3) {
     x.length >= minPts &&
     x.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === "number" && Number.isFinite(n)))
   );
+}
+
+function isInteriorPathsList(x) {
+  return Array.isArray(x) && x.length > 0 && x.every((path) => isPtList(path, 3));
 }
 
 export function applyGuidePayload(o) {
@@ -405,7 +524,14 @@ export function applyGuidePayload(o) {
     mergeGuideFrame(guideGeom.guideFrame, o.guideFrame);
   }
   if (isPtList(o.frontPts)) guideGeom.frontPts = o.frontPts.map((p) => [p[0], p[1]]);
-  if (isPtList(o.profilePts)) guideGeom.profilePts = o.profilePts.map((p) => [p[0], p[1]]);
+  if (isPtList(o.profilePts)) {
+    guideGeom.profilePts = o.profilePts.map((p) => [p[0], p[1]]);
+    if (isInteriorPathsList(o.profileInteriorPaths)) {
+      guideGeom.profileInteriorPaths = o.profileInteriorPaths.map((path) => path.map((p) => [p[0], p[1]]));
+    } else {
+      delete guideGeom.profileInteriorPaths;
+    }
+  }
   return true;
 }
 
@@ -450,6 +576,15 @@ export function saveGuideGeometry() {
     frontPts: guideGeom.frontPts.map((p) => [p[0], p[1]]),
     profilePts: guideGeom.profilePts.map((p) => [p[0], p[1]]),
   };
+  if (
+    guideGeom.profileInteriorPaths &&
+    Array.isArray(guideGeom.profileInteriorPaths) &&
+    guideGeom.profileInteriorPaths.length > 0
+  ) {
+    payload.profileInteriorPaths = guideGeom.profileInteriorPaths.map((path) =>
+      path.map((p) => [p[0], p[1]])
+    );
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
@@ -461,20 +596,25 @@ export function resetGuideGeometry() {
 }
 
 export function exportGuideGeometryJson() {
-  return JSON.stringify(
-    {
-      version: guideGeom.version,
-      headAnchorFront: guideGeom.headAnchorFront,
-      headAnchorProfile: guideGeom.headAnchorProfile,
-      footAnchorFront: guideGeom.footAnchorFront,
-      footAnchorProfile: guideGeom.footAnchorProfile,
-      guideFrame: { ...guideGeom.guideFrame },
-      frontPts: guideGeom.frontPts,
-      profilePts: guideGeom.profilePts,
-    },
-    null,
-    2
-  );
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    version: guideGeom.version,
+    headAnchorFront: guideGeom.headAnchorFront,
+    headAnchorProfile: guideGeom.headAnchorProfile,
+    footAnchorFront: guideGeom.footAnchorFront,
+    footAnchorProfile: guideGeom.footAnchorProfile,
+    guideFrame: { ...guideGeom.guideFrame },
+    frontPts: guideGeom.frontPts,
+    profilePts: guideGeom.profilePts,
+  };
+  if (
+    guideGeom.profileInteriorPaths &&
+    Array.isArray(guideGeom.profileInteriorPaths) &&
+    guideGeom.profileInteriorPaths.length > 0
+  ) {
+    payload.profileInteriorPaths = guideGeom.profileInteriorPaths;
+  }
+  return JSON.stringify(payload, null, 2);
 }
 
 export function importGuideGeometryJson(str) {
