@@ -49,6 +49,30 @@ function clamp(n, lo, hi) {
 }
 
 /**
+ * Horizontal clamp for the guide box so nose/foot anchors can align with landmarks across the
+ * full letterboxed video rect (object-fit: cover). Using only canvas margins blocks movement
+ * when the desired `left` is left of the letterbox (common on profile step).
+ */
+function clampGuideBoxLeft(rawLeft, cssW, cssH, vw, vh, w, headAx, footAx, marginX) {
+  if (!Number.isFinite(rawLeft) || !Number.isFinite(w) || w <= 0) return rawLeft;
+  if (!vw || !vh || vw <= 0 || vh <= 0) {
+    return clamp(rawLeft, marginX, cssW - marginX - w);
+  }
+  const scale = Math.max(cssW / vw, cssH / vh);
+  const dispW = vw * scale;
+  const offX = (cssW - dispW) / 2;
+  const axHi = Math.max(headAx, footAx);
+  const axLo = Math.min(headAx, footAx);
+  const leftMinAlign = offX - axHi * w;
+  const leftMaxAlign = offX + dispW - axLo * w;
+  const minL = Math.min(marginX, leftMinAlign);
+  const maxL = Math.max(cssW - marginX - w, leftMaxAlign);
+  const lo = Math.min(minL, maxL);
+  const hi = Math.max(minL, maxL);
+  return clamp(rawLeft, lo, hi);
+}
+
+/**
  * Convert normalized frame points to an SVG `points` attribute (ref SVG viewBox 0 0 100×160).
  * Maps video-normalized (nx, ny) through object-fit: cover; see videoNormToPreviewLocal.
  */
@@ -306,7 +330,7 @@ export function computeGuideBoxTracked(
     let top = py - headA.y * H;
     let left = horizontalTrackedLeft(px, fpx);
     top = clamp(top, marginY, cssH - marginY - H);
-    left = clamp(left, marginX, cssW - marginX - w);
+    left = clampGuideBoxLeft(left, cssW, cssH, vw, vh, w, headAnchorX, footAnchorX, marginX);
 
     if (smoothDelta.fitHeight == null) {
       smoothDelta.fitHeight = H;
@@ -338,7 +362,17 @@ export function computeGuideBoxTracked(
     let rawLeft =
       base.left + (px - targetXHead) * (1 - fhBlend) + (fpx - targetXFoot) * fhBlend;
     let rawTop = base.top + (py - targetY);
-    rawLeft = clamp(rawLeft, marginX, cssW - marginX - w);
+    rawLeft = clampGuideBoxLeft(
+      rawLeft,
+      cssW,
+      cssH,
+      vw,
+      vh,
+      w,
+      headAnchorX,
+      footAnchorX,
+      marginX
+    );
     rawTop = clamp(rawTop, marginY, cssH - marginY - base.height);
     const tgtDx = rawLeft - base.left;
     const tgtDy = rawTop - base.top;
