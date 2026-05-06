@@ -254,8 +254,14 @@ def _bsdf_input(bsdf, *names):
     raise KeyError(f"BSDF input not found (tried {names})")
 
 
-def apply_skin_material(body_obj, texture_path: str) -> None:
-    """Apply photorealistic skin Principled BSDF with SSS to the body mesh."""
+def apply_skin_material(body_obj, texture_path: str, use_sss: bool = False) -> None:
+    """Apply skin Principled BSDF to the body mesh.
+
+    ``texture_path`` should point at a UV map PNG (SMPLitex maps are 4K, the
+    procedural ones are 1K — both work). When SSS is enabled, the shader
+    enables a small subsurface contribution; this is slow on Cycles but
+    cheap on EEVEE.
+    """
     mat = bpy.data.materials.new("skin")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -265,15 +271,29 @@ def apply_skin_material(body_obj, texture_path: str) -> None:
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     out = nodes.new("ShaderNodeOutputMaterial")
 
-    # Simple diffuse — no SSS, no specular (fast rendering for training data)
-    bsdf.inputs["Roughness"].default_value = 1.0
-    _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.0
+    bsdf.inputs["Roughness"].default_value = 0.65   # less plasticky than 1.0
+    _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.30
 
-    # UV texture
+    if use_sss:
+        try:
+            _bsdf_input(bsdf, "Subsurface Weight", "Subsurface").default_value = 0.18
+            bsdf.inputs["Subsurface Radius"].default_value = (0.32, 0.16, 0.10)
+        except KeyError:
+            pass  # older Blender; just skip
+
+    # UV texture (SMPLitex or procedural fallback)
     if texture_path and Path(texture_path).exists():
         tex_node = nodes.new("ShaderNodeTexImage")
         tex_node.image = bpy.data.images.load(texture_path)
         links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+        if use_sss:
+            try:
+                links.new(
+                    tex_node.outputs["Color"],
+                    _bsdf_input(bsdf, "Subsurface Color", "Base Color"),
+                )
+            except KeyError:
+                pass
     else:
         # Fallback: neutral skin tone
         bsdf.inputs["Base Color"].default_value = (0.8, 0.6, 0.5, 1.0)
@@ -285,6 +305,63 @@ def apply_skin_material(body_obj, texture_path: str) -> None:
         body_obj.data.materials[0] = mat
     else:
         body_obj.data.materials.append(mat)
+
+
+def import_hair(hair_path: str, body_obj) -> object | None:
+    """Import a hair OBJ and snap it to the top of the head.
+
+    Hair OBJs are expected to be modeled at SMPL-X canonical head position
+    (head_top ≈ y=1.7 m, x=0). The function aligns the hair's bounding-box top
+    to the body's HEAD_TOP world coordinate (we use the body's mesh top-Y as a
+    proxy) and applies a randomized hair color via _apply_hair_material.
+    """
+    if not Path(hair_path).exists():
+        return None
+    bpy.ops.wm.obj_import(filepath=hair_path)
+    hair_obj = bpy.context.selected_objects[0]
+
+    # Align hair top with body top in world space (Z axis in Blender = up)
+    body_top_z = max(v.co.z for v in body_obj.data.vertices)
+    hair_top_z = max(v.co.z for v in hair_obj.data.vertices)
+    delta = body_top_z - hair_top_z
+    hair_obj.location.z += delta
+
+    _apply_hair_material(hair_obj)
+    return hair_obj
+
+
+def _apply_hair_material(obj) -> None:
+    """Random natural hair colour (black / brown / blond / grey)."""
+    palette = [
+        (0.045, 0.025, 0.015),  # black
+        (0.18,  0.10,  0.05),   # dark brown
+        (0.40,  0.25,  0.12),   # brown
+        (0.62,  0.45,  0.22),   # light brown
+        (0.78,  0.60,  0.35),   # blond
+        (0.55,  0.55,  0.55),   # grey
+    ]
+    rgb = random.choice(palette)
+
+    mat = bpy.data.materials.new("hair")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    out = nodes.new("ShaderNodeOutputMaterial")
+    bsdf.inputs["Base Color"].default_value = (*rgb, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.55
+    try:
+        _bsdf_input(bsdf, "Specular IOR Level", "Specular").default_value = 0.6
+    except KeyError:
+        pass
+    links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+
+    if obj.data.materials:
+        obj.data.materials[0] = mat
+    else:
+        obj.data.materials.append(mat)
 
 
 def import_clothing(clothing_path: str, body_obj) -> object | None:
@@ -605,9 +682,27 @@ def render_sample(
 
             body_obj = import_body_obj(manifest_entry["obj_path"])
 
-            tex_idx = manifest_entry.get("skin_texture_idx", rng.randint(1, N_SKIN_TEXTURES))
-            tex_path = str(assets_dir / "textures" / SKIN_TEXTURE_PATTERN.format(tex_idx))
-            apply_skin_material(body_obj, tex_path)
+            # Prefer SMPLitex photo-real UV maps (if downloaded) over the
+            # procedural Fitzpatrick textures. SMPLitex lives in
+            # assets/textures/smplitex/*.png — random pick per render.
+            tex_path: str | None = None
+            smplitex_dir = assets_dir / "textures" / "smplitex"
+            if smplitex_dir.is_dir():
+                smplitex_files = sorted(smplitex_dir.glob("*.png"))
+                if smplitex_files:
+                    tex_path = str(rng.choice(smplitex_files))
+            if tex_path is None:
+                tex_idx = manifest_entry.get("skin_texture_idx", rng.randint(1, N_SKIN_TEXTURES))
+                tex_path = str(assets_dir / "textures" / SKIN_TEXTURE_PATTERN.format(tex_idx))
+            apply_skin_material(body_obj, tex_path, use_sss=(engine == "BLENDER_EEVEE"))
+
+            # Hair (optional) — pre-modeled OBJs in assets/hair/, attached to
+            # the head's top vertex. ~70% of bodies get hair when files exist.
+            hair_dir = assets_dir / "hair"
+            if hair_dir.is_dir():
+                hair_files = list(hair_dir.glob("*.obj"))
+                if hair_files and rng.random() < 0.70:
+                    import_hair(str(rng.choice(hair_files)), body_obj)
 
             cloth_dir = assets_dir / "clothing"
             if cloth_dir.exists():

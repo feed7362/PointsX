@@ -263,14 +263,44 @@ def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, 
     return vertices, joints, final_height_m
 
 
-def save_body_obj(vertices: np.ndarray, faces: np.ndarray, path: Path) -> None:
-    """Save body mesh as OBJ file."""
+def save_body_obj(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    path: Path,
+    uv_verts: np.ndarray | None = None,
+    uv_faces: np.ndarray | None = None,
+) -> None:
+    """Save body mesh as Wavefront OBJ.
+
+    When ``uv_verts`` and ``uv_faces`` are supplied (the SMPL-X UV layout),
+    they're written as ``vt`` lines and ``f v/vt v/vt v/vt`` indices, so
+    Blender / any OBJ importer applies textures correctly. Without them the
+    body is exported with no UVs (textured renders end up looking blotchy).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    has_uv = (
+        uv_verts is not None
+        and uv_faces is not None
+        and len(uv_verts) > 0
+        and len(uv_faces) == len(faces)
+    )
+
     with open(path, "w") as f:
         for v in vertices:
             f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
-        for face in faces:
-            f.write(f"f {face[0] + 1} {face[1] + 1} {face[2] + 1}\n")
+        if has_uv:
+            for uv in uv_verts:
+                f.write(f"vt {uv[0]:.6f} {uv[1]:.6f}\n")
+            for face, uvf in zip(faces, uv_faces):
+                f.write(
+                    f"f "
+                    f"{int(face[0]) + 1}/{int(uvf[0]) + 1} "
+                    f"{int(face[1]) + 1}/{int(uvf[1]) + 1} "
+                    f"{int(face[2]) + 1}/{int(uvf[2]) + 1}\n"
+                )
+        else:
+            for face in faces:
+                f.write(f"f {face[0] + 1} {face[1] + 1} {face[2] + 1}\n")
 
 
 def save_landmarks_json(

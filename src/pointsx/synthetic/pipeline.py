@@ -89,8 +89,17 @@ def run_smplx_phase(
     landmarks_dir.mkdir(parents=True, exist_ok=True)
     measurements_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load faces once (same for all SMPL-X models)
+    # Load faces + UV layout once (same for every SMPL-X mesh).
     faces = _load_smplx_faces(model_dir)
+    uv_data = _load_smplx_uvs(model_dir)
+    if uv_data is None:
+        logger.warning(
+            "No UV layout found in SMPL-X model — exported OBJs will have no UVs "
+            "and SMPLitex / photo skin textures won't map correctly."
+        )
+        uv_verts, uv_faces = None, None
+    else:
+        uv_verts, uv_faces = uv_data
 
     from pointsx.synthetic.landmarks import extract_landmarks  # noqa: PLC0415
     from tqdm import tqdm
@@ -107,9 +116,9 @@ def run_smplx_phase(
         # Update actual height (cast to Python float for JSON serialization)
         sample.actual_height_cm = float(height_m) * 100.0
 
-        # Save OBJ mesh
+        # Save OBJ mesh (with UVs when available so SMPLitex textures map correctly)
         obj_path = mesh_dir / f"body_{sample.body_id:05d}.obj"
-        save_body_obj(vertices, faces, obj_path)
+        save_body_obj(vertices, faces, obj_path, uv_verts=uv_verts, uv_faces=uv_faces)
 
         # Extract landmarks
         landmarks_3d = extract_landmarks(vertices, joints)
@@ -170,6 +179,28 @@ def _load_smplx_faces(model_dir: Path) -> np.ndarray:
     faces = model.faces.astype(np.int32)
     del model
     return faces
+
+
+def _load_smplx_uvs(model_dir: Path) -> tuple[np.ndarray, np.ndarray] | None:
+    """Read SMPL-X UV layout (vt, ft) directly from the .npz model file.
+
+    Returns (uv_verts, uv_faces) where:
+        uv_verts: (N_uv, 2) float — u,v coords in [0,1]
+        uv_faces: (N_faces, 3) int — index into uv_verts
+    Returns None when the model file has no UV info.
+    """
+    npz_path = model_dir / "SMPLX_NEUTRAL.npz"
+    if not npz_path.exists():
+        return None
+    try:
+        data = np.load(str(npz_path), allow_pickle=False)
+    except Exception:
+        # Some SMPL-X .npz files store pickled objects — retry with allow_pickle.
+        data = np.load(str(npz_path), allow_pickle=True)
+    if "vt" not in data.files or "ft" not in data.files:
+        logger.warning("SMPL-X .npz has no 'vt'/'ft' UV arrays — bodies will render untextured.")
+        return None
+    return np.asarray(data["vt"], dtype=np.float32), np.asarray(data["ft"], dtype=np.int32)
 
 
 # ── Blender phase ─────────────────────────────────────────────────────────────

@@ -55,10 +55,11 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
     "wrist_circumference":          0.85,
     # Direct widths / lengths — medium-high
     "chest_width_front":            0.75,
-    "shoulder_slope_width":         0.70,
     "arm_length_shoulder_to_wrist": 0.70,
-    "leg_length_inner_seam":        0.70,
-    "leg_length_outer_seam":        0.70,
+    # Derived seam / slope lengths (built from keypoints + offsets)
+    "shoulder_slope_width":         0.65,
+    "leg_length_inner_seam":        0.60,
+    "leg_length_outer_seam":        0.65,
     # Geometric derivations
     "chest_circumference":          0.70,
     "back_width_scapular":          0.55,
@@ -142,14 +143,81 @@ def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
     return circ
 
 
+def _waist_y(kp: Keypoints) -> float | None:
+    """Waist line: 60 % between THORAX and PELVIS (anatomical natural waist)."""
+    if not is_valid(kp.confidence, KP.THORAX, KP.PELVIS):
+        return None
+    return float(kp.points[KP.THORAX, 1]) + 0.6 * (
+        float(kp.points[KP.PELVIS, 1]) - float(kp.points[KP.THORAX, 1])
+    )
+
+
+def _avg_ankle_y(kp: Keypoints) -> float | None:
+    ys = [float(kp.points[k, 1]) for k in (KP.LEFT_ANKLE, KP.RIGHT_ANKLE) if is_valid(kp.confidence, k)]
+    return sum(ys) / len(ys) if ys else None
+
+
 def _derive_back_length(side_kp: Keypoints, px_per_cm_side: float) -> float | None:
-    # Side view: vertical span from upper neck to mid-hips.
-    return _kp_to_midpoint_cm(side_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_side)
+    """Back length to waist: nape (UPPER_NECK proxy for C7) → natural waist line.
+    Vertical (Y) distance only, mirroring how a tailor's tape lies along the spine."""
+    if px_per_cm_side <= 0 or not is_valid(side_kp.confidence, KP.UPPER_NECK):
+        return None
+    waist_y = _waist_y(side_kp)
+    if waist_y is None:
+        return None
+    return abs(waist_y - float(side_kp.points[KP.UPPER_NECK, 1])) / px_per_cm_side
 
 
 def _derive_front_length(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
-    # Front view proxy for front body length to waist.
-    return _kp_to_midpoint_cm(front_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_front)
+    """Front length to waist: same vertical span as back, on the front view."""
+    if px_per_cm_front <= 0 or not is_valid(front_kp.confidence, KP.UPPER_NECK):
+        return None
+    waist_y = _waist_y(front_kp)
+    if waist_y is None:
+        return None
+    return abs(waist_y - float(front_kp.points[KP.UPPER_NECK, 1])) / px_per_cm_front
+
+
+def _derive_shoulder_slope(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
+    """Shoulder slope length: UPPER_NECK → shoulder tip (the diagonal slope).
+
+    Tailors call this 'плечовий скат' — the line from C7/nape down to the
+    acromion, typically 14-18 cm. Distinct from the (much longer) shoulder
+    *span* the BodyMeasurements field represents.
+    """
+    pts, conf = front_kp.points, front_kp.confidence
+    if px_per_cm_front <= 0 or not is_valid(conf, KP.UPPER_NECK):
+        return None
+    sides: list[float] = []
+    for sh in (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
+        if is_valid(conf, sh):
+            sides.append(distance(pts, KP.UPPER_NECK, sh) / px_per_cm_front)
+    return sum(sides) / len(sides) if sides else None
+
+
+def _derive_inner_leg(side_kp: Keypoints, px_per_cm_side: float) -> float | None:
+    """Inseam: crotch → ankle. PELVIS is ~10 cm above the crotch in 3D, subtract."""
+    if px_per_cm_side <= 0 or not is_valid(side_kp.confidence, KP.PELVIS):
+        return None
+    ankle_y = _avg_ankle_y(side_kp)
+    if ankle_y is None:
+        return None
+    raw = abs(ankle_y - float(side_kp.points[KP.PELVIS, 1])) / px_per_cm_side
+    # PELVIS keypoint sits at hip-joint level, ~10 cm above where a tape's
+    # "crotch" reading begins. Subtract a body-height-relative offset so the
+    # adjustment scales with subject size.
+    return max(0.0, raw - 10.0)
+
+
+def _derive_outer_leg(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
+    """Outer leg seam: natural waist → ankle (vertical Y distance)."""
+    if px_per_cm_front <= 0:
+        return None
+    waist_y = _waist_y(front_kp)
+    ankle_y = _avg_ankle_y(front_kp)
+    if waist_y is None or ankle_y is None:
+        return None
+    return abs(ankle_y - waist_y) / px_per_cm_front
 
 
 def _derive_neck_base_height(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
@@ -195,10 +263,18 @@ def _value_for_id(
     if mid == "calf_circumference":            return bm.calf_circumference_cm, flags
     if mid == "wrist_circumference":           return bm.wrist_circumference_cm, flags
     if mid == "chest_width_front":             return bm.torso_width_front_cm, flags
-    if mid == "shoulder_slope_width":          return bm.shoulder_width_cm, flags
     if mid == "arm_length_shoulder_to_wrist":  return bm.arm_length_cm, flags
-    if mid == "leg_length_inner_seam":         return bm.leg_length_inner_cm, flags
-    if mid == "leg_length_outer_seam":         return bm.leg_length_outer_cm, flags
+
+    # Tailor-semantics derivations (override wrong direct mappings) ---------
+    if mid == "shoulder_slope_width":
+        flags.append("derived")
+        return _derive_shoulder_slope(front_kp, cal.px_per_cm_front), flags
+    if mid == "leg_length_inner_seam":
+        flags.append("derived")
+        return _derive_inner_leg(side_kp, cal.px_per_cm_side), flags
+    if mid == "leg_length_outer_seam":
+        flags.append("derived")
+        return _derive_outer_leg(front_kp, cal.px_per_cm_front), flags
 
     # Geometric derivations -------------------------------------------------
     if mid == "chest_circumference":
