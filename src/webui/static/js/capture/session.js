@@ -284,7 +284,8 @@ function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
   const { thumbFront, thumbSide } = getCaptureDom();
   resetAutoCaptureUi();
   cancelSpeechSynthesis();
-  setPoseStatus(poseLine, "ok");
+  // Upload flow should be silent: keep visual pose status without TTS.
+  setPoseStatusVisual(poseLine, "ok");
   const url = URL.createObjectURL(storageBlob);
   if (which === "front") {
     captureState.suspendPoseLoopAfterComplete = false;

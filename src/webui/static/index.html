@@ -19,7 +19,7 @@
       <section class="card references" aria-labelledby="ref-heading" id="section-references">
         <h2 id="ref-heading">Приклади правильної пози</h2>
         <p class="ref-intro">
-          <strong>Анфас:</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+          <strong>Анфас:</strong> ноги приблизно на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
           <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки злегка відведені на ~15–20° від корпусу.
           <br>Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
         </p>
@@ -53,6 +53,16 @@
             <option value="female">Жінка</option>
             <option value="other">Інше</option>
           </select>
+        </div>
+        <div class="field">
+          <label for="pose-backend">Модель пози (сервер)</label>
+          <select id="pose-backend" name="pose_backend" aria-describedby="pose-backend-hint">
+            <option value="custom">16 точок (кастомна, LV-MHP)</option>
+            <option value="coco" selected>COCO 17 (YOLO26, з перетворенням)</option>
+          </select>
+          <p id="pose-backend-hint" class="hint">
+            Кастомна модель зазвичай точніша для цього пайплайну; COCO — універсальна.
+          </p>
         </div>
       </section>
 
@@ -184,7 +194,6 @@
                 <tr>
                   <th>Показник</th>
                   <th>см</th>
-                  <th>Дост.</th>
                 </tr>
               </thead>
               <tbody id="tailoring-measures-body"></tbody>
@@ -239,7 +248,6 @@
               <tr>
                 <th>Показник</th>
                 <th>Значення (см)</th>
-                <th>Достовірність</th>
               </tr>
             </thead>
             <tbody id="results-body"></tbody>

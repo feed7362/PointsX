@@ -64,11 +64,64 @@ function formatMeasureHttpError(res, bodyText) {
   return fallback;
 }
 
+const MEASUREMENT_MANUAL_ORDER = [
+  "chest_circumference",
+  "waist_circumference",
+  "hip_circumference",
+  "thigh_circumference",
+ 
+  "neck_base_height",
+  "chest_width_front",
+  "back_width_scapular",
+  "shoulder_slope_width",
+
+  "arm_length_shoulder_to_wrist",
+  "leg_length_outer_seam",
+  "leg_length_inner_seam",
+  
+  "back_length_to_waist",
+  "front_length_to_waist",
+
+  "neck_circumference",
+  "upper_arm_circumference", 
+  "wrist_circumference",
+  "calf_circumference",
+  "ankle_circumference",
+];
+
+const HIDDEN_MEASUREMENT_IDS = new Set([
+  "neck_circumference",
+  "upper_arm_circumference",
+  "wrist_circumference",
+  "calf_circumference",
+  "ankle_circumference",
+  "back_width_scapular",
+  "front_length_to_waist",
+]);
+
+function orderMeasurementsManual(list) {
+  const rows = (Array.isArray(list) ? list : []).filter(
+    (r) => !HIDDEN_MEASUREMENT_IDS.has(String(r?.id ?? ""))
+  );
+  const byId = new Map(rows.map((r) => [r?.id, r]));
+  const ordered = [];
+  for (const id of MEASUREMENT_MANUAL_ORDER) {
+    const row = byId.get(id);
+    if (row) ordered.push(row);
+  }
+  for (const row of rows) {
+    if (!MEASUREMENT_MANUAL_ORDER.includes(row?.id)) ordered.push(row);
+  }
+  return ordered;
+}
+
 const PIPELINE_VIZ_KEYS = [
-  ["viz_front_pose_png_b64", "Анфас — поза (YOLO pose)"],
-  ["viz_front_seg_png_b64", "Анфас — силует (YOLO seg)"],
-  ["viz_side_pose_png_b64", "Профіль — поза (YOLO pose)"],
-  ["viz_side_seg_png_b64", "Профіль — силует (YOLO seg)"],
+  ["viz_front_pose_png_b64", "Анфас — поза"],
+  ["viz_front_seg_png_b64", "Анфас — силует"],
+  ["viz_front_measures_png_b64", "Анфас — лінії зняття мірок"],
+  ["viz_side_pose_png_b64", "Профіль — поза"],
+  ["viz_side_seg_png_b64", "Профіль — силует"],
+  ["viz_side_measures_png_b64", "Профіль — лінії зняття мірок"],
 ];
 
 /** Show base64 PNGs from envelope `derived` (server pipeline debug). */
@@ -355,19 +408,22 @@ export function refreshTailoringView() {
   if (!garment) return;
 
   const sex          = env.subject?.sex ?? "other";
-  const measurements = env.measurements ?? [];
+  const measurements = orderMeasurementsManual(env.measurements ?? []);
 
   // Render measurements table
-  const midsForGarment = garment.measurement_ids || [];
+  const midsForGarment = (garment.measurement_ids || []).filter(
+    (mid) => !HIDDEN_MEASUREMENT_IDS.has(String(mid))
+  );
   tailoringMeasuresBody.innerHTML = "";
-  for (const mid of midsForGarment) {
-    const row = measurements.find((m) => m.id === mid);
+  const garmentRows = midsForGarment
+    .map((mid) => measurements.find((m) => m.id === mid))
+    .filter(Boolean);
+  for (const row of orderMeasurementsManual(garmentRows)) {
     if (!row) continue;
     const tr = document.createElement("tr");
     tr.innerHTML =
-      "<td>" + escapeHtml(row.label_uk ?? mid) +
-      "</td><td>" + escapeHtml(String(row.value_cm)) +
-      "</td><td>" + escapeHtml(String(row.confidence)) + "</td>";
+      "<td>" + escapeHtml(row.label_uk ?? row.id) +
+      "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
     tailoringMeasuresBody.appendChild(tr);
   }
 
@@ -516,13 +572,14 @@ export function ensureSizeTabsWired() {
 // ---------------------------------------------------------------------------
 
 export function attachMeasureHandler() {
-  const {
+    const {
     btnMeasure,
     btnMeasureTest,
     resultsSection,
     resultsBody,
     heightInput,
     sexSelect,
+    poseBackendSelect,
     tailoringIntro,
     garmentStripWrap,
     tailoringPanels,
@@ -554,6 +611,9 @@ export function attachMeasureHandler() {
     fd.append("sex",       sexSelect.value);
     const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
     if (!useTestImages) {
+      if (poseBackendSelect && poseBackendSelect.value) {
+        fd.append("pose_backend", poseBackendSelect.value);
+      }
       const frontName =
         captureState.frontBlob instanceof File && captureState.frontBlob.name
           ? captureState.frontBlob.name
@@ -573,7 +633,7 @@ export function attachMeasureHandler() {
         throw new Error(formatMeasureHttpError(res, text));
       }
       const data = await res.json();
-      const measurements = data.measurements ?? [];
+      const measurements = orderMeasurementsManual(data.measurements ?? []);
       if (!measurements.length) {
         captureState.lastMockResponse = null;
         const mvEmpty = document.getElementById("model-viz");
@@ -603,8 +663,7 @@ export function attachMeasureHandler() {
         const tr = document.createElement("tr");
         tr.innerHTML =
           "<td>" + escapeHtml(row.label_uk ?? row.id) +
-          "</td><td>" + escapeHtml(String(row.value_cm)) +
-          "</td><td>" + escapeHtml(String(row.confidence)) + "</td>";
+          "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
         resultsBody.appendChild(tr);
       }
 

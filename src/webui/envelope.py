@@ -70,6 +70,27 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
     "ankle_circumference":          0.40,
 }
 
+_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {
+    "female": {
+        "chest_circumference": -4.0,
+        "waist_circumference": -19.0,
+        "hip_circumference": -6.0,
+        "thigh_circumference": -12.0,
+    },
+    "other": {
+        "chest_circumference": -4.0,
+        "waist_circumference": -19.0,
+        "hip_circumference": -6.0,
+        "thigh_circumference": -12.0,
+    },
+    "male": {
+        "chest_circumference": -2.0,
+        "waist_circumference": -14.0,
+        "hip_circumference": -15.0,
+        "thigh_circumference": -16.0,
+    },
+}
+
 # Anthropometric ratios used when a measurement isn't directly observable
 _UPPER_ARM_TO_CHEST_RATIO = 0.34   # adult average upper-arm girth ≈ 33-35% of chest girth
 _ANKLE_TO_CALF_RATIO      = 0.62
@@ -142,13 +163,27 @@ def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
     return circ
 
 
-def _derive_back_length(side_kp: Keypoints, px_per_cm_side: float) -> float | None:
-    # Side view: vertical span from upper neck to mid-hips.
+def _derive_back_length(
+    bm: BodyMeasurements, side_kp: Keypoints, px_per_cm_side: float
+) -> float | None:
+    # Prefer persisted waist level if available.
+    if bm.waist_level_side_px is not None and is_valid(side_kp.confidence, KP.UPPER_NECK):
+        if px_per_cm_side <= 0:
+            return None
+        return abs(float(side_kp.points[KP.UPPER_NECK, 1]) - float(bm.waist_level_side_px)) / px_per_cm_side
+    # Fallback: old proxy from upper neck to hip midpoint.
     return _kp_to_midpoint_cm(side_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_side)
 
 
-def _derive_front_length(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
-    # Front view proxy for front body length to waist.
+def _derive_front_length(
+    bm: BodyMeasurements, front_kp: Keypoints, px_per_cm_front: float
+) -> float | None:
+    # Prefer persisted waist level if available.
+    if bm.waist_level_front_px is not None and is_valid(front_kp.confidence, KP.UPPER_NECK):
+        if px_per_cm_front <= 0:
+            return None
+        return abs(float(front_kp.points[KP.UPPER_NECK, 1]) - float(bm.waist_level_front_px)) / px_per_cm_front
+    # Fallback: old proxy from upper neck to hip midpoint.
     return _kp_to_midpoint_cm(front_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_front)
 
 
@@ -195,7 +230,7 @@ def _value_for_id(
     if mid == "calf_circumference":            return bm.calf_circumference_cm, flags
     if mid == "wrist_circumference":           return bm.wrist_circumference_cm, flags
     if mid == "chest_width_front":             return bm.torso_width_front_cm, flags
-    if mid == "shoulder_slope_width":          return bm.shoulder_width_cm, flags
+    if mid == "shoulder_slope_width":          return bm.shoulder_slope_width_cm, flags
     if mid == "arm_length_shoulder_to_wrist":  return bm.arm_length_cm, flags
     if mid == "leg_length_inner_seam":         return bm.leg_length_inner_cm, flags
     if mid == "leg_length_outer_seam":         return bm.leg_length_outer_cm, flags
@@ -209,10 +244,10 @@ def _value_for_id(
         return bm.torso_width_side_cm, flags
     if mid == "back_length_to_waist":
         flags.append("derived")
-        return _derive_back_length(side_kp, cal.px_per_cm_side), flags
+        return _derive_back_length(bm, side_kp, cal.px_per_cm_side), flags
     if mid == "front_length_to_waist":
         flags.append("derived")
-        return _derive_front_length(front_kp, cal.px_per_cm_front), flags
+        return _derive_front_length(bm, front_kp, cal.px_per_cm_front), flags
     if mid == "neck_base_height":
         flags.append("derived")
         return _derive_neck_base_height(front_kp, cal.px_per_cm_front), flags
@@ -248,6 +283,7 @@ def body_to_envelope(
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
+    sex_offsets = _SEX_CIRCUMFERENCE_OFFSETS_CM.get(sex, {})
 
     items = []
     for mid, label_uk, source in CANONICAL_MEASUREMENTS:
@@ -257,6 +293,8 @@ def body_to_envelope(
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.
             continue
+        if mid in sex_offsets:
+            value = max(0.0, float(value) + sex_offsets[mid])
         # Confidence: prefer pipeline-provided, fall back to per-id default.
         conf = bm.confidence.get(mid, _DEFAULT_CONFIDENCE.get(mid, 0.5))
         conf = max(0.0, min(1.0, float(conf)))
@@ -290,6 +328,7 @@ def body_to_envelope(
             source="regression" if result.has_regressor else "mediapipe",
             model_version="regression-0.1" if result.has_regressor else "ellipse-0.1",
             unit_system="metric",
+            pose_backend=result.pose_backend,
         ),
         subject=SubjectInfo(
             height_cm=subject_height_cm,

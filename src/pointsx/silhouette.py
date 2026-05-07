@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pointsx.keypoints import KP, interpolate_y, is_valid
+from pointsx.keypoints import KP, distance, interpolate_y, is_valid
 from pointsx.schemas import Keypoints, SilhouetteMask
 
 
@@ -72,6 +72,96 @@ def measure_width_in_band_at_y(
         return measure_width_at_y(mask, y, margin)
 
     return float(np.mean(widths))
+
+
+def _continuous_row_width(mask_row: np.ndarray) -> float | None:
+    """Width of the longest continuous foreground segment on one row."""
+    cols = np.where(mask_row)[0]
+    if len(cols) < 2:
+        return None
+    segments = _find_segments(cols)
+    best = max(segments, key=lambda s: (s[-1] - s[0]))
+    return float(best[-1] - best[0]) if len(best) >= 2 else None
+
+
+def _continuous_width_at_y(
+    mask: np.ndarray,
+    y: float,
+    margin: int = 3,
+    x_band: tuple[float, float] | None = None,
+) -> float | None:
+    """Longest continuous width at y, averaged over a small vertical band."""
+    h, w = mask.shape
+    y_int = int(round(y))
+    y_min = max(0, y_int - margin)
+    y_max = min(h - 1, y_int + margin)
+
+    if x_band is not None:
+        x_lo = max(0, int(round(x_band[0])))
+        x_hi = min(w - 1, int(round(x_band[1])))
+        if x_hi <= x_lo:
+            x_band = None
+
+    widths: list[float] = []
+    for row in range(y_min, y_max + 1):
+        if x_band is None:
+            row_mask = mask[row]
+        else:
+            row_mask = mask[row, x_lo : x_hi + 1]
+        w_row = _continuous_row_width(row_mask)
+        if w_row is not None:
+            widths.append(w_row)
+    if not widths:
+        return None
+    return float(np.mean(widths))
+
+
+def _extreme_continuous_width_between_y(
+    mask: np.ndarray,
+    y0: float,
+    y1: float,
+    *,
+    prefer: str,
+    x_band: tuple[float, float] | None = None,
+) -> float | None:
+    """Min or max continuous width across all rows between y0 and y1."""
+    lo = int(round(min(y0, y1)))
+    hi = int(round(max(y0, y1)))
+    vals: list[float] = []
+    for yi in range(lo, hi + 1):
+        w = _continuous_width_at_y(mask, float(yi), margin=0, x_band=x_band)
+        if w is not None:
+            vals.append(w)
+    if not vals:
+        return None
+    return float(min(vals) if prefer == "min" else max(vals))
+
+
+def _extreme_continuous_width_and_y_between_y(
+    mask: np.ndarray,
+    y0: float,
+    y1: float,
+    *,
+    prefer: str,
+    x_band: tuple[float, float] | None = None,
+) -> tuple[float | None, float | None]:
+    """Min/max continuous width and selected y-row."""
+    lo = int(round(min(y0, y1)))
+    hi = int(round(max(y0, y1)))
+    best_w: float | None = None
+    best_y: float | None = None
+    for yi in range(lo, hi + 1):
+        w = _continuous_width_at_y(mask, float(yi), margin=0, x_band=x_band)
+        if w is None:
+            continue
+        if best_w is None:
+            best_w = float(w)
+            best_y = float(yi)
+            continue
+        if (prefer == "min" and w < best_w) or (prefer == "max" and w > best_w):
+            best_w = float(w)
+            best_y = float(yi)
+    return best_w, best_y
 
 
 def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | None:
@@ -160,7 +250,11 @@ def _front_torso_band(front_kp: Keypoints, mask_w: int) -> tuple[float, float] |
 
 
 def measure_limb_width_at_y(
-    mask: np.ndarray, y: float, x_hint: float, margin: int = 3
+    mask: np.ndarray,
+    y: float,
+    x_hint: float,
+    margin: int = 3,
+    x_band: tuple[float, float] | None = None,
 ) -> float | None:
     """Measure width of a single limb at y, using x_hint to identify which segment.
 
@@ -175,6 +269,10 @@ def measure_limb_width_at_y(
     widths = []
     for row in range(y_min, y_max + 1):
         cols = np.where(mask[row])[0]
+        if x_band is not None and len(cols) > 0:
+            x_lo = max(0, int(round(x_band[0])))
+            x_hi = min(w - 1, int(round(x_band[1])))
+            cols = cols[(cols >= x_lo) & (cols <= x_hi)]
         if len(cols) < 2:
             continue
 
@@ -202,10 +300,15 @@ def extract_all_widths(
     side_mask: SilhouetteMask,
     front_kp: Keypoints,
     side_kp: Keypoints,
-) -> dict[str, tuple[float | None, float | None]]:
+) -> tuple[
+    dict[str, tuple[float | None, float | None]],
+    dict[str, tuple[float | None, float | None]],
+]:
     """Extract body widths at key y-coordinates from both views.
 
-    Returns dict mapping body part to (front_width_px, side_width_px).
+    Returns:
+      - widths: body part -> (front_width_px, side_width_px)
+      - selected_y: body part -> (front_y_px, side_y_px) for selected lines
     """
     f_pts, f_conf = front_kp.points, front_kp.confidence
     s_pts, s_conf = side_kp.points, side_kp.confidence
@@ -236,6 +339,7 @@ def extract_all_widths(
             return measure_width_at_y(mask, y)
 
     widths: dict[str, tuple[float | None, float | None]] = {}
+    selected_y: dict[str, tuple[float | None, float | None]] = {}
 
     # Head: midpoint between head_top and upper_neck
     if is_valid(f_conf, KP.HEAD_TOP, KP.UPPER_NECK):
@@ -246,65 +350,176 @@ def extract_all_widths(
         existing = widths.get("head", (None, None))
         widths["head"] = (existing[0], _side_torso_width(s_mask, y_head_s))
 
-    # Neck: at upper_neck y
+    # Neck: shortest continuous line from a line below nose down to upper_neck.
+    # Start line: nose_y + |nose_y - head_top_y|.
     if is_valid(f_conf, KP.UPPER_NECK):
-        y_neck_f = f_pts[KP.UPPER_NECK, 1]
-        widths["neck"] = (_front_torso_width(f_mask, y_neck_f), None)
+        y_upper_neck = float(f_pts[KP.UPPER_NECK, 1])
+        y_start = None
+        if (
+            front_kp.nose_xy is not None
+            and (front_kp.nose_conf or 0.0) >= 0.2
+            and is_valid(f_conf, KP.HEAD_TOP)
+        ):
+            y_nose = float(front_kp.nose_xy[1])
+            y_head_top = float(f_pts[KP.HEAD_TOP, 1])
+            y_start = y_nose + abs(y_nose - y_head_top)
+        elif front_kp.nose_xy is not None and (front_kp.nose_conf or 0.0) >= 0.2:
+            y_start = float(front_kp.nose_xy[1])
+        elif is_valid(f_conf, KP.HEAD_TOP):
+            y_start = float(f_pts[KP.HEAD_TOP, 1])
+        if y_start is not None:
+            neck_f = _extreme_continuous_width_between_y(
+                f_mask, y_start, y_upper_neck, prefer="min", x_band=f_band
+            )
+            widths["neck"] = (neck_f, None)
     if is_valid(s_conf, KP.UPPER_NECK):
-        y_neck_s = s_pts[KP.UPPER_NECK, 1]
-        existing = widths.get("neck", (None, None))
-        widths["neck"] = (existing[0], _side_torso_width(s_mask, y_neck_s))
+        y_upper_neck = float(s_pts[KP.UPPER_NECK, 1])
+        y_start = None
+        if (
+            side_kp.nose_xy is not None
+            and (side_kp.nose_conf or 0.0) >= 0.2
+            and is_valid(s_conf, KP.HEAD_TOP)
+        ):
+            y_nose = float(side_kp.nose_xy[1])
+            y_head_top = float(s_pts[KP.HEAD_TOP, 1])
+            y_start = y_nose + abs(y_nose - y_head_top)
+        elif side_kp.nose_xy is not None and (side_kp.nose_conf or 0.0) >= 0.2:
+            y_start = float(side_kp.nose_xy[1])
+        elif is_valid(s_conf, KP.HEAD_TOP):
+            y_start = float(s_pts[KP.HEAD_TOP, 1])
+        if y_start is not None:
+            neck_s = _extreme_continuous_width_between_y(
+                s_mask, y_start, y_upper_neck, prefer="min", x_band=s_band
+            )
+            existing = widths.get("neck", (None, None))
+            widths["neck"] = (existing[0], neck_s)
 
-    # Chest / torso: at thorax y
-    if is_valid(f_conf, KP.THORAX):
-        y_chest_f = f_pts[KP.THORAX, 1]
-        widths["torso"] = (_front_torso_width(f_mask, y_chest_f), None)
-    if is_valid(s_conf, KP.THORAX):
-        y_chest_s = s_pts[KP.THORAX, 1]
+    # Torso width:
+    # - front: distance between shoulder points
+    # - side: continuous silhouette width at midpoint between upper_neck and elbow
+    if is_valid(f_conf, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
+        widths["torso"] = (distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER), None)
+    if is_valid(s_conf, KP.UPPER_NECK) and (is_valid(s_conf, KP.RIGHT_ELBOW) or is_valid(s_conf, KP.LEFT_ELBOW)):
+        elbow_y = (
+            float(s_pts[KP.RIGHT_ELBOW, 1])
+            if is_valid(s_conf, KP.RIGHT_ELBOW)
+            else float(s_pts[KP.LEFT_ELBOW, 1])
+        )
+        y_torso_side = 0.5 * (float(s_pts[KP.UPPER_NECK, 1]) + elbow_y)
+        torso_s = _continuous_width_at_y(s_mask, y_torso_side, margin=3, x_band=s_band)
         existing = widths.get("torso", (None, None))
-        widths["torso"] = (existing[0], _side_torso_width(s_mask, y_chest_s))
+        widths["torso"] = (
+            existing[0],
+            torso_s,
+        )
 
-    # Waist: interpolated 60% between thorax and pelvis
-    if is_valid(f_conf, KP.THORAX, KP.PELVIS):
-        y_waist_f = interpolate_y(f_pts, KP.THORAX, KP.PELVIS, 0.6)
-        widths["waist"] = (_front_torso_width(f_mask, y_waist_f), None)
-    if is_valid(s_conf, KP.THORAX, KP.PELVIS):
-        y_waist_s = interpolate_y(s_pts, KP.THORAX, KP.PELVIS, 0.6)
+    # Waist: shortest continuous line from pelvis to pelvis + 0.5*(upper_neck - pelvis).
+    if is_valid(f_conf, KP.PELVIS, KP.UPPER_NECK):
+        y_pelvis = f_pts[KP.PELVIS, 1]
+        y_mid = y_pelvis + 0.4 * (f_pts[KP.UPPER_NECK, 1] - y_pelvis)
+        waist_f, waist_f_y = _extreme_continuous_width_and_y_between_y(
+            f_mask, y_pelvis, y_mid, prefer="min", x_band=f_band
+        )
+        widths["waist"] = (waist_f, None)
+        selected_y["waist"] = (waist_f_y, None)
+    if is_valid(s_conf, KP.PELVIS, KP.UPPER_NECK):
+        y_pelvis = s_pts[KP.PELVIS, 1]
+        y_mid = y_pelvis + 0.4 * (s_pts[KP.UPPER_NECK, 1] - y_pelvis)
+        waist_s, waist_s_y = _extreme_continuous_width_and_y_between_y(
+            s_mask, y_pelvis, y_mid, prefer="min", x_band=s_band
+        )
         existing = widths.get("waist", (None, None))
-        widths["waist"] = (existing[0], _side_torso_width(s_mask, y_waist_s))
+        widths["waist"] = (existing[0], waist_s)
+        existing_y = selected_y.get("waist", (None, None))
+        selected_y["waist"] = (existing_y[0], waist_s_y)
 
-    # Hip: at pelvis / midpoint of hips
-    if is_valid(f_conf, KP.LEFT_HIP, KP.RIGHT_HIP):
-        y_hip_f = (f_pts[KP.LEFT_HIP, 1] + f_pts[KP.RIGHT_HIP, 1]) / 2
-        widths["hip"] = (_front_torso_width(f_mask, y_hip_f), None)
-    elif is_valid(f_conf, KP.PELVIS):
-        y_hip_f = f_pts[KP.PELVIS, 1]
-        widths["hip"] = (_front_torso_width(f_mask, y_hip_f), None)
+    # Hip: largest continuous line from pelvis to knee.
+    if is_valid(f_conf, KP.PELVIS):
+        y_pelvis = f_pts[KP.PELVIS, 1]
+        knee_ys = []
+        if is_valid(f_conf, KP.LEFT_KNEE):
+            knee_ys.append(float(f_pts[KP.LEFT_KNEE, 1]))
+        if is_valid(f_conf, KP.RIGHT_KNEE):
+            knee_ys.append(float(f_pts[KP.RIGHT_KNEE, 1]))
+        if knee_ys:
+            y_knee = float(np.mean(knee_ys))
+            y_start = y_pelvis + 0.05 * (y_knee - y_pelvis)
+            hip_f = _extreme_continuous_width_between_y(
+                f_mask, y_start, y_knee, prefer="max", x_band=f_band
+            )
+            widths["hip"] = (hip_f, None)
 
-    if is_valid(s_conf, KP.LEFT_HIP, KP.RIGHT_HIP):
-        y_hip_s = (s_pts[KP.LEFT_HIP, 1] + s_pts[KP.RIGHT_HIP, 1]) / 2
+    if is_valid(s_conf, KP.PELVIS, KP.RIGHT_KNEE):
+        y_pelvis = s_pts[KP.PELVIS, 1]
+        y_knee = s_pts[KP.RIGHT_KNEE, 1]
+        y_start = y_pelvis + 0.05 * (y_knee - y_pelvis)
+        hip_s = _extreme_continuous_width_between_y(
+            s_mask, y_start, y_knee, prefer="max", x_band=s_band
+        )
         existing = widths.get("hip", (None, None))
-        widths["hip"] = (existing[0], _side_torso_width(s_mask, y_hip_s))
-    elif is_valid(s_conf, KP.PELVIS):
-        y_hip_s = s_pts[KP.PELVIS, 1]
-        existing = widths.get("hip", (None, None))
-        widths["hip"] = (existing[0], _side_torso_width(s_mask, y_hip_s))
+        widths["hip"] = (existing[0], hip_s)
 
-    # Thigh: 25% between hip and knee (front: single-limb, side: full width)
-    for side_name, kp_hip, kp_knee in [
-        ("right", KP.RIGHT_HIP, KP.RIGHT_KNEE),
-        ("left", KP.LEFT_HIP, KP.LEFT_KNEE),
-    ]:
-        if is_valid(f_conf, kp_hip, kp_knee):
-            y_thigh_f = interpolate_y(f_pts, kp_hip, kp_knee, 0.25)
-            x_hint = f_pts[kp_knee, 0]
-            front_w = measure_limb_width_at_y(f_mask, y_thigh_f, x_hint)
-            key = f"thigh_{side_name}"
-            widths[key] = (front_w, None)
+    # Thigh:
+    # - front: at the level where center gap between legs begins; measure one-leg continuous segment
+    # - side: at 30% below pelvis (toward knee/ankle)
+    if is_valid(f_conf, KP.PELVIS):
+        pelvis_x = int(round(float(f_pts[KP.PELVIS, 0])))
+        pelvis_y = int(round(float(f_pts[KP.PELVIS, 1])))
+        pelvis_x = int(np.clip(pelvis_x, 0, f_mask.shape[1] - 1))
+        pelvis_y = int(np.clip(pelvis_y, 0, f_mask.shape[0] - 1))
+        thigh_split_x = (
+            int(round(float(f_pts[KP.UPPER_NECK, 0])))
+            if is_valid(f_conf, KP.UPPER_NECK)
+            else pelvis_x
+        )
+        thigh_split_x = int(np.clip(thigh_split_x, 0, f_mask.shape[1] - 1))
+        ankle_ys = []
+        if is_valid(f_conf, KP.LEFT_ANKLE):
+            ankle_ys.append(float(f_pts[KP.LEFT_ANKLE, 1]))
+        if is_valid(f_conf, KP.RIGHT_ANKLE):
+            ankle_ys.append(float(f_pts[KP.RIGHT_ANKLE, 1]))
+        knee_ys = []
+        if is_valid(f_conf, KP.LEFT_KNEE):
+            knee_ys.append(float(f_pts[KP.LEFT_KNEE, 1]))
+        if is_valid(f_conf, KP.RIGHT_KNEE):
+            knee_ys.append(float(f_pts[KP.RIGHT_KNEE, 1]))
+        if ankle_ys:
+            y_bottom = int(round(np.mean(ankle_ys)))
+        elif knee_ys:
+            y_bottom = int(round(np.mean(knee_ys)))
+        else:
+            y_bottom = f_mask.shape[0] - 1
+        y_bottom = int(np.clip(y_bottom, pelvis_y + 1, f_mask.shape[0] - 1))
+        y_thigh_f = pelvis_y
+        for y in range(pelvis_y, y_bottom + 1):
+            if not f_mask[y, pelvis_x]:
+                y_thigh_f = y
+                break
+        for side_name, kp_knee in [("right", KP.RIGHT_KNEE), ("left", KP.LEFT_KNEE)]:
+            if is_valid(f_conf, kp_knee):
+                x_hint = f_pts[kp_knee, 0]
+            elif side_name == "right" and is_valid(f_conf, KP.RIGHT_HIP):
+                x_hint = f_pts[KP.RIGHT_HIP, 0]
+            elif side_name == "left" and is_valid(f_conf, KP.LEFT_HIP):
+                x_hint = f_pts[KP.LEFT_HIP, 0]
+            else:
+                continue
+            if side_name == "right":
+                x_band = (0.0, thigh_split_x)
+            else:
+                x_band = (thigh_split_x, float(f_mask.shape[1] - 1))
+            front_w = measure_limb_width_at_y(f_mask, y_thigh_f, x_hint, x_band=x_band)
+            widths[f"thigh_{side_name}"] = (front_w, None)
 
-    # Side thigh: use average of hip/knee midpoint
-    if is_valid(s_conf, KP.RIGHT_HIP, KP.RIGHT_KNEE):
-        y_thigh_s = interpolate_y(s_pts, KP.RIGHT_HIP, KP.RIGHT_KNEE, 0.25)
+    if is_valid(s_conf, KP.PELVIS):
+        y_pelvis_s = float(s_pts[KP.PELVIS, 1])
+        if is_valid(s_conf, KP.RIGHT_KNEE):
+            y_ref = float(s_pts[KP.RIGHT_KNEE, 1])
+        elif is_valid(s_conf, KP.RIGHT_ANKLE):
+            y_ref = float(s_pts[KP.RIGHT_ANKLE, 1])
+        else:
+            y_ref = y_pelvis_s
+        y_thigh_s = y_pelvis_s + 0.5 * (y_ref - y_pelvis_s)
         side_w = _side_torso_width(s_mask, y_thigh_s)
         for key in ["thigh_right", "thigh_left"]:
             existing = widths.get(key, (None, None))
@@ -348,4 +563,4 @@ def extract_all_widths(
             existing = widths.get(key, (None, None))
             widths[key] = (existing[0], side_w)
 
-    return widths
+    return widths, selected_y

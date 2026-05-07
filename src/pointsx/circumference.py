@@ -40,13 +40,13 @@ def estimate_circumferences(
 ) -> BodyMeasurements:
     """Add circumference estimates to measurements.
 
-    Uses regression model if provided, otherwise falls back to ellipse approximation.
+    Uses regression model when provided, otherwise falls back to ellipse approximation.
     Modifies and returns the same BodyMeasurements object.
     """
     if regression_model is not None:
         return _estimate_with_regression(m, regression_model)
 
-    # Ellipse-based estimation
+    # Ellipse-based estimation for all circumferences
     m.neck_circumference_cm = _estimate_single(m.neck_width_front_cm, m.neck_width_side_cm)
     m.waist_circumference_cm = _estimate_single(m.waist_width_front_cm, m.waist_width_side_cm)
     m.hip_circumference_cm = _estimate_single(m.hip_width_front_cm, m.hip_width_side_cm)

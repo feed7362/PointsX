@@ -18,9 +18,10 @@ from pathlib import Path
 import numpy as np
 
 from pointsx.calibration import calibrate
+from pointsx.keypoints import MIN_CONFIDENCE
 from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
-from pointsx.models import BodyModels
+from pointsx.models import BodyModels, PoseBackend
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
 
@@ -37,11 +38,12 @@ class InferenceResult:
     side_mask: SilhouetteMask
     cal: CalibrationInfo
     has_regressor: bool
+    pose_backend: str
 
 
 def _reference_point(kp: Keypoints) -> tuple[float, float]:
     """Subject center for seg-mask selection (mirrors MeasurementPipeline)."""
-    valid = kp.confidence >= 0.3
+    valid = kp.confidence >= MIN_CONFIDENCE
     if np.any(valid):
         center = kp.points[valid].mean(axis=0)
     else:
@@ -68,14 +70,16 @@ class WebuiPipeline:
 
     def __init__(
         self,
-        pose_model_path: str | Path,
+        pose_custom_path: str | Path | None,
+        pose_coco_path: str | Path | None,
         seg_model_path: str | Path,
         regression_model_path: str | Path | None = None,
         img_size: int = 640,
         device: str = "auto",
     ) -> None:
         self.models = BodyModels(
-            pose_model_path=pose_model_path,
+            pose_custom_path=pose_custom_path,
+            pose_coco_path=pose_coco_path,
             seg_model_path=seg_model_path,
             img_size=img_size,
             device=device,
@@ -97,12 +101,14 @@ class WebuiPipeline:
         front_img: np.ndarray,
         side_img: np.ndarray,
         height_cm: float,
+        *,
+        pose_backend: PoseBackend = "custom",
     ) -> InferenceResult:
         """Run the full pose+seg+regression pipeline on a pair of images."""
-        front_kp = self.models.predict_pose(front_img, view="front")
+        front_kp = self.models.predict_pose(front_img, view="front", pose_backend=pose_backend)
         if front_kp is None:
             raise ValueError("No person detected in front image")
-        side_kp = self.models.predict_pose(side_img, view="side")
+        side_kp = self.models.predict_pose(side_img, view="side", pose_backend=pose_backend)
         if side_kp is None:
             raise ValueError("No person detected in side image")
 
@@ -119,7 +125,7 @@ class WebuiPipeline:
 
         cal = calibrate(front_kp, side_kp, height_cm)
         bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
-        bm = estimate_circumferences(bm, self.regressor)
+        bm = estimate_circumferences(bm, regression_model=None)
         bm = validate_measurements(bm)
 
         return InferenceResult(
@@ -129,5 +135,6 @@ class WebuiPipeline:
             front_mask=front_mask,
             side_mask=side_mask,
             cal=cal,
-            has_regressor=self.regressor is not None,
+            has_regressor=False,
+            pose_backend=pose_backend,
         )

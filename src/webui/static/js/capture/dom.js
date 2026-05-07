@@ -12,6 +12,7 @@ function buildDom() {
     captureCanvas: /** @type {HTMLCanvasElement} */ (document.getElementById("capture-canvas")),
     heightInput: /** @type {HTMLInputElement} */ (document.getElementById("height")),
     sexSelect: /** @type {HTMLSelectElement} */ (document.getElementById("sex")),
+    poseBackendSelect: /** @type {HTMLSelectElement | null} */ (document.getElementById("pose-backend")),
     stepLabel: /** @type {HTMLElement} */ (document.getElementById("step-label")),
     statusEl: /** @type {HTMLElement} */ (document.getElementById("status")),
     poseStatusEl: /** @type {HTMLElement} */ (document.getElementById("pose-status")),

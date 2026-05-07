@@ -103,7 +103,7 @@ function checkFrontPose(lm, rawWorldLm) {
     (ls.visibility ?? 1) < VIS_MIN ||
     (rs.visibility ?? 1) < VIS_MIN
   ) {
-    return { ok: false, reason: "Підійдіть ближче: не видно обличчя або плечей." };
+    return { ok: false, reason: "Покажіть обличчя і плечі в кадрі." };
   }
   const tilt = Math.abs(ls.y - rs.y);
   if (tilt > 0.12) {
@@ -112,20 +112,21 @@ function checkFrontPose(lm, rawWorldLm) {
   const shoulderW = Math.abs(ls.x - rs.x);
   const hipWForFacing = Math.abs((lh?.x ?? ls.x) - (rh?.x ?? rs.x));
   const frontalWidth = Math.max(shoulderW, hipWForFacing);
-  const FRONTAL_WIDTH_MIN = 0.094;
-  const shoulderMidX = (ls.x + rs.x) / 2;
-  if (frontalWidth < FRONTAL_WIDTH_MIN) {
-    const corridor = Math.max(0.055, shoulderW * 0.55 + 0.04);
-    const noseDx = Math.abs(nose.x - shoulderMidX);
-    if (tilt <= 0.12 && noseDx <= corridor) {
-      return {
-        ok: false,
-        reason:
-          "Підійдіть ближче до камери",
-      };
-    }
-    return { ok: false, reason: "Станьте обличчям до камери" };
-  }
+  // Slightly less strict distance gate: avoid false "come closer" prompts.
+  // const FRONTAL_WIDTH_MIN = 0.086;
+  // const shoulderMidX = (ls.x + rs.x) / 2;
+  // if (frontalWidth < FRONTAL_WIDTH_MIN) {
+  //   const corridor = Math.max(0.055, shoulderW * 0.55 + 0.04);
+  //   const noseDx = Math.abs(nose.x - shoulderMidX);
+  //   if (tilt <= 0.12 && noseDx <= corridor) {
+  //     return {
+  //       ok: false,
+  //       reason:
+  //         "Покажіть себе крупніше в кадрі",
+  //     };
+  //   }
+  //   return { ok: false, reason: "Станьте обличчям до камери" };
+  // }
   const minSx = Math.min(ls.x, rs.x) - 0.09;
   const maxSx = Math.max(ls.x, rs.x) + 0.09;
   if (nose.x < minSx || nose.x > maxSx) {
@@ -168,7 +169,7 @@ function checkFrontPose(lm, rawWorldLm) {
     (ankleWx < minAnkleSpread && kneeWx < minKneeSpread) ||
     lowerBodySpreadScore < 0.62
   ) {
-    return { ok: false, reason: "Ноги на ширині плечей" };
+    return { ok: false, reason: "Спробуйте поставити ноги трохи ширше — приблизно на ширині плечей" };
   }
   if ((lm[23].visibility ?? 0) < 0.24 || (lm[24].visibility ?? 0) < 0.24) {
     return { ok: false, reason: "Має бути видно зону стегон і паху" };
@@ -341,7 +342,7 @@ function checkProfilePose(lm) {
   const lsV = ls.visibility ?? 0;
   const rsV = rs.visibility ?? 0;
   if (Math.max(lsV, rsV) < VIS_MIN || (nose.visibility ?? 1) < VIS_MIN) {
-    return { ok: false, reason: "Підійдіть ближче" };
+    return { ok: false, reason: "Покажіть себе крупніше в кадрі" };
   }
 
   const leftEye = lm[2];

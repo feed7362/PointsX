@@ -1,12 +1,15 @@
 """FastAPI app: static capture UI + real body-measurement endpoint.
 
 Configuration (environment variables, all optional):
-    POINTSX_POSE_MODEL        path to YOLO11n-pose .pt
-                              default: runs/pose/best.pt (your fine-tuned weights)
-    POINTSX_SEG_MODEL         path to YOLO11n-seg .pt
-                              default: runs/seg/best.pt
-    POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt
-                              default: models/circumference_regressor.pt if present;
+    POINTSX_POSE_MODEL_CUSTOM path to 16-keypoint (LV-MHP) pose .pt
+                              default: models/pose-cus.pt
+    POINTSX_POSE_MODEL_COCO   path to COCO-17 pose .pt (mapped to 16 internally)
+                              default: models/yolo26-pose.pt
+    POINTSX_POSE_MODEL        legacy: if set, overrides POINTSX_POSE_MODEL_CUSTOM only
+    POINTSX_SEG_MODEL         path to YOLO segmentation .pt
+                              default: models/yolo12l-person-seg-extended.pt
+    POINTSX_REGRESSION_MODEL  path to regression .pt
+                              default: models/reg.pt if present;
                               set to an empty string to force the Ramanujan ellipse
                               fallback instead.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
@@ -97,6 +100,7 @@ def _validation_errors_to_uk(errors: list[Any]) -> str:
         "sex": "Стать",
         "front": "Фото анфасу",
         "side": "Фото профілю",
+        "pose_backend": "Модель пози",
     }
     for item in errors:
         if not isinstance(item, dict):
@@ -163,6 +167,7 @@ class PipelineInfo(BaseModel):
     source: Literal["mock", "mediapipe", "regression"] = "regression"
     model_version: str = "regression-0.1"
     unit_system: Literal["metric"] = "metric"
+    pose_backend: Literal["custom", "coco"] | None = None
 
 
 class SubjectInfo(BaseModel):
@@ -283,11 +288,16 @@ async def lifespan(app: FastAPI):
     Failures are logged but do not crash the server — the endpoint will return
     503 until env vars are corrected and the server is restarted.
     """
-    pose_path = _resolve_path("POINTSX_POSE_MODEL", "runs/pose/best.pt")
-    seg_path  = _resolve_path("POINTSX_SEG_MODEL",  "runs/seg/best.pt")
+    pose_custom = _resolve_path("POINTSX_POSE_MODEL_CUSTOM", "models/pose-cus.pt")
+    pose_coco = _resolve_path("POINTSX_POSE_MODEL_COCO", "models/yolo26-pose.pt")
+    legacy_pose = os.environ.get("POINTSX_POSE_MODEL")
+    if legacy_pose is not None and str(legacy_pose).strip():
+        pose_custom = str(legacy_pose).strip()
+        logger.info("POINTSX_POSE_MODEL set — using as custom pose path (legacy override).")
+    seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
     # Auto-load the regressor when present; users can override via env var or
     # disable it explicitly with POINTSX_REGRESSION_MODEL="" (empty string).
-    reg_default = "models/circumference_regressor.pt"
+    reg_default = "models/reg.pt"
     reg_raw = os.environ.get("POINTSX_REGRESSION_MODEL")
     if reg_raw is None:
         reg_path = reg_default if Path(reg_default).exists() else None
@@ -302,14 +312,26 @@ async def lifespan(app: FastAPI):
         from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
 
         app.state.pipeline = WebuiPipeline(
-            pose_model_path=pose_path,
+            pose_custom_path=pose_custom,
+            pose_coco_path=pose_coco,
             seg_model_path=seg_path,
             regression_model_path=reg_path,
             device=device,
         )
+        avail = app.state.pipeline.models.available_pose_backends()
+        if not avail:
+            app.state.pipeline = None
+            raise RuntimeError(
+                "No pose weights loaded: need at least one of custom (.pt) or COCO (.pt) checkpoints."
+            )
         logger.info(
-            "Pipeline loaded — pose=%s seg=%s regressor=%s device=%s",
-            pose_path, seg_path, reg_path or "<ellipse-fallback>", device,
+            "Pipeline loaded — pose_custom=%s pose_coco=%s pose_backends=%s seg=%s regressor=%s device=%s",
+            pose_custom,
+            pose_coco,
+            sorted(avail),
+            seg_path,
+            reg_path or "<ellipse-fallback>",
+            device,
         )
     except Exception as exc:  # noqa: BLE001 — we want the server to keep running
         app.state.pipeline_load_error = str(exc)
@@ -382,6 +404,7 @@ async def measure(
     request: Request,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
+    pose_backend: Literal["custom", "coco"] = Form("custom"),
     front: UploadFile = File(...),
     side: UploadFile = File(...),
 ) -> MeasurementEnvelope:
@@ -403,11 +426,22 @@ async def measure(
             ),
         )
 
+    avail = pipeline.models.available_pose_backends()
+    if pose_backend not in avail:
+        need = "pose-cus.pt (16 точок)" if pose_backend == "custom" else "yolo26-pose.pt (COCO 17)"
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Обрана модель пози ({pose_backend}) недоступна: відсутній файл ваг для {need}. "
+                "Перевірте POINTSX_POSE_MODEL_CUSTOM / POINTSX_POSE_MODEL_COCO або оберіть інший режим."
+            ),
+        )
+
     front_img = await _validate_and_decode(front, "front")
     side_img  = await _validate_and_decode(side,  "side")
 
     try:
-        result = pipeline.measure(front_img, side_img, height_cm)
+        result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,

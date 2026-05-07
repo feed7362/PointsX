@@ -16,8 +16,23 @@ def main():
     parser.add_argument("--front", required=True, help="Path to front-view photo")
     parser.add_argument("--side", required=True, help="Path to side/profile-view photo")
     parser.add_argument("--height", required=True, type=float, help="Known height in cm")
-    parser.add_argument("--pose-model", default="models/yolo11n-pose.pt", help="Path to pose model")
-    parser.add_argument("--seg-model", default="models/yolo11n-seg.pt", help="Path to segmentation model")
+    parser.add_argument(
+        "--pose-backend",
+        choices=("custom", "coco"),
+        default="custom",
+        help="Pose model: custom 16-point (LV-MHP) or COCO-17 (converted to 16)",
+    )
+    parser.add_argument(
+        "--pose-model-custom",
+        default="models/pose-cus.pt",
+        help="Weights for native 16-keypoint pose (used when --pose-backend=custom)",
+    )
+    parser.add_argument(
+        "--pose-model-coco",
+        default="models/yolo26-pose.pt",
+        help="Weights for COCO 17-keypoint pose (used when --pose-backend=coco)",
+    )
+    parser.add_argument("--seg-model", default="models/yolo12l-person-seg-extended.pt", help="Path to segmentation model")
     parser.add_argument("--regression-model", default=None, help="Path to circumference regression model")
     parser.add_argument("--device", default="auto", help="Inference device: auto, cpu, cuda")
     parser.add_argument(
@@ -34,13 +49,14 @@ def main():
     )
 
     pipeline = MeasurementPipeline(
-        pose_model_path=args.pose_model,
+        pose_custom_path=args.pose_model_custom,
+        pose_coco_path=args.pose_model_coco,
         seg_model_path=args.seg_model,
         regression_model_path=args.regression_model,
         device=args.device,
     )
 
-    result = pipeline(args.front, args.side, args.height)
+    result = pipeline(args.front, args.side, args.height, pose_backend=args.pose_backend)
 
     if args.output == "json":
         data = result.to_dict()
