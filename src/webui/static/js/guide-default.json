@@ -5,16 +5,16 @@
     "y": 0.085
   },
   "headAnchorProfile": {
-    "x": 0.49946,
-    "y": 0.02
+    "x": 0.558,
+    "y": 0.091
   },
   "footAnchorFront": {
     "x": 0.5,
     "y": 0.923
   },
   "footAnchorProfile": {
-    "x": 0.520708,
-    "y": 1.0
+    "x": 0.484,
+    "y": 0.95
   },
   "guideFrame": {
     "sidePadRatio": 0.08,
