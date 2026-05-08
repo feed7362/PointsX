@@ -42,13 +42,17 @@ import numpy as np
 from pointsx.circumference import estimate_circumferences
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements
-from webui.envelope import CANONICAL_MEASUREMENTS, body_to_envelope
+from webui.envelope import CANONICAL_MEASUREMENTS, DISPLAY_MEASUREMENT_IDS, body_to_envelope
 from webui.inference import InferenceResult, WebuiPipeline
 
 logger = logging.getLogger(__name__)
 
+# All canonical IDs (used to recognise GT columns from the subjects CSV) +
+# the display subset (what the eval actually surfaces to the user, mirroring
+# the webui results table).
 CANONICAL_IDS = [mid for mid, _label, _src in CANONICAL_MEASUREMENTS]
 LABEL_BY_ID = {mid: label for mid, label, _src in CANONICAL_MEASUREMENTS}
+DISPLAY_IDS = list(DISPLAY_MEASUREMENT_IDS)
 
 
 @dataclass
@@ -72,7 +76,7 @@ class Combo:
 @dataclass
 class ComboStats:
     label: str
-    errors: dict[str, list[float]] = field(default_factory=lambda: {m: [] for m in CANONICAL_IDS})
+    errors: dict[str, list[float]] = field(default_factory=lambda: {m: [] for m in DISPLAY_IDS})
     n_failed: int = 0
 
 
@@ -123,7 +127,8 @@ def _print_subject_table(subject: SubjectRow, preds: dict[str, float]) -> None:
     """Webui-style table: id label (UK) → predicted vs GT vs error."""
     print(f"\n── {subject.subject_id} (sex={subject.sex}, h={subject.height_cm} cm) ──")
     print(f"{'Показник':<58} {'Прогноз':>10} {'GT':>10} {'Δ см':>10}")
-    for mid, label_uk, _src in CANONICAL_MEASUREMENTS:
+    for mid in DISPLAY_IDS:
+        label_uk = LABEL_BY_ID[mid]
         pv = preds.get(mid)
         gv = subject.gt.get(mid)
         pred_str = f"{pv:>10.1f}" if pv is not None else f"{'—':>10}"
@@ -138,7 +143,7 @@ def _print_subject_table(subject: SubjectRow, preds: dict[str, float]) -> None:
 def _print_combo_summary(stats: ComboStats, n_subjects: int) -> None:
     print(f"\n=== {stats.label} — per-measurement error ===")
     print(f"{'Показник':<58} {'n':>4} {'MAE':>8} {'RMSE':>8} {'bias':>9}")
-    for mid in CANONICAL_IDS:
+    for mid in DISPLAY_IDS:
         vals = stats.errors[mid]
         label = LABEL_BY_ID[mid]
         if not vals:
@@ -180,7 +185,7 @@ def _print_grid_ranking(combo_stats: list[ComboStats]) -> None:
     # Per-measurement winner
     print("\n=== Per-measurement winner (lowest MAE) ===")
     print(f"{'Показник':<58} {'best combo':<32} {'MAE':>8}")
-    for mid in CANONICAL_IDS:
+    for mid in DISPLAY_IDS:
         best_label, best_mae = None, float("inf")
         for s in combo_stats:
             vals = s.errors[mid]
@@ -202,7 +207,7 @@ def _write_grid_report(output: Path, combo_stats: list[ComboStats]) -> None:
         w = csv.writer(f)
         w.writerow(["combo", "measurement", "n", "mae_cm", "rmse_cm", "bias_cm"])
         for s in combo_stats:
-            for mid in CANONICAL_IDS:
+            for mid in DISPLAY_IDS:
                 vals = s.errors[mid]
                 if not vals:
                     w.writerow([s.label, mid, 0, "", "", ""])
@@ -367,9 +372,13 @@ def main() -> None:
             if not args.grid:
                 _print_subject_table(subject, preds)
 
-            for mid, gt_cm in subject.gt.items():
+            # Only score against display IDs — hidden tailoring-only IDs in
+            # CANONICAL_MEASUREMENTS would skew the aggregate without ever
+            # appearing in the user-facing tables.
+            for mid in DISPLAY_IDS:
+                gt_cm = subject.gt.get(mid)
                 pred_cm = preds.get(mid)
-                if pred_cm is None:
+                if gt_cm is None or pred_cm is None:
                     continue
                 combo_stats[combo.label].errors[mid].append(pred_cm - gt_cm)
 

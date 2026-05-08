@@ -44,6 +44,28 @@ CANONICAL_MEASUREMENTS: list[tuple[str, str, str]] = [
     ("ankle_circumference",          "Обхват щиколотки",                                     "fused"),
 ]
 
+# IDs surfaced in user-facing displays (eval table, webui results panel). The
+# hidden remainder of CANONICAL_MEASUREMENTS is still computed and returned in
+# the API response because the pattern engine / size charts consume it, but
+# these are the only ones the user reads on screen.
+#
+# Order matches the webui's MEASUREMENT_MANUAL_ORDER in tailoring.js
+# (after HIDDEN_MEASUREMENT_IDS is applied) — keep them in lockstep when
+# editing one or the other.
+DISPLAY_MEASUREMENT_IDS: list[str] = [
+    "chest_circumference",
+    "waist_circumference",
+    "hip_circumference",
+    "thigh_circumference",
+    "neck_base_height",
+    "chest_width_front",
+    "shoulder_slope_width",
+    "arm_length_shoulder_to_wrist",
+    "leg_length_outer_seam",
+    "leg_length_inner_seam",
+    "back_length_to_waist",
+]
+
 # Default per-id confidence (used when BodyMeasurements.confidence is empty)
 _DEFAULT_CONFIDENCE: dict[str, float] = {
     # Direct circumferences from regressor / ellipse — high
