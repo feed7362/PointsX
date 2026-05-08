@@ -1,0 +1,3 @@
+subject_id,front,side,height_cm,sex,chest_circumference,waist_circumference,hip_circumference,neck_circumference,thigh_circumference,calf_circumference,wrist_circumference,arm_length_shoulder_to_wrist,leg_length_inner_seam,leg_length_outer_seam
+alice,photos/alice_front.jpg,photos/alice_side.jpg,167,female,92,72,98,33,56,36,15,55,76,102
+bob,photos/bob_front.jpg,photos/bob_side.jpg,181,male,104,86,102,40,60,40,17,62,82,109

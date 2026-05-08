@@ -31,6 +31,7 @@ dependencies = [
 [project.scripts]
 pointsx = "pointsx.cli:main"
 pointsx-web = "webui.__main__:main"
+pointsx-eval = "pointsx.eval:main"
 
 [build-system]
 requires = ["hatchling"]
