@@ -38,33 +38,67 @@ def _adjust_custom_keypoint_confidence(conf: np.ndarray) -> np.ndarray:
 PoseBackend = Literal["custom", "coco"]
 
 
-def _ensure_yolo_weights(path: Path) -> Path | None:
-    """If `path` doesn't exist, try Ultralytics' built-in auto-download by basename.
+# Ultralytics-published pose checkpoints (release assets, auto-downloadable
+# by passing the bare filename to YOLO()). Tried in order if the user's
+# requested filename isn't itself a known asset. yolo11x-pose first because
+# it's the strongest COCO pose model that still loads on a single GPU.
+_FALLBACK_POSE_ASSETS = (
+    "yolo11x-pose.pt",
+    "yolo11l-pose.pt",
+    "yolo11m-pose.pt",
+    "yolo11s-pose.pt",
+    "yolo11n-pose.pt",
+)
 
-    Ultralytics' YOLO() resolves a bare filename (e.g. ``yolo26-pose.pt``)
-    against its release assets and downloads to cwd on first use. We invoke it
-    that way, then move the resulting file into `path` so subsequent runs are
-    offline. Returns the final path if the file ends up on disk, else None.
+
+def _try_ultralytics_download(name: str) -> Path | None:
+    """Pass a bare filename to YOLO() to trigger Ultralytics' built-in download.
+
+    Returns the on-disk path of the downloaded weights, or None on failure.
     """
-    if path.is_file():
-        return path
-    name = path.name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Auto-downloading YOLO weights %s via Ultralytics…", name)
     try:
-        YOLO(name)  # triggers download into cwd (or HF cache, depending on version)
+        YOLO(name)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Auto-download of %s failed: %s", name, exc)
         return None
-
     cwd_candidate = Path.cwd() / name
-    if cwd_candidate.is_file() and cwd_candidate.resolve() != path.resolve():
+    if cwd_candidate.is_file():
+        return cwd_candidate
+    logger.warning("Ultralytics returned without writing %s", name)
+    return None
+
+
+def _ensure_yolo_weights(path: Path) -> Path | None:
+    """If `path` doesn't exist, fetch via Ultralytics auto-download.
+
+    First tries the requested basename (works if the user named the file after
+    a real Ultralytics release asset). Falls back to a list of known pose
+    checkpoints — when one downloads, it's moved/renamed to `path` so the
+    cached weights match what the rest of the system expects.
+    """
+    if path.is_file():
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    candidates: list[str] = [path.name]
+    for fb in _FALLBACK_POSE_ASSETS:
+        if fb not in candidates:
+            candidates.append(fb)
+
+    for name in candidates:
+        logger.info("Auto-downloading YOLO weights %s via Ultralytics…", name)
+        downloaded = _try_ultralytics_download(name)
+        if downloaded is None:
+            continue
         try:
-            cwd_candidate.replace(path)
+            if downloaded.resolve() != path.resolve():
+                downloaded.replace(path)
+            logger.info("Saved weights to %s (origin=%s)", path, name)
+            return path
         except OSError as exc:
-            logger.warning("Could not move %s to %s: %s", cwd_candidate, path, exc)
-            return cwd_candidate if cwd_candidate.is_file() else None
-    return path if path.is_file() else None
+            logger.warning("Could not move %s to %s: %s", downloaded, path, exc)
+            return downloaded
+    return None
 
 
 class BodyModels:
