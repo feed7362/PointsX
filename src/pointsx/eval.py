@@ -425,6 +425,7 @@ def _evaluate_combo_for_subject(
     combo: Combo,
     regressor,
     pose_backend_used: str,
+    sex_offsets_override: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, float]:
     """Run the cheap part (circumferences + envelope) for a single combo."""
     bm = copy.deepcopy(bm_template)
@@ -440,8 +441,49 @@ def _evaluate_combo_for_subject(
         result, subject_height_cm=subject.height_cm, sex=subject.sex,
         request_id=f"eval-{subject.subject_id}",
         apply_sex_offsets=combo.apply_sex_offsets,
+        sex_offsets_override=sex_offsets_override,
     )
     return _envelope_predictions(envelope)
+
+
+# ── Offset fitting (median bias minimisation) ──────────────────────────────
+
+def _fit_median_offsets(rows: list[ErrorRow]) -> dict[str, dict[str, float]]:
+    """For each (sex, mid) with observations, return -median(error) as the
+    additive offset that minimises L1 (MAE) when applied to predicted_cm.
+
+    Skip cells with no observations (no offset learned).
+    """
+    by_cell: dict[tuple[str, str], list[float]] = {}
+    for r in rows:
+        by_cell.setdefault((r.sex, r.measurement_id), []).append(r.error_cm)
+    fitted: dict[str, dict[str, float]] = {}
+    for (sex, mid), errs in by_cell.items():
+        med = float(np.median(errs))
+        # Round to 0.5 cm — nothing in real-world bias is more precise than that
+        # given the input noise, and round numbers are easier to inspect.
+        offset = -round(med * 2) / 2
+        if abs(offset) < 0.25:
+            continue  # keep the dict tidy; sub-quarter-cm offsets aren't meaningful
+        fitted.setdefault(sex, {})[mid] = offset
+    return fitted
+
+
+def _print_fitted_offsets(fitted: dict[str, dict[str, float]]) -> None:
+    print("\n=== Fitted bias offsets (paste into envelope.py "
+          "_SEX_CIRCUMFERENCE_OFFSETS_CM) ===")
+    if not fitted:
+        print("  (no cells had enough data to fit)")
+        return
+    print("_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {")
+    for sex in sorted(fitted):
+        entries = fitted[sex]
+        print(f'    "{sex}": {{')
+        for mid in DISPLAY_IDS:
+            if mid in entries:
+                print(f'        "{mid}": {entries[mid]:+.1f},')
+        print("    },")
+    print("}")
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
@@ -473,6 +515,11 @@ def main() -> None:
                         help="Single-combo mode: skip _SEX_CIRCUMFERENCE_OFFSETS_CM.")
     parser.add_argument("--grid", action="store_true",
                         help="Run all combinations of pose × regressor × sex-offsets and rank them.")
+    parser.add_argument("--fit-offsets", action="store_true",
+                        help="Fit per-(sex, measurement) bias offsets that minimise L1 error "
+                             "(median of pred-gt). Forces single-combo mode with sex offsets OFF "
+                             "for the first pass, prints a paste-ready dict, then re-runs with "
+                             "the fitted offsets to show projected MAE.")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--output", type=Path, default=Path("runs/eval/report.csv"))
     args = parser.parse_args()
@@ -494,85 +541,101 @@ def main() -> None:
     if not regressor_loaded:
         logger.warning("Regressor not loaded — Ramanujan fallback only")
 
+    # --fit-offsets is a single-combo, two-pass workflow. The first pass runs
+    # with offsets OFF to collect raw bias; the second pass replays with the
+    # fitted offsets so the user sees the projected MAE.
+    if args.fit_offsets and args.grid:
+        sys.exit("--fit-offsets is incompatible with --grid (it implies single-combo).")
+
     combos = (_build_grid(available, regressor_loaded) if args.grid else [Combo(
         label=f"{args.pose_backend}+{'rama' if args.no_regressor or not regressor_loaded else 'reg'}"
-              f"+{'noff' if args.no_sex_offsets else 'off'}",
+              f"+{'noff' if args.no_sex_offsets or args.fit_offsets else 'off'}",
         pose_backend=args.pose_backend,
         use_regressor=(not args.no_regressor) and regressor_loaded,
-        apply_sex_offsets=not args.no_sex_offsets,
+        apply_sex_offsets=(not args.no_sex_offsets) and (not args.fit_offsets),
     )])
     if args.pose_backend not in available and not args.grid:
         sys.exit(f"Pose backend {args.pose_backend!r} unavailable. Loaded: {sorted(available)}")
 
-    # Cache per-(subject, pose_backend) the expensive pose+seg+extract output,
-    # then reuse it across all combos that share the same pose backend.
+    # Cache per-(subject, pose_backend) the expensive pose+seg+extract output
+    # so we can replay cheap combos and a second offset-fitting pass without
+    # re-running pose+seg+extract.
     needed_backends = sorted({c.pose_backend for c in combos})
-    combo_stats = {c.label: ComboStats(label=c.label) for c in combos}
-    error_rows: list[ErrorRow] = []  # flat log for per-subject / per-sex / per-category pivots
-
+    extracts_by_subject: dict[str, dict[str, Any]] = {}
     for subject in subjects:
         if not subject.front.is_file() or not subject.side.is_file():
             logger.warning("%s: missing image", subject.subject_id)
-            for s in combo_stats.values():
-                s.n_failed += 1
+            extracts_by_subject[subject.subject_id] = {}
             continue
         front_img = cv2.imread(str(subject.front), cv2.IMREAD_COLOR)
         side_img = cv2.imread(str(subject.side), cv2.IMREAD_COLOR)
         if front_img is None or side_img is None:
             logger.warning("%s: cv2.imread None", subject.subject_id)
-            for s in combo_stats.values():
-                s.n_failed += 1
+            extracts_by_subject[subject.subject_id] = {}
             continue
-
-        per_backend_extract: dict[str, Any] = {}
+        per_backend: dict[str, Any] = {}
         for pb in needed_backends:
             try:
-                res = pipeline.measure(front_img, side_img,
-                                       subject.height_cm, pose_backend=pb)
-                per_backend_extract[pb] = res
+                per_backend[pb] = pipeline.measure(
+                    front_img, side_img, subject.height_cm, pose_backend=pb,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("%s [%s]: pipeline failed: %s",
                                subject.subject_id, pb, exc)
-                per_backend_extract[pb] = None
+                per_backend[pb] = None
+        extracts_by_subject[subject.subject_id] = per_backend
 
-        for combo in combos:
-            res = per_backend_extract.get(combo.pose_backend)
-            if res is None:
-                combo_stats[combo.label].n_failed += 1
+    def _run_combos(
+        combos: list[Combo],
+        sex_offsets_override: dict[str, dict[str, float]] | None = None,
+        emit_per_subject_table: bool = False,
+    ) -> tuple[dict[str, ComboStats], list[ErrorRow]]:
+        combo_stats = {c.label: ComboStats(label=c.label) for c in combos}
+        error_rows: list[ErrorRow] = []
+        for subject in subjects:
+            extracts = extracts_by_subject.get(subject.subject_id) or {}
+            if not extracts:
+                for s in combo_stats.values():
+                    s.n_failed += 1
                 continue
-            try:
-                preds = _evaluate_combo_for_subject(
-                    subject, res.body, res.front_kp, res.side_kp,
-                    res.front_mask, res.side_mask, res.cal,
-                    combo, pipeline.regressor, pose_backend_used=combo.pose_backend,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("%s [%s]: combo eval failed: %s",
-                               subject.subject_id, combo.label, exc)
-                combo_stats[combo.label].n_failed += 1
-                continue
-
-            # Single-combo mode: also emit the webui-style table.
-            if not args.grid:
-                _print_subject_table(subject, preds)
-
-            # Only score against display IDs — hidden tailoring-only IDs in
-            # CANONICAL_MEASUREMENTS would skew the aggregate without ever
-            # appearing in the user-facing tables.
-            for mid in DISPLAY_IDS:
-                gt_cm = subject.gt.get(mid)
-                pred_cm = preds.get(mid)
-                if gt_cm is None or pred_cm is None:
+            for combo in combos:
+                res = extracts.get(combo.pose_backend)
+                if res is None:
+                    combo_stats[combo.label].n_failed += 1
                     continue
-                err = pred_cm - gt_cm
-                combo_stats[combo.label].errors[mid].append(err)
-                error_rows.append(ErrorRow(
-                    combo=combo.label, subject_id=subject.subject_id,
-                    sex=subject.sex, measurement_id=mid,
-                    predicted_cm=round(pred_cm, 2), gt_cm=round(gt_cm, 2),
-                    error_cm=round(err, 2),
-                ))
+                try:
+                    preds = _evaluate_combo_for_subject(
+                        subject, res.body, res.front_kp, res.side_kp,
+                        res.front_mask, res.side_mask, res.cal,
+                        combo, pipeline.regressor,
+                        pose_backend_used=combo.pose_backend,
+                        sex_offsets_override=sex_offsets_override,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("%s [%s]: combo eval failed: %s",
+                                   subject.subject_id, combo.label, exc)
+                    combo_stats[combo.label].n_failed += 1
+                    continue
+                if emit_per_subject_table:
+                    _print_subject_table(subject, preds)
+                for mid in DISPLAY_IDS:
+                    gt_cm = subject.gt.get(mid)
+                    pred_cm = preds.get(mid)
+                    if gt_cm is None or pred_cm is None:
+                        continue
+                    err = pred_cm - gt_cm
+                    combo_stats[combo.label].errors[mid].append(err)
+                    error_rows.append(ErrorRow(
+                        combo=combo.label, subject_id=subject.subject_id,
+                        sex=subject.sex, measurement_id=mid,
+                        predicted_cm=round(pred_cm, 2), gt_cm=round(gt_cm, 2),
+                        error_cm=round(err, 2),
+                    ))
+        return combo_stats, error_rows
 
+    combo_stats, error_rows = _run_combos(
+        combos, emit_per_subject_table=not args.grid and not args.fit_offsets,
+    )
     stats_list = list(combo_stats.values())
 
     if args.grid:
@@ -595,6 +658,8 @@ def main() -> None:
         logger.info("Wrote grid report to %s", args.output)
     else:
         s = stats_list[0]
+        if args.fit_offsets:
+            print(f"\n=== Pass 1 ({s.label}, sex offsets OFF) — raw bias ===")
         _print_combo_summary(s, len(subjects))
         _print_per_subject(s.label, error_rows)
         _print_per_sex(s.label, error_rows)
@@ -603,6 +668,37 @@ def main() -> None:
         if agg["n"]:
             print(f"\nOverall: MAE={agg['mae']:.2f} cm  RMSE={agg['rmse']:.2f} cm  "
                   f"observations={agg['n']}  failed={s.n_failed}/{len(subjects)}")
+
+        if args.fit_offsets:
+            fitted = _fit_median_offsets(error_rows)
+            _print_fitted_offsets(fitted)
+
+            # Replay with fitted offsets — re-enable apply_sex_offsets so the
+            # override path is taken.
+            replay_combos = [Combo(
+                label=f"{s.label.replace('+noff', '+fitted')}",
+                pose_backend=combos[0].pose_backend,
+                use_regressor=combos[0].use_regressor,
+                apply_sex_offsets=True,
+            )]
+            r_stats, r_rows = _run_combos(
+                replay_combos, sex_offsets_override=fitted,
+            )
+            r_list = list(r_stats.values())
+            r_s = r_list[0]
+            print(f"\n=== Pass 2 ({r_s.label}, fitted offsets applied) ===")
+            _print_combo_summary(r_s, len(subjects))
+            _print_per_sex(r_s.label, r_rows)
+            _print_per_category(r_s.label, r_rows)
+            r_agg = _aggregate_stats(r_s)
+            if r_agg["n"]:
+                print(f"\nProjected MAE: {r_agg['mae']:.2f} cm  "
+                      f"(was {agg['mae']:.2f} cm — improvement "
+                      f"{agg['mae'] - r_agg['mae']:+.2f} cm)")
+
+            stats_list = stats_list + r_list
+            error_rows = error_rows + r_rows
+
         _write_grid_report(args.output, stats_list, error_rows)
         logger.info("Wrote report to %s", args.output)
 
