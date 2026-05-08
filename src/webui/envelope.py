@@ -214,6 +214,18 @@ def _kp_to_midpoint_cm(
     return float(np.linalg.norm(p - m)) / px_per_cm
 
 
+def _avg_ankle_y(kp: Keypoints) -> float | None:
+    """Average y-pixel of left/right ankles (whichever pass the confidence gate)."""
+    ys: list[float] = []
+    if is_valid(kp.confidence, KP.LEFT_ANKLE):
+        ys.append(float(kp.points[int(KP.LEFT_ANKLE), 1]))
+    if is_valid(kp.confidence, KP.RIGHT_ANKLE):
+        ys.append(float(kp.points[int(KP.RIGHT_ANKLE), 1]))
+    if not ys:
+        return None
+    return sum(ys) / len(ys)
+
+
 # Maximum gap between the ankle keypoint and the "floor" we'll trust, expressed
 # as a fraction of subject height. Anatomical foot height is ~4 % of total
 # height; we allow a 6 % cap to leave room for stance / camera tilt while still
