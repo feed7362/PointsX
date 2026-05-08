@@ -446,42 +446,62 @@ def _evaluate_combo_for_subject(
     return _envelope_predictions(envelope)
 
 
-# ── Offset fitting (median bias minimisation) ──────────────────────────────
+# ── Offset fitting (multiplicative percent bias minimisation) ──────────────
 
-def _fit_median_offsets(rows: list[ErrorRow]) -> dict[str, dict[str, float]]:
-    """For each (sex, mid) with observations, return -median(error) as the
-    additive offset that minimises L1 (MAE) when applied to predicted_cm.
+# Only the four core circumferences participate. Lengths/widths are treated as
+# pipeline bugs to fix in code, not bias to scale away.
+FIT_TARGET_IDS: list[str] = [
+    "chest_circumference",
+    "waist_circumference",
+    "hip_circumference",
+    "thigh_circumference",
+]
 
-    Skip cells with no observations (no offset learned).
+
+def _fit_median_scales_pct(rows: list[ErrorRow]) -> dict[str, dict[str, float]]:
+    """For each (sex, mid) in FIT_TARGET_IDS, return the L1-optimal multiplicative
+    correction expressed as a percentage.
+
+    With per-observation ratio r_i = gt_i / pred_i, the L1-optimal scale s
+    minimising Σ |s·pred − gt| is the (pred-weighted) median of r_i. With small
+    n and similar pred magnitudes per cell, the un-weighted median is a fine
+    approximation. The returned percent satisfies ``value *= 1 + pct/100``.
     """
-    by_cell: dict[tuple[str, str], list[float]] = {}
+    by_cell: dict[tuple[str, str], list[tuple[float, float]]] = {}
     for r in rows:
-        by_cell.setdefault((r.sex, r.measurement_id), []).append(r.error_cm)
+        if r.measurement_id not in FIT_TARGET_IDS:
+            continue
+        by_cell.setdefault((r.sex, r.measurement_id), []).append(
+            (r.predicted_cm, r.gt_cm)
+        )
     fitted: dict[str, dict[str, float]] = {}
-    for (sex, mid), errs in by_cell.items():
-        med = float(np.median(errs))
-        # Round to 0.5 cm — nothing in real-world bias is more precise than that
-        # given the input noise, and round numbers are easier to inspect.
-        offset = -round(med * 2) / 2
-        if abs(offset) < 0.25:
-            continue  # keep the dict tidy; sub-quarter-cm offsets aren't meaningful
-        fitted.setdefault(sex, {})[mid] = offset
+    for (sex, mid), pairs in by_cell.items():
+        ratios = [gt / pred for pred, gt in pairs if pred > 0]
+        if not ratios:
+            continue
+        scale = float(np.median(ratios))
+        pct = (scale - 1.0) * 100.0
+        # Round to 0.5 % — bias finer than that is below pipeline noise.
+        pct = round(pct * 2) / 2
+        if abs(pct) < 0.25:
+            continue
+        fitted.setdefault(sex, {})[mid] = pct
     return fitted
 
 
 def _print_fitted_offsets(fitted: dict[str, dict[str, float]]) -> None:
-    print("\n=== Fitted bias offsets (paste into envelope.py "
-          "_SEX_CIRCUMFERENCE_OFFSETS_CM) ===")
+    print("\n=== Fitted percent scales (paste into envelope.py "
+          "_SEX_CIRCUMFERENCE_SCALES_PCT) ===")
     if not fitted:
         print("  (no cells had enough data to fit)")
         return
-    print("_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {")
+    print("_SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {")
     for sex in sorted(fitted):
         entries = fitted[sex]
         print(f'    "{sex}": {{')
-        for mid in DISPLAY_IDS:
+        for mid in FIT_TARGET_IDS:
             if mid in entries:
-                print(f'        "{mid}": {entries[mid]:+.1f},')
+                print(f'        "{mid}": {entries[mid]:+.1f},  # %')
         print("    },")
     print("}")
 
@@ -670,7 +690,7 @@ def main() -> None:
                   f"observations={agg['n']}  failed={s.n_failed}/{len(subjects)}")
 
         if args.fit_offsets:
-            fitted = _fit_median_offsets(error_rows)
+            fitted = _fit_median_scales_pct(error_rows)
             _print_fitted_offsets(fitted)
 
             # Replay with fitted offsets — re-enable apply_sex_offsets so the

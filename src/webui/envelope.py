@@ -92,25 +92,34 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
     "ankle_circumference":          0.40,
 }
 
+# Per-sex multiplicative bias correction for the four core circumferences.
+# Values are PERCENT scale-factors applied as ``value *= 1 + pct/100``. They
+# only apply to these four IDs (chest/waist/hip/thigh) — other measurements
+# are not bias-corrected here.
+#
+# Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed
+# dict back here when you have new ground-truth subjects. Defaults are seeded
+# from a small (n=3) eval set, so expect them to update.
+_SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
+    "female": {},
+    "male": {},
+    "other": {},
+}
+
+# Backwards-compat alias retained as an empty dict — older code paths that
+# might still reference _SEX_CIRCUMFERENCE_OFFSETS_CM should be updated, but
+# until then they get a no-op.
 _SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {
-    "female": {
-        "chest_circumference": -4.0,
-        "waist_circumference": -19.0,
-        "hip_circumference": -6.0,
-        "thigh_circumference": -12.0,
-    },
-    "other": {
-        "chest_circumference": -4.0,
-        "waist_circumference": -19.0,
-        "hip_circumference": -6.0,
-        "thigh_circumference": -12.0,
-    },
-    "male": {
-        "chest_circumference": -2.0,
-        "waist_circumference": -14.0,
-        "hip_circumference": -15.0,
-        "thigh_circumference": -16.0,
-    },
+    "female": {}, "male": {}, "other": {},
+}
+
+# Set of IDs eligible for the multiplicative bias correction. Anything outside
+# this set is left untouched by the sex-scale logic.
+_SEX_SCALE_TARGET_IDS: set[str] = {
+    "chest_circumference",
+    "waist_circumference",
+    "hip_circumference",
+    "thigh_circumference",
 }
 
 # Anthropometric ratios used when a measurement isn't directly observable
@@ -324,11 +333,12 @@ def body_to_envelope(
     """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult.
 
     Args:
-        apply_sex_offsets: when False, skip the per-sex circumference bias
-            correction. Useful for evaluation runs that want raw model output.
-        sex_offsets_override: when provided (and apply_sex_offsets is True),
-            substitute this dict for the module-level _SEX_CIRCUMFERENCE_OFFSETS_CM
-            so callers can A/B-test alternative offset tables.
+        apply_sex_offsets: when False, skip the per-sex multiplicative bias
+            correction (the historic name is kept; today this controls
+            _SEX_CIRCUMFERENCE_SCALES_PCT, not the deprecated additive table).
+        sex_offsets_override: percent-scale dict ``{sex: {mid: pct}}`` that
+            substitutes _SEX_CIRCUMFERENCE_SCALES_PCT for this call. Used by
+            ``pointsx-eval --fit-offsets`` to A/B-test newly fitted scales.
     """
     (
         MeasurementEnvelope,
@@ -342,10 +352,10 @@ def body_to_envelope(
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
     if apply_sex_offsets:
-        offsets_table = sex_offsets_override or _SEX_CIRCUMFERENCE_OFFSETS_CM
-        sex_offsets = offsets_table.get(sex, {})
+        scales_table = sex_offsets_override or _SEX_CIRCUMFERENCE_SCALES_PCT
+        sex_scales_pct = scales_table.get(sex, {})
     else:
-        sex_offsets = {}
+        sex_scales_pct = {}
 
     items = []
     out_of_range: list[str] = []
@@ -356,8 +366,9 @@ def body_to_envelope(
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.
             continue
-        if mid in sex_offsets:
-            value = max(0.0, float(value) + sex_offsets[mid])
+        # Apply per-sex multiplicative bias correction (whitelisted IDs only).
+        if mid in _SEX_SCALE_TARGET_IDS and mid in sex_scales_pct:
+            value = max(0.0, float(value) * (1.0 + float(sex_scales_pct[mid]) / 100.0))
 
         # Sanity-range gate: never drop. Tag with `out_of_range` so callers and
         # the UI can mark it visually, but the value is still surfaced. Pydantic
