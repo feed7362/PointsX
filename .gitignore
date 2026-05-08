@@ -15,4 +15,6 @@ data/
 
 /.cursor
 /.claude/
+/assets/
 yolo12l-person-seg-extended.pt
+/dataset

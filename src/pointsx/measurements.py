@@ -176,7 +176,7 @@ def extract_measurements(
         h_s, w_s = sm.shape
         pelvis_y = float(s_pts[KP.PELVIS, 1])
         thorax_y = float(s_pts[KP.THORAX, 1])
-        y_start_f = pelvis_y + 0.20 * (thorax_y - pelvis_y)
+        y_start_f = pelvis_y + 0.25 * (thorax_y - pelvis_y)
         y_start = int(np.clip(int(round(y_start_f)), 0, h_s - 1))
         torso_x = float(s_pts[KP.PELVIS, 0])
 
@@ -184,11 +184,10 @@ def extract_measurements(
         ys_fg = np.where(sm.any(axis=1))[0]
         if len(cols_start) >= 2 and len(ys_fg) > 0:
             y_end = int(ys_fg[-1])
-            cols_end = np.where(sm[y_end])[0]
-            if len(cols_end) >= 2:
-                x_start = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
-                x_end = int(cols_end[0] if abs(cols_end[0] - torso_x) > abs(cols_end[-1] - torso_x) else cols_end[-1])
-                m.leg_length_outer_cm = float(np.hypot(x_end - x_start, y_end - y_start)) / ps
+            # Outer leg as a vertical segment: one x chosen at anchor row, same x at sole line (y only differs).
+            x_line = cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1]
+            x_line = int(np.clip(int(x_line), 0, w_s - 1))
+            m.leg_length_outer_cm = float(abs(y_end - y_start)) / ps
 
     # ── Leg length inner (front): single vertical line with static x ──
     if is_valid(f_conf, KP.PELVIS):

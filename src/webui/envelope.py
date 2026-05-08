@@ -44,6 +44,28 @@ CANONICAL_MEASUREMENTS: list[tuple[str, str, str]] = [
     ("ankle_circumference",          "Обхват щиколотки",                                     "fused"),
 ]
 
+# IDs surfaced in user-facing displays (eval table, webui results panel). The
+# hidden remainder of CANONICAL_MEASUREMENTS is still computed and returned in
+# the API response because the pattern engine / size charts consume it, but
+# these are the only ones the user reads on screen.
+#
+# Order matches the webui's MEASUREMENT_MANUAL_ORDER in tailoring.js
+# (after HIDDEN_MEASUREMENT_IDS is applied) — keep them in lockstep when
+# editing one or the other.
+DISPLAY_MEASUREMENT_IDS: list[str] = [
+    "chest_circumference",
+    "waist_circumference",
+    "hip_circumference",
+    "thigh_circumference",
+    "neck_base_height",
+    "chest_width_front",
+    "shoulder_slope_width",
+    "arm_length_shoulder_to_wrist",
+    "leg_length_outer_seam",
+    "leg_length_inner_seam",
+    "back_length_to_waist",
+]
+
 # Default per-id confidence (used when BodyMeasurements.confidence is empty)
 _DEFAULT_CONFIDENCE: dict[str, float] = {
     # Direct circumferences from regressor / ellipse — high
@@ -70,30 +92,81 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
     "ankle_circumference":          0.40,
 }
 
-_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {
+# Per-sex multiplicative bias correction for the four core circumferences.
+# Values are PERCENT scale-factors applied as ``value *= 1 + pct/100``. They
+# only apply to these four IDs (chest/waist/hip/thigh) — other measurements
+# are not bias-corrected here.
+#
+# Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed
+# dict back here when you have new ground-truth subjects. Defaults are seeded
+# from a small (n=3) eval set, so expect them to update.
+_SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
     "female": {
-        "chest_circumference": -4.0,
-        "waist_circumference": -19.0,
-        "hip_circumference": -6.0,
-        "thigh_circumference": -12.0,
-    },
-    "other": {
-        "chest_circumference": -4.0,
-        "waist_circumference": -19.0,
-        "hip_circumference": -6.0,
-        "thigh_circumference": -12.0,
+        "chest_circumference":  -9.0,   # %
+        "waist_circumference": -21.5,
+        "hip_circumference":    -5.0,
+        "thigh_circumference": -24.0,
     },
     "male": {
-        "chest_circumference": -2.0,
-        "waist_circumference": -14.0,
-        "hip_circumference": -15.0,
+        "chest_circumference":  -3.0,
+        "waist_circumference": -19.0,
+        "hip_circumference":   -11.0,
+        "thigh_circumference": -18.5,
+    },
+    # "other" averages male and female so an unknown-sex subject is biased
+    # toward neither extreme.
+    "other": {
+        "chest_circumference":  -6.0,
+        "waist_circumference": -20.0,
+        "hip_circumference":    -8.0,
         "thigh_circumference": -16.0,
     },
+}
+
+# Backwards-compat alias retained as an empty dict — older code paths that
+# might still reference _SEX_CIRCUMFERENCE_OFFSETS_CM should be updated, but
+# until then they get a no-op.
+_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {
+    "female": {}, "male": {}, "other": {},
+}
+
+# Set of IDs eligible for the multiplicative bias correction. Anything outside
+# this set is left untouched by the sex-scale logic.
+_SEX_SCALE_TARGET_IDS: set[str] = {
+    "chest_circumference",
+    "waist_circumference",
+    "hip_circumference",
+    "thigh_circumference",
 }
 
 # Anthropometric ratios used when a measurement isn't directly observable
 _UPPER_ARM_TO_CHEST_RATIO = 0.34   # adult average upper-arm girth ≈ 33-35% of chest girth
 _ANKLE_TO_CALF_RATIO      = 0.62
+
+# Per-id plausible range. Measurements outside this band are dropped (None) so
+# the envelope never advertises an impossible value. Real upstream model
+# failures (e.g. regressor outputting negative cm for occluded limbs) would
+# otherwise reach Pydantic and surface as a 500.
+_PLAUSIBLE_RANGE_CM: dict[str, tuple[float, float]] = {
+    "neck_circumference":           (20.0,  70.0),
+    "chest_circumference":          (60.0, 160.0),
+    "waist_circumference":          (50.0, 160.0),
+    "hip_circumference":            (60.0, 170.0),
+    "thigh_circumference":          (30.0,  90.0),
+    "calf_circumference":           (20.0,  60.0),
+    "wrist_circumference":          (10.0,  25.0),
+    "upper_arm_circumference":      (15.0,  60.0),
+    "ankle_circumference":          (15.0,  35.0),
+    "shoulder_slope_width":         ( 8.0,  25.0),
+    "back_width_scapular":          (15.0,  50.0),
+    "chest_width_front":            (20.0,  60.0),
+    "neck_base_height":             (110.0, 200.0),
+    "back_length_to_waist":         (25.0,  60.0),
+    "front_length_to_waist":        (25.0,  60.0),
+    "arm_length_shoulder_to_wrist": (35.0,  90.0),
+    "leg_length_inner_seam":        (50.0, 100.0),
+    "leg_length_outer_seam":        (60.0, 115.0),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -166,13 +239,34 @@ def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
 def _derive_back_length(
     bm: BodyMeasurements, side_kp: Keypoints, px_per_cm_side: float
 ) -> float | None:
-    # Prefer persisted waist level if available.
-    if bm.waist_level_side_px is not None and is_valid(side_kp.confidence, KP.UPPER_NECK):
-        if px_per_cm_side <= 0:
-            return None
-        return abs(float(side_kp.points[KP.UPPER_NECK, 1]) - float(bm.waist_level_side_px)) / px_per_cm_side
-    # Fallback: old proxy from upper neck to hip midpoint.
-    return _kp_to_midpoint_cm(side_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_side)
+    """Back length from C7 (UPPER_NECK proxy) to natural waist, on the side view.
+
+    Uses a stable proportional anchor for the waist:
+    ``y_waist = upper_neck_y + 0.65 × (pelvis_y − upper_neck_y)`` — anatomical
+    natural waist sits ~65 % of the way down the torso. The silhouette-detected
+    waist (``bm.waist_level_side_px``) was previously preferred, but on the
+    eval set it drifted subject-to-subject (RMSE 7.87 cm with ±13 cm outliers)
+    because the side-view torso lacks a clear narrowest point. Proportional
+    keypoint anchor is far more stable.
+    """
+    if px_per_cm_side <= 0:
+        return None
+    pts = side_kp.points
+    conf = side_kp.confidence
+    if not is_valid(conf, KP.UPPER_NECK):
+        return None
+    upper_neck_y = float(pts[KP.UPPER_NECK, 1])
+
+    # Pelvis: prefer the explicit keypoint, fall back to midpoint of hips.
+    if is_valid(conf, KP.PELVIS):
+        pelvis_y = float(pts[KP.PELVIS, 1])
+    elif is_valid(conf, KP.LEFT_HIP, KP.RIGHT_HIP):
+        pelvis_y = (float(pts[KP.LEFT_HIP, 1]) + float(pts[KP.RIGHT_HIP, 1])) / 2
+    else:
+        return None
+
+    waist_y = upper_neck_y + 0.65 * (pelvis_y - upper_neck_y)
+    return abs(waist_y - upper_neck_y) / px_per_cm_side
 
 
 def _derive_front_length(
@@ -270,8 +364,20 @@ def body_to_envelope(
     request_id: str,
     front_bgr: Any | None = None,
     side_bgr: Any | None = None,
+    *,
+    apply_sex_offsets: bool = True,
+    sex_offsets_override: dict[str, dict[str, float]] | None = None,
 ) -> Any:
-    """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult."""
+    """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult.
+
+    Args:
+        apply_sex_offsets: when False, skip the per-sex multiplicative bias
+            correction (the historic name is kept; today this controls
+            _SEX_CIRCUMFERENCE_SCALES_PCT, not the deprecated additive table).
+        sex_offsets_override: percent-scale dict ``{sex: {mid: pct}}`` that
+            substitutes _SEX_CIRCUMFERENCE_SCALES_PCT for this call. Used by
+            ``pointsx-eval --fit-offsets`` to A/B-test newly fitted scales.
+    """
     (
         MeasurementEnvelope,
         MeasurementItem,
@@ -283,9 +389,26 @@ def body_to_envelope(
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
-    sex_offsets = _SEX_CIRCUMFERENCE_OFFSETS_CM.get(sex, {})
+
+    # Outer-leg override DISABLED for A/B test against the merged
+    # extract_measurements implementation (side-view diagonal from 20% above
+    # pelvis to bottom of side mask). Re-enable by un-commenting the block
+    # below if our envelope-side derivation wins on the eval set.
+    # outer_leg_cm = _derive_outer_leg_to_floor(
+    #     bm, result.front_kp, result.front_mask, result.cal.px_per_cm_front,
+    #     subject_height_cm,
+    # )
+    # if outer_leg_cm is not None:
+    #     bm.leg_length_outer_cm = outer_leg_cm
+
+    if apply_sex_offsets:
+        scales_table = sex_offsets_override or _SEX_CIRCUMFERENCE_SCALES_PCT
+        sex_scales_pct = scales_table.get(sex, {})
+    else:
+        sex_scales_pct = {}
 
     items = []
+    out_of_range: list[str] = []
     for mid, label_uk, source in CANONICAL_MEASUREMENTS:
         value, flags = _value_for_id(
             mid, bm, result.front_kp, result.side_kp, result.cal, chest_circ_cm,
@@ -293,13 +416,23 @@ def body_to_envelope(
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.
             continue
-        if mid in sex_offsets:
-            value = max(0.0, float(value) + sex_offsets[mid])
+        # Apply per-sex multiplicative bias correction (whitelisted IDs only).
+        if mid in _SEX_SCALE_TARGET_IDS and mid in sex_scales_pct:
+            value = max(0.0, float(value) * (1.0 + float(sex_scales_pct[mid]) / 100.0))
+
+        # Sanity-range gate: never drop. Tag with `out_of_range` so callers and
+        # the UI can mark it visually, but the value is still surfaced. Pydantic
+        # uncertainty stays non-negative thanks to abs(value) below.
+        lo, hi = _PLAUSIBLE_RANGE_CM.get(mid, (0.5, 250.0))
+        if not (lo <= float(value) <= hi):
+            flags = list(flags) + ["out_of_range"]
+            out_of_range.append(f"{mid}={float(value):.1f}")
+
         # Confidence: prefer pipeline-provided, fall back to per-id default.
         conf = bm.confidence.get(mid, _DEFAULT_CONFIDENCE.get(mid, 0.5))
         conf = max(0.0, min(1.0, float(conf)))
-        # Uncertainty: 5 % of value scaled by (1 − confidence).
-        uncertainty = round((1.0 - conf) * float(value) * 0.05, 2)
+        # Uncertainty: 5 % of |value| scaled by (1 − confidence).
+        uncertainty = round((1.0 - conf) * abs(float(value)) * 0.05, 2)
 
         items.append(MeasurementItem(
             id=mid,
@@ -341,5 +474,8 @@ def body_to_envelope(
         ),
         measurements=items,
         derived=derived,
-        warnings=list(bm.warnings),
+        warnings=list(bm.warnings) + (
+            [f"Out of plausible range: {', '.join(out_of_range)}"]
+            if out_of_range else []
+        ),
     )

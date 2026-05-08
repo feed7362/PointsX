@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "ordinal_scales": {
     "top.women": [
       "XS",
@@ -246,37 +246,37 @@
         {
           "min_cm": 78,
           "max_cm": 82,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 82,
           "max_cm": 86,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 86,
           "max_cm": 90,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 90,
           "max_cm": 94,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 94,
           "max_cm": 100,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 100,
           "max_cm": 116,
-          "code": "46/48",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -293,37 +293,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "46/48",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -340,37 +340,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "46/48",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -387,37 +387,37 @@
         {
           "min_cm": 78,
           "max_cm": 82,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 82,
           "max_cm": 86,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 86,
           "max_cm": 90,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 90,
           "max_cm": 94,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 94,
           "max_cm": 100,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 100,
           "max_cm": 116,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -434,37 +434,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -481,37 +481,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -528,37 +528,37 @@
         {
           "min_cm": 78,
           "max_cm": 82,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 82,
           "max_cm": 86,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 86,
           "max_cm": 90,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 90,
           "max_cm": 94,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 94,
           "max_cm": 100,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 100,
           "max_cm": 116,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -575,37 +575,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -622,37 +622,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -668,30 +668,30 @@
       "bands": [
         {
           "min_cm": 86,
-          "max_cm": 96,
+          "max_cm": 94,
           "code": "44/46",
           "ordinal": 0
         },
         {
-          "min_cm": 96,
-          "max_cm": 104,
+          "min_cm": 94,
+          "max_cm": 102,
           "code": "48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 104,
-          "max_cm": 112,
+          "min_cm": 102,
+          "max_cm": 110,
           "code": "52",
           "ordinal": 2
         },
         {
-          "min_cm": 112,
-          "max_cm": 120,
+          "min_cm": 110,
+          "max_cm": 118,
           "code": "54/56",
           "ordinal": 3
         },
         {
-          "min_cm": 120,
+          "min_cm": 118,
           "max_cm": 130,
           "code": "58",
           "ordinal": 4
@@ -709,30 +709,30 @@
       "bands": [
         {
           "min_cm": 76,
-          "max_cm": 84,
+          "max_cm": 82,
           "code": "44/46",
           "ordinal": 0
         },
         {
-          "min_cm": 84,
-          "max_cm": 92,
+          "min_cm": 82,
+          "max_cm": 90,
           "code": "48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 92,
-          "max_cm": 100,
+          "min_cm": 90,
+          "max_cm": 98,
           "code": "52",
           "ordinal": 2
         },
         {
-          "min_cm": 100,
-          "max_cm": 108,
+          "min_cm": 98,
+          "max_cm": 106,
           "code": "54/56",
           "ordinal": 3
         },
         {
-          "min_cm": 108,
+          "min_cm": 106,
           "max_cm": 118,
           "code": "58",
           "ordinal": 4
@@ -750,30 +750,30 @@
       "bands": [
         {
           "min_cm": 88,
-          "max_cm": 98,
+          "max_cm": 96,
           "code": "44/46",
           "ordinal": 0
         },
         {
-          "min_cm": 98,
-          "max_cm": 106,
+          "min_cm": 96,
+          "max_cm": 104,
           "code": "48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 106,
-          "max_cm": 114,
+          "min_cm": 104,
+          "max_cm": 112,
           "code": "52",
           "ordinal": 2
         },
         {
-          "min_cm": 114,
-          "max_cm": 122,
+          "min_cm": 112,
+          "max_cm": 120,
           "code": "54/56",
           "ordinal": 3
         },
         {
-          "min_cm": 122,
+          "min_cm": 120,
           "max_cm": 132,
           "code": "58",
           "ordinal": 4
@@ -791,30 +791,30 @@
       "bands": [
         {
           "min_cm": 86,
-          "max_cm": 96,
+          "max_cm": 94,
           "code": "EU 46",
           "ordinal": 0
         },
         {
-          "min_cm": 96,
-          "max_cm": 104,
+          "min_cm": 94,
+          "max_cm": 102,
           "code": "EU 48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 104,
-          "max_cm": 112,
+          "min_cm": 102,
+          "max_cm": 110,
           "code": "EU 52",
           "ordinal": 2
         },
         {
-          "min_cm": 112,
-          "max_cm": 120,
+          "min_cm": 110,
+          "max_cm": 118,
           "code": "EU 54",
           "ordinal": 3
         },
         {
-          "min_cm": 120,
+          "min_cm": 118,
           "max_cm": 130,
           "code": "EU 56",
           "ordinal": 4
@@ -832,30 +832,30 @@
       "bands": [
         {
           "min_cm": 76,
-          "max_cm": 84,
+          "max_cm": 82,
           "code": "EU 46",
           "ordinal": 0
         },
         {
-          "min_cm": 84,
-          "max_cm": 92,
+          "min_cm": 82,
+          "max_cm": 90,
           "code": "EU 48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 92,
-          "max_cm": 100,
+          "min_cm": 90,
+          "max_cm": 98,
           "code": "EU 52",
           "ordinal": 2
         },
         {
-          "min_cm": 100,
-          "max_cm": 108,
+          "min_cm": 98,
+          "max_cm": 106,
           "code": "EU 54",
           "ordinal": 3
         },
         {
-          "min_cm": 108,
+          "min_cm": 106,
           "max_cm": 118,
           "code": "EU 56",
           "ordinal": 4
@@ -873,30 +873,30 @@
       "bands": [
         {
           "min_cm": 88,
-          "max_cm": 98,
+          "max_cm": 96,
           "code": "EU 46",
           "ordinal": 0
         },
         {
-          "min_cm": 98,
-          "max_cm": 106,
+          "min_cm": 96,
+          "max_cm": 104,
           "code": "EU 48/50",
           "ordinal": 1
         },
         {
-          "min_cm": 106,
-          "max_cm": 114,
+          "min_cm": 104,
+          "max_cm": 112,
           "code": "EU 52",
           "ordinal": 2
         },
         {
-          "min_cm": 114,
-          "max_cm": 122,
+          "min_cm": 112,
+          "max_cm": 120,
           "code": "EU 54",
           "ordinal": 3
         },
         {
-          "min_cm": 122,
+          "min_cm": 120,
           "max_cm": 132,
           "code": "EU 56",
           "ordinal": 4
@@ -914,6 +914,88 @@
       "bands": [
         {
           "min_cm": 86,
+          "max_cm": 94,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 94,
+          "max_cm": 102,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 102,
+          "max_cm": 110,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 110,
+          "max_cm": 118,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 118,
+          "max_cm": 130,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_waist_top",
+      "kind": "consensus_band",
+      "label_uk": "США — талія (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "waist_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 76,
+          "max_cm": 82,
+          "code": "S",
+          "ordinal": 0
+        },
+        {
+          "min_cm": 82,
+          "max_cm": 90,
+          "code": "M",
+          "ordinal": 1
+        },
+        {
+          "min_cm": 90,
+          "max_cm": 98,
+          "code": "L",
+          "ordinal": 2
+        },
+        {
+          "min_cm": 98,
+          "max_cm": 106,
+          "code": "XL",
+          "ordinal": 3
+        },
+        {
+          "min_cm": 106,
+          "max_cm": 118,
+          "code": "XXL",
+          "ordinal": 4
+        }
+      ]
+    },
+    {
+      "id": "us_men_hip_top",
+      "kind": "consensus_band",
+      "label_uk": "США — стегна (верх, чоловіки)",
+      "sex": "male",
+      "family": "top",
+      "measurement_key": "hip_circumference",
+      "scale_key": "top.men",
+      "bands": [
+        {
+          "min_cm": 88,
           "max_cm": 96,
           "code": "S",
           "ordinal": 0
@@ -938,88 +1020,6 @@
         },
         {
           "min_cm": 120,
-          "max_cm": 130,
-          "code": "XXL",
-          "ordinal": 4
-        }
-      ]
-    },
-    {
-      "id": "us_men_waist_top",
-      "kind": "consensus_band",
-      "label_uk": "США — талія (верх, чоловіки)",
-      "sex": "male",
-      "family": "top",
-      "measurement_key": "waist_circumference",
-      "scale_key": "top.men",
-      "bands": [
-        {
-          "min_cm": 76,
-          "max_cm": 84,
-          "code": "S",
-          "ordinal": 0
-        },
-        {
-          "min_cm": 84,
-          "max_cm": 92,
-          "code": "M",
-          "ordinal": 1
-        },
-        {
-          "min_cm": 92,
-          "max_cm": 100,
-          "code": "L",
-          "ordinal": 2
-        },
-        {
-          "min_cm": 100,
-          "max_cm": 108,
-          "code": "XL",
-          "ordinal": 3
-        },
-        {
-          "min_cm": 108,
-          "max_cm": 118,
-          "code": "XXL",
-          "ordinal": 4
-        }
-      ]
-    },
-    {
-      "id": "us_men_hip_top",
-      "kind": "consensus_band",
-      "label_uk": "США — стегна (верх, чоловіки)",
-      "sex": "male",
-      "family": "top",
-      "measurement_key": "hip_circumference",
-      "scale_key": "top.men",
-      "bands": [
-        {
-          "min_cm": 88,
-          "max_cm": 98,
-          "code": "S",
-          "ordinal": 0
-        },
-        {
-          "min_cm": 98,
-          "max_cm": 106,
-          "code": "M",
-          "ordinal": 1
-        },
-        {
-          "min_cm": 106,
-          "max_cm": 114,
-          "code": "L",
-          "ordinal": 2
-        },
-        {
-          "min_cm": 114,
-          "max_cm": 122,
-          "code": "XL",
-          "ordinal": 3
-        },
-        {
-          "min_cm": 122,
           "max_cm": 132,
           "code": "XXL",
           "ordinal": 4
@@ -1038,37 +1038,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "46",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1085,37 +1085,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "46",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1132,37 +1132,37 @@
         {
           "min_cm": 46,
           "max_cm": 50,
-          "code": "36",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 50,
           "max_cm": 54,
-          "code": "38",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 54,
           "max_cm": 58,
-          "code": "40",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 58,
           "max_cm": 64,
-          "code": "42",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 64,
           "max_cm": 72,
-          "code": "44",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 72,
           "max_cm": 84,
-          "code": "46",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1179,37 +1179,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1226,37 +1226,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1273,37 +1273,37 @@
         {
           "min_cm": 46,
           "max_cm": 50,
-          "code": "EU 34",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 50,
           "max_cm": 54,
-          "code": "EU 36",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 54,
           "max_cm": 58,
-          "code": "EU 38",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 58,
           "max_cm": 64,
-          "code": "EU 40",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 64,
           "max_cm": 72,
-          "code": "EU 42",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 72,
           "max_cm": 84,
-          "code": "EU 44",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1320,37 +1320,37 @@
         {
           "min_cm": 58,
           "max_cm": 62,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 62,
           "max_cm": 66,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 66,
           "max_cm": 70,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 70,
           "max_cm": 76,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 76,
           "max_cm": 84,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 84,
           "max_cm": 96,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1367,37 +1367,37 @@
         {
           "min_cm": 84,
           "max_cm": 88,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 88,
           "max_cm": 92,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 92,
           "max_cm": 96,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 96,
           "max_cm": 102,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 102,
           "max_cm": 110,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 110,
           "max_cm": 124,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1414,37 +1414,37 @@
         {
           "min_cm": 46,
           "max_cm": 50,
-          "code": "XS",
+          "code": "34",
           "ordinal": 0
         },
         {
           "min_cm": 50,
           "max_cm": 54,
-          "code": "S",
+          "code": "36",
           "ordinal": 1
         },
         {
           "min_cm": 54,
           "max_cm": 58,
-          "code": "M",
+          "code": "38",
           "ordinal": 2
         },
         {
           "min_cm": 58,
           "max_cm": 64,
-          "code": "L",
+          "code": "40",
           "ordinal": 3
         },
         {
           "min_cm": 64,
           "max_cm": 72,
-          "code": "XL",
+          "code": "42",
           "ordinal": 4
         },
         {
           "min_cm": 72,
           "max_cm": 84,
-          "code": "XXL",
+          "code": "44",
           "ordinal": 5
         }
       ]
@@ -1466,25 +1466,25 @@
         },
         {
           "min_cm": 82,
-          "max_cm": 88,
+          "max_cm": 90,
           "code": "48",
           "ordinal": 1
         },
         {
-          "min_cm": 88,
-          "max_cm": 96,
+          "min_cm": 90,
+          "max_cm": 98,
           "code": "50/52",
           "ordinal": 2
         },
         {
-          "min_cm": 96,
-          "max_cm": 104,
+          "min_cm": 98,
+          "max_cm": 106,
           "code": "54",
           "ordinal": 3
         },
         {
-          "min_cm": 104,
-          "max_cm": 114,
+          "min_cm": 106,
+          "max_cm": 118,
           "code": "56",
           "ordinal": 4
         }
@@ -1500,31 +1500,31 @@
       "scale_key": "bottom.men",
       "bands": [
         {
-          "min_cm": 90,
-          "max_cm": 98,
+          "min_cm": 88,
+          "max_cm": 96,
           "code": "46",
           "ordinal": 0
         },
         {
-          "min_cm": 98,
-          "max_cm": 106,
+          "min_cm": 96,
+          "max_cm": 104,
           "code": "48",
           "ordinal": 1
         },
         {
-          "min_cm": 106,
-          "max_cm": 114,
+          "min_cm": 104,
+          "max_cm": 112,
           "code": "50/52",
           "ordinal": 2
         },
         {
-          "min_cm": 114,
-          "max_cm": 122,
+          "min_cm": 112,
+          "max_cm": 120,
           "code": "54",
           "ordinal": 3
         },
         {
-          "min_cm": 122,
+          "min_cm": 120,
           "max_cm": 132,
           "code": "56",
           "ordinal": 4
@@ -1542,30 +1542,30 @@
       "bands": [
         {
           "min_cm": 48,
-          "max_cm": 54,
+          "max_cm": 52,
           "code": "46",
           "ordinal": 0
         },
         {
-          "min_cm": 54,
-          "max_cm": 60,
+          "min_cm": 52,
+          "max_cm": 58,
           "code": "48",
           "ordinal": 1
         },
         {
-          "min_cm": 60,
-          "max_cm": 68,
+          "min_cm": 58,
+          "max_cm": 66,
           "code": "50/52",
           "ordinal": 2
         },
         {
-          "min_cm": 68,
-          "max_cm": 76,
+          "min_cm": 66,
+          "max_cm": 74,
           "code": "54",
           "ordinal": 3
         },
         {
-          "min_cm": 76,
+          "min_cm": 74,
           "max_cm": 86,
           "code": "56",
           "ordinal": 4
@@ -1589,25 +1589,25 @@
         },
         {
           "min_cm": 82,
-          "max_cm": 88,
+          "max_cm": 90,
           "code": "EU 48",
           "ordinal": 1
         },
         {
-          "min_cm": 88,
-          "max_cm": 96,
+          "min_cm": 90,
+          "max_cm": 98,
           "code": "EU 50",
           "ordinal": 2
         },
         {
-          "min_cm": 96,
-          "max_cm": 104,
+          "min_cm": 98,
+          "max_cm": 106,
           "code": "EU 52",
           "ordinal": 3
         },
         {
-          "min_cm": 104,
-          "max_cm": 114,
+          "min_cm": 106,
+          "max_cm": 118,
           "code": "EU 54",
           "ordinal": 4
         }
@@ -1623,31 +1623,31 @@
       "scale_key": "bottom.men",
       "bands": [
         {
-          "min_cm": 90,
-          "max_cm": 98,
+          "min_cm": 88,
+          "max_cm": 96,
           "code": "EU 46",
           "ordinal": 0
         },
         {
-          "min_cm": 98,
-          "max_cm": 106,
+          "min_cm": 96,
+          "max_cm": 104,
           "code": "EU 48",
           "ordinal": 1
         },
         {
-          "min_cm": 106,
-          "max_cm": 114,
+          "min_cm": 104,
+          "max_cm": 112,
           "code": "EU 50",
           "ordinal": 2
         },
         {
-          "min_cm": 114,
-          "max_cm": 122,
+          "min_cm": 112,
+          "max_cm": 120,
           "code": "EU 52",
           "ordinal": 3
         },
         {
-          "min_cm": 122,
+          "min_cm": 120,
           "max_cm": 132,
           "code": "EU 54",
           "ordinal": 4
@@ -1665,30 +1665,30 @@
       "bands": [
         {
           "min_cm": 48,
-          "max_cm": 54,
+          "max_cm": 52,
           "code": "EU 46",
           "ordinal": 0
         },
         {
-          "min_cm": 54,
-          "max_cm": 60,
+          "min_cm": 52,
+          "max_cm": 58,
           "code": "EU 48",
           "ordinal": 1
         },
         {
-          "min_cm": 60,
-          "max_cm": 68,
+          "min_cm": 58,
+          "max_cm": 66,
           "code": "EU 50",
           "ordinal": 2
         },
         {
-          "min_cm": 68,
-          "max_cm": 76,
+          "min_cm": 66,
+          "max_cm": 74,
           "code": "EU 52",
           "ordinal": 3
         },
         {
-          "min_cm": 76,
+          "min_cm": 74,
           "max_cm": 86,
           "code": "EU 54",
           "ordinal": 4
@@ -1712,25 +1712,25 @@
         },
         {
           "min_cm": 82,
-          "max_cm": 88,
+          "max_cm": 90,
           "code": "M",
           "ordinal": 1
         },
         {
-          "min_cm": 88,
-          "max_cm": 96,
+          "min_cm": 90,
+          "max_cm": 98,
           "code": "L",
           "ordinal": 2
         },
         {
-          "min_cm": 96,
-          "max_cm": 104,
+          "min_cm": 98,
+          "max_cm": 106,
           "code": "XL",
           "ordinal": 3
         },
         {
-          "min_cm": 104,
-          "max_cm": 114,
+          "min_cm": 106,
+          "max_cm": 118,
           "code": "XXL",
           "ordinal": 4
         }
@@ -1746,31 +1746,31 @@
       "scale_key": "bottom.men",
       "bands": [
         {
-          "min_cm": 90,
-          "max_cm": 98,
+          "min_cm": 88,
+          "max_cm": 96,
           "code": "S",
           "ordinal": 0
         },
         {
-          "min_cm": 98,
-          "max_cm": 106,
+          "min_cm": 96,
+          "max_cm": 104,
           "code": "M",
           "ordinal": 1
         },
         {
-          "min_cm": 106,
-          "max_cm": 114,
+          "min_cm": 104,
+          "max_cm": 112,
           "code": "L",
           "ordinal": 2
         },
         {
-          "min_cm": 114,
-          "max_cm": 122,
+          "min_cm": 112,
+          "max_cm": 120,
           "code": "XL",
           "ordinal": 3
         },
         {
-          "min_cm": 122,
+          "min_cm": 120,
           "max_cm": 132,
           "code": "XXL",
           "ordinal": 4
@@ -1788,30 +1788,30 @@
       "bands": [
         {
           "min_cm": 48,
-          "max_cm": 54,
+          "max_cm": 52,
           "code": "S",
           "ordinal": 0
         },
         {
-          "min_cm": 54,
-          "max_cm": 60,
+          "min_cm": 52,
+          "max_cm": 58,
           "code": "M",
           "ordinal": 1
         },
         {
-          "min_cm": 60,
-          "max_cm": 68,
+          "min_cm": 58,
+          "max_cm": 66,
           "code": "L",
           "ordinal": 2
         },
         {
-          "min_cm": 68,
-          "max_cm": 76,
+          "min_cm": 66,
+          "max_cm": 74,
           "code": "XL",
           "ordinal": 3
         },
         {
-          "min_cm": 76,
+          "min_cm": 74,
           "max_cm": 86,
           "code": "XXL",
           "ordinal": 4

@@ -68,12 +68,12 @@ function evalUa(garment, measures, sex = "female", confidences = {}) {
 // ---------------------------------------------------------------------------
 
 describe("unanimous", () => {
-  it("three measures landing on M → verdict=unanimous, code=40", () => {
-    // chest 88 → M (86–90), waist 68 → M (66–70), hip 94 → M (92–96)
+  it("three measures landing on M → verdict=unanimous, code=38", () => {
+    // chest 88 → M (86–90 ord 2), waist 68 → M (66–70), hip 94 → M (92–96) — Continental код 38
     const measures     = { chest_circumference: 88, waist_circumference: 68, hip_circumference: 94 };
     const result       = evalUa(dressGarment, measures);
     assert.equal(result.verdict, "unanimous");
-    assert.equal(result.code,    "40");
+    assert.equal(result.code,    "38");
     assert.equal(result.confidence, "high");
   });
 
@@ -90,12 +90,12 @@ describe("unanimous", () => {
 // ---------------------------------------------------------------------------
 
 describe("majority", () => {
-  it("M/M/L → verdict=majority, code=40, outlier is hip", () => {
+  it("M/M/L → verdict=majority, code=38, outlier is hip", () => {
     // chest 88 → M (ordinal 2), waist 68 → M (ordinal 2), hip 99 → L (96–102, ordinal 3)
     const measures = { chest_circumference: 88, waist_circumference: 68, hip_circumference: 99 };
     const result   = evalUa(dressGarment, measures);
     assert.equal(result.verdict, "majority");
-    assert.equal(result.code,    "40");
+    assert.equal(result.code,    "38");
     assert.equal(result.outlier?.mid, "hip_circumference");
   });
 
@@ -231,7 +231,7 @@ describe("pants trio", () => {
     const result   = evaluateGarmentSize(catalog, pantsGarment, measures, {}, "eu", "female");
     assert.equal(result.verdict, "unanimous");
     assert.equal(result.ordinal, 2);
-    assert.equal(result.code, "EU 38");
+    assert.equal(result.code, "38");
   });
 
   it("pants waist/hip agree M, thigh is one step L → majority", () => {
