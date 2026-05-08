@@ -348,7 +348,7 @@ def body_to_envelope(
         sex_offsets = {}
 
     items = []
-    dropped_implausible: list[str] = []
+    out_of_range: list[str] = []
     for mid, label_uk, source in CANONICAL_MEASUREMENTS:
         value, flags = _value_for_id(
             mid, bm, result.front_kp, result.side_kp, result.cal, chest_circ_cm,
@@ -359,12 +359,13 @@ def body_to_envelope(
         if mid in sex_offsets:
             value = max(0.0, float(value) + sex_offsets[mid])
 
-        # Sanity-range gate: drop wildly out-of-band values rather than letting
-        # them surface as a 500 (e.g. negative regressor output on occluded limbs).
+        # Sanity-range gate: never drop. Tag with `out_of_range` so callers and
+        # the UI can mark it visually, but the value is still surfaced. Pydantic
+        # uncertainty stays non-negative thanks to abs(value) below.
         lo, hi = _PLAUSIBLE_RANGE_CM.get(mid, (0.5, 250.0))
         if not (lo <= float(value) <= hi):
-            dropped_implausible.append(f"{mid}={float(value):.1f}")
-            continue
+            flags = list(flags) + ["out_of_range"]
+            out_of_range.append(f"{mid}={float(value):.1f}")
 
         # Confidence: prefer pipeline-provided, fall back to per-id default.
         conf = bm.confidence.get(mid, _DEFAULT_CONFIDENCE.get(mid, 0.5))
@@ -413,7 +414,7 @@ def body_to_envelope(
         measurements=items,
         derived=derived,
         warnings=list(bm.warnings) + (
-            [f"Dropped implausible: {', '.join(dropped_implausible)}"]
-            if dropped_implausible else []
+            [f"Out of plausible range: {', '.join(out_of_range)}"]
+            if out_of_range else []
         ),
     )
