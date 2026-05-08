@@ -10,7 +10,7 @@ Model loading (consumed by the FastAPI lifespan in webui.app):
     POINTSX_POSE_MODEL        legacy: overrides POINTSX_POSE_MODEL_CUSTOM when set
     POINTSX_SEG_MODEL         path to segmentation .pt (default: models/yolo12l-person-seg-extended.pt)
     POINTSX_REGRESSION_MODEL  path to regression .pt
-                              default: models/reg.pt if present;
+                              default: models/circumference_regressor.pt if present;
                               set to "" to force the Ramanujan ellipse fallback.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …
                               default: auto
@@ -37,7 +37,7 @@ Override via env vars when needed:
   POINTSX_POSE_MODEL_CUSTOM=models/pose-cus.pt \\
   POINTSX_POSE_MODEL_COCO=models/yolo26-pose.pt \\
   POINTSX_SEG_MODEL=models/yolo12l-person-seg-extended.pt \\
-  POINTSX_REGRESSION_MODEL=models/reg.pt \\
+  POINTSX_REGRESSION_MODEL=models/circumference_regressor.pt \\
   POINTSX_DEVICE=cpu \\
   pointsx-web --reload
 """

@@ -9,7 +9,7 @@ Configuration (environment variables, all optional):
     POINTSX_SEG_MODEL         path to YOLO segmentation .pt
                               default: models/yolo12l-person-seg-extended.pt
     POINTSX_REGRESSION_MODEL  path to regression .pt
-                              default: models/reg.pt if present;
+                              default: models/circumference_regressor.pt if present;
                               set to an empty string to force the Ramanujan ellipse
                               fallback instead.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
@@ -297,7 +297,7 @@ async def lifespan(app: FastAPI):
     seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
     # Auto-load the regressor when present; users can override via env var or
     # disable it explicitly with POINTSX_REGRESSION_MODEL="" (empty string).
-    reg_default = "models/reg.pt"
+    reg_default = "models/circumference_regressor.pt"
     reg_raw = os.environ.get("POINTSX_REGRESSION_MODEL")
     if reg_raw is None:
         reg_path = reg_default if Path(reg_default).exists() else None
