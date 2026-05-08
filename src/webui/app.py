@@ -295,14 +295,13 @@ async def lifespan(app: FastAPI):
         pose_custom = str(legacy_pose).strip()
         logger.info("POINTSX_POSE_MODEL set — using as custom pose path (legacy override).")
     seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
-    # Auto-load the regressor when present; users can override via env var or
-    # disable it explicitly with POINTSX_REGRESSION_MODEL="" (empty string).
-    reg_default = "models/circumference_regressor.pt"
+    # Regressor disabled by default — currently it's known to produce outliers
+    # on real photos (e.g. negative-cm hips/thighs on certain subjects), and
+    # the per-sex bias scales in envelope.py were fit against the Ramanujan
+    # ellipse output, not the regressor's. To re-enable, set the env var:
+    #   POINTSX_REGRESSION_MODEL=models/circumference_regressor.pt
     reg_raw = os.environ.get("POINTSX_REGRESSION_MODEL")
-    if reg_raw is None:
-        reg_path = reg_default if Path(reg_default).exists() else None
-    else:
-        reg_path = reg_raw.strip() or None
+    reg_path = reg_raw.strip() if (reg_raw and reg_raw.strip()) else None
     device    = _resolve_path("POINTSX_DEVICE", "auto")
 
     app.state.pipeline = None
