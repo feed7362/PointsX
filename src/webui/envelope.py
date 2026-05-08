@@ -102,10 +102,10 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # from a small (n=3) eval set, so expect them to update.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
     "female": {
-        "chest_circumference":  -6.5,   # %
-        "waist_circumference": -22.5,
-        "hip_circumference":    -5.0,
-        "thigh_circumference": -15.0,
+        "chest_circumference":  -8.0,   # %
+        "waist_circumference": -22.0,
+        "hip_circumference":    -7.0,
+        "thigh_circumference": -21.5,
     },
     "male": {
         "chest_circumference":  -2.5,
@@ -113,13 +113,13 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
         "hip_circumference":   -13.5,
         "thigh_circumference": -21.0,
     },
-    # "other" is conservative — pick the smaller of male/female magnitudes per
-    # measurement so an unknown-sex subject isn't biased the wrong way.
+    # "other" averages male and female so an unknown-sex subject is biased
+    # toward neither extreme.
     "other": {
-        "chest_circumference":  -4.5,
+        "chest_circumference":  -5.0,
         "waist_circumference": -21.0,
-        "hip_circumference":    -9.0,
-        "thigh_circumference": -18.0,
+        "hip_circumference":   -10.0,
+        "thigh_circumference": -21.0,
     },
 }
 
