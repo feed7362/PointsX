@@ -178,21 +178,148 @@ body {
   margin: 0 auto 1rem;
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-  background: #000;
   aspect-ratio: 3 / 4;
 }
 
-.preview-wrap::before {
+/* Live camera feed: OLED-style frame on dark scheme */
+.preview-wrap:not(.preview-wrap--idle) {
+  background: #000;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+/* Camera off — same gray surface & border as .thumb-slot (theme tokens only) */
+.preview-wrap.preview-wrap--idle {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(26, 31, 42, 0.1);
+}
+
+/* LiveOnly — cinematic wash (never overlays idle; avoids muddying thumb-gray) */
+.preview-wrap:not(.preview-wrap--idle)::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 0;
   background:
     radial-gradient(130% 95% at 50% 0%, rgba(113, 168, 255, 0.18), transparent 60%),
     linear-gradient(180deg, rgba(10, 18, 34, 0.14), rgba(10, 18, 34, 0.45));
+}
+
+.preview-wrap.preview-wrap--idle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   z-index: 0;
+  background: radial-gradient(
+    118% 90% at 50% -6%,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    transparent 58%
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  .preview-wrap.preview-wrap--idle {
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  }
+}
+.preview-idle {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.1rem, 5vw, 2.25rem);
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.preview-wrap.preview-wrap--idle .preview-idle {
+  opacity: 1;
+  visibility: visible;
+}
+
+.preview-idle-inner {
+  max-width: 18rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.preview-idle-icon {
+  width: clamp(4rem, 18vw, 5.75rem);
+  height: clamp(4rem, 18vw, 5.75rem);
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+  filter: drop-shadow(0 0 28px rgba(91, 140, 255, 0.25));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .preview-wrap.preview-wrap--idle .preview-idle-icon {
+    animation: preview-idle-soft 7s ease-in-out infinite;
+  }
+}
+
+@keyframes preview-idle-soft {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateY(-2px);
+  }
+}
+
+.preview-idle-title {
+  margin: 0;
+  font-size: clamp(1.1rem, 3.8vw, 1.35rem);
+  font-weight: 680;
+  color: color-mix(in srgb, var(--text) 92%, var(--accent));
+  letter-spacing: 0.01em;
+}
+
+.preview-idle-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 17rem;
+}
+
+/* Undo selfie mirror so idle copy reads normally (matches countdown overlay behaviour). */
+.preview-wrap.mirror .preview-idle {
+  transform: scaleX(-1);
+}
+
+.preview-wrap.preview-wrap--idle #video {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.preview-wrap:not(.preview-wrap--idle) #video {
+  opacity: 1;
+  transition: opacity 0.35s ease 0.04s;
+}
+
+.preview-wrap.preview-wrap--idle .overlay {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.preview-wrap:not(.preview-wrap--idle) .overlay {
+  opacity: 1;
+  transition: opacity 0.35s ease 0.08s;
 }
 
 .countdown-overlay {
@@ -214,6 +341,46 @@ body {
 /* Undo selfie mirror for the countdown overlay so digits read correctly. */
 .preview-wrap.mirror .countdown-overlay {
   transform: scaleX(-1);
+}
+
+@media (prefers-color-scheme: light) {
+  /* Live frame: explicit :not(...) so this wins over the dark-scheme #000 rule */
+  .preview-wrap:not(.preview-wrap--idle) {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(26, 31, 42, 0.07);
+  }
+
+  .preview-wrap:not(.preview-wrap--idle)::before {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, transparent 40%, transparent 100%);
+    opacity: 0.2;
+  }
+
+  #video {
+    background-color: var(--bg);
+  }
+
+  /* Idle already uses var(--bg); keep accent wash very soft on pastel */
+  .preview-wrap.preview-wrap--idle::before {
+    opacity: 1;
+    background: radial-gradient(
+      120% 88% at 50% -8%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent 58%
+    );
+  }
+
+  .preview-wrap.preview-wrap--idle .preview-idle-hint {
+    color: color-mix(in srgb, var(--muted) 40%, var(--text));
+  }
+
+  .countdown-overlay {
+    background: rgba(12, 16, 28, 0);
+    color: #fff;
+    text-shadow:
+      0 0 0.35rem rgba(0, 0, 0, 0.8),
+      0 0 1rem rgba(91, 140, 255, 0.45);
+  }
 }
 
 .capture--review .preview-wrap {
@@ -265,7 +432,9 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  object-fit: fill;
+  /* Match #video (cover) + guideGeometry videoNormToPreviewLocal; avoid non-uniform stretch from fill. */
+  object-fit: cover;
+  object-position: center;
   z-index: 2;
 }
 
@@ -377,7 +546,7 @@ body {
   padding: 0;
   border: none;
   border-radius: 0;
-  object-fit: fill;
+  object-fit: contain;
   object-position: center;
   background: var(--bg);
   z-index: 1;

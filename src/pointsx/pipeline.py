@@ -11,7 +11,8 @@ import numpy as np
 from pointsx.calibration import calibrate
 from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
-from pointsx.models import BodyModels
+from pointsx.keypoints import MIN_CONFIDENCE
+from pointsx.models import BodyModels, PoseBackend
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements, Keypoints
 
@@ -29,14 +30,16 @@ class MeasurementPipeline:
 
     def __init__(
         self,
-        pose_model_path: str | Path = "models/yolo11n-pose.pt",
-        seg_model_path: str | Path = "models/yolo11n-seg.pt",
+        pose_custom_path: str | Path | None = "models/pose-cus.pt",
+        pose_coco_path: str | Path | None = "models/yolo26-pose.pt",
+        seg_model_path: str | Path = "models/yolo12l-person-seg-extended.pt",
         regression_model_path: str | Path | None = None,
         img_size: int = 640,
         device: str = "auto",
     ):
         self._models = BodyModels(
-            pose_model_path=pose_model_path,
+            pose_custom_path=pose_custom_path,
+            pose_coco_path=pose_coco_path,
             seg_model_path=seg_model_path,
             img_size=img_size,
             device=device,
@@ -51,6 +54,8 @@ class MeasurementPipeline:
         front_image: str | Path | np.ndarray,
         side_image: str | Path | np.ndarray,
         height_cm: float,
+        *,
+        pose_backend: PoseBackend = "custom",
     ) -> BodyMeasurements:
         """Run the full measurement pipeline.
 
@@ -65,9 +70,9 @@ class MeasurementPipeline:
         front_img = self._load_image(front_image)
         side_img = self._load_image(side_image)
 
-        logger.info("Running pose estimation...")
-        front_kp = self._models.predict_pose(front_img, view="front")
-        side_kp = self._models.predict_pose(side_img, view="side")
+        logger.info("Running pose estimation (%s)...", pose_backend)
+        front_kp = self._models.predict_pose(front_img, view="front", pose_backend=pose_backend)
+        side_kp = self._models.predict_pose(side_img, view="side", pose_backend=pose_backend)
 
         if front_kp is None:
             raise ValueError("No person detected in front image")
@@ -94,7 +99,7 @@ class MeasurementPipeline:
         )
 
         logger.info("Estimating circumferences...")
-        measurements = estimate_circumferences(measurements, self._regression_model)
+        measurements = estimate_circumferences(measurements, regression_model=None)
 
         logger.info("Validating...")
         measurements = validate_measurements(measurements)
@@ -126,7 +131,7 @@ class MeasurementPipeline:
     @staticmethod
     def _keypoint_reference(kp: Keypoints) -> tuple[float, float]:
         """Estimate subject center from valid keypoints."""
-        valid = kp.confidence >= 0.3
+        valid = kp.confidence >= MIN_CONFIDENCE
         if np.any(valid):
             center = kp.points[valid].mean(axis=0)
         else:

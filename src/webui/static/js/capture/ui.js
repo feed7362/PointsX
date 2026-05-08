@@ -51,7 +51,7 @@ export function updateUiStep() {
     stepLabel.textContent =
       "Обидва знімки в превʼю";
   } else if (captureState.step === 1) {
-    stepLabel.textContent = "Крок 1 з 2: анфас — пахви відкриті, ноги на ширині плечей";
+    stepLabel.textContent = "Крок 1 з 2: анфас — пахви відкриті, ноги приблизно на ширині плечей";
   } else {
     stepLabel.textContent =
       "Крок 2 з 2: профіль — боком до камери, руки вперед на ~45° ";

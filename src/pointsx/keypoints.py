@@ -61,8 +61,10 @@ KP_NAMES = [
     "Left Shoulder", "Left Elbow", "Left Wrist",
 ]
 
-# Minimum confidence to consider a keypoint valid
-MIN_CONFIDENCE = 0.3
+# Minimum confidence to consider a keypoint valid.
+# LV-MHP / custom fine-tuned heads often report lower scores than COCO pose; 0.22
+# keeps obvious junk out while not dropping whole measurement chains.
+MIN_CONFIDENCE = 0.22
 
 
 def point(kps: np.ndarray, idx: KP) -> np.ndarray:

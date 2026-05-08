@@ -45,11 +45,83 @@ export function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+function formatMeasureHttpError(res, bodyText) {
+  const fallback = (bodyText && bodyText.trim()) || res.statusText;
+  try {
+    const j = JSON.parse(bodyText);
+    if (typeof j.detail === "string") return j.detail;
+    if (Array.isArray(j.detail)) {
+      const msgs = j.detail
+        .map((x) =>
+          typeof x === "object" && x !== null && typeof x.msg === "string" ? x.msg : ""
+        )
+        .filter(Boolean);
+      if (msgs.length) return msgs.join(" ");
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
+const MEASUREMENT_MANUAL_ORDER = [
+  "chest_circumference",
+  "waist_circumference",
+  "hip_circumference",
+  "thigh_circumference",
+ 
+  "neck_base_height",
+  "chest_width_front",
+  "back_width_scapular",
+  "shoulder_slope_width",
+
+  "arm_length_shoulder_to_wrist",
+  "leg_length_outer_seam",
+  "leg_length_inner_seam",
+  
+  "back_length_to_waist",
+  "front_length_to_waist",
+
+  "neck_circumference",
+  "upper_arm_circumference", 
+  "wrist_circumference",
+  "calf_circumference",
+  "ankle_circumference",
+];
+
+const HIDDEN_MEASUREMENT_IDS = new Set([
+  "neck_circumference",
+  "upper_arm_circumference",
+  "wrist_circumference",
+  "calf_circumference",
+  "ankle_circumference",
+  "back_width_scapular",
+  "front_length_to_waist",
+]);
+
+function orderMeasurementsManual(list) {
+  const rows = (Array.isArray(list) ? list : []).filter(
+    (r) => !HIDDEN_MEASUREMENT_IDS.has(String(r?.id ?? ""))
+  );
+  const byId = new Map(rows.map((r) => [r?.id, r]));
+  const ordered = [];
+  for (const id of MEASUREMENT_MANUAL_ORDER) {
+    const row = byId.get(id);
+    if (row) ordered.push(row);
+  }
+  for (const row of rows) {
+    if (!MEASUREMENT_MANUAL_ORDER.includes(row?.id)) ordered.push(row);
+  }
+  return ordered;
+}
+
 const PIPELINE_VIZ_KEYS = [
-  ["viz_front_pose_png_b64", "Анфас — поза (YOLO pose)"],
-  ["viz_front_seg_png_b64", "Анфас — силует (YOLO seg)"],
-  ["viz_side_pose_png_b64", "Профіль — поза (YOLO pose)"],
-  ["viz_side_seg_png_b64", "Профіль — силует (YOLO seg)"],
+  ["viz_front_pose_png_b64", "Анфас — поза"],
+  ["viz_front_seg_png_b64", "Анфас — силует"],
+  ["viz_front_measures_png_b64", "Анфас — лінії зняття мірок"],
+  ["viz_side_pose_png_b64", "Профіль — поза"],
+  ["viz_side_seg_png_b64", "Профіль — силует"],
+  ["viz_side_measures_png_b64", "Профіль — лінії зняття мірок"],
 ];
 
 /** Show base64 PNGs from envelope `derived` (server pipeline debug). */
@@ -336,19 +408,22 @@ export function refreshTailoringView() {
   if (!garment) return;
 
   const sex          = env.subject?.sex ?? "other";
-  const measurements = env.measurements ?? [];
+  const measurements = orderMeasurementsManual(env.measurements ?? []);
 
   // Render measurements table
-  const midsForGarment = garment.measurement_ids || [];
+  const midsForGarment = (garment.measurement_ids || []).filter(
+    (mid) => !HIDDEN_MEASUREMENT_IDS.has(String(mid))
+  );
   tailoringMeasuresBody.innerHTML = "";
-  for (const mid of midsForGarment) {
-    const row = measurements.find((m) => m.id === mid);
+  const garmentRows = midsForGarment
+    .map((mid) => measurements.find((m) => m.id === mid))
+    .filter(Boolean);
+  for (const row of orderMeasurementsManual(garmentRows)) {
     if (!row) continue;
     const tr = document.createElement("tr");
     tr.innerHTML =
-      "<td>" + escapeHtml(row.label_uk ?? mid) +
-      "</td><td>" + escapeHtml(String(row.value_cm)) +
-      "</td><td>" + escapeHtml(String(row.confidence)) + "</td>";
+      "<td>" + escapeHtml(row.label_uk ?? row.id) +
+      "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
     tailoringMeasuresBody.appendChild(tr);
   }
 
@@ -497,13 +572,14 @@ export function ensureSizeTabsWired() {
 // ---------------------------------------------------------------------------
 
 export function attachMeasureHandler() {
-  const {
+    const {
     btnMeasure,
     btnMeasureTest,
     resultsSection,
     resultsBody,
     heightInput,
     sexSelect,
+    poseBackendSelect,
     tailoringIntro,
     garmentStripWrap,
     tailoringPanels,
@@ -512,9 +588,17 @@ export function attachMeasureHandler() {
 
   async function runMeasureRequest(mode = "capture") {
     const useTestImages = mode === "test";
-    if (!useTestImages && (!captureState.frontBlob || !captureState.sideBlob)) return;
+    if (!useTestImages && (!captureState.frontBlob || !captureState.sideBlob)) {
+      setStatus("Потрібні обидва знімки — анфас і профіль.", true);
+      return;
+    }
     if (!resultsSection || !resultsBody) {
       setStatus("Помилка: немає контейнера результатів у розмітці.", true);
+      return;
+    }
+    const heightCmNum = Number(String(heightInput.value).replace(",", "."));
+    if (!Number.isFinite(heightCmNum) || heightCmNum < 100 || heightCmNum > 250) {
+      setStatus("Вкажіть зріст від 100 до 250 см.", true);
       return;
     }
     setStatus(useTestImages ? "Тестовий розрахунок…" : "Обчислення…");
@@ -523,10 +607,13 @@ export function attachMeasureHandler() {
     if (modelVizEl) modelVizEl.hidden = true;
 
     const fd = new FormData();
-    fd.append("height_cm", String(heightInput.value));
+    fd.append("height_cm", String(heightCmNum));
     fd.append("sex",       sexSelect.value);
     const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
     if (!useTestImages) {
+      if (poseBackendSelect && poseBackendSelect.value) {
+        fd.append("pose_backend", poseBackendSelect.value);
+      }
       const frontName =
         captureState.frontBlob instanceof File && captureState.frontBlob.name
           ? captureState.frontBlob.name
@@ -543,24 +630,40 @@ export function attachMeasureHandler() {
       const res = await fetch(measureUrl, { method: "POST", body: fd });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || res.statusText);
+        throw new Error(formatMeasureHttpError(res, text));
       }
       const data = await res.json();
+      const measurements = orderMeasurementsManual(data.measurements ?? []);
+      if (!measurements.length) {
+        captureState.lastMockResponse = null;
+        const mvEmpty = document.getElementById("model-viz");
+        if (mvEmpty) mvEmpty.hidden = true;
+        resultsBody.innerHTML = "";
+        if (tailoringIntro) tailoringIntro.hidden = true;
+        if (garmentStripWrap) garmentStripWrap.hidden = true;
+        if (tailoringPanels) tailoringPanels.hidden = true;
+        if (tailoringDisclaimer) tailoringDisclaimer.hidden = true;
+        const patternDetailsEl = document.getElementById("pattern-details");
+        if (patternDetailsEl) patternDetailsEl.hidden = true;
+        resultsSection.hidden = false;
+        setStatus(
+          "Сервер повернув порожній список мірок. Спробуйте інші знімки або перевірте позу й освітлення.",
+          true
+        );
+        return;
+      }
+
       captureState.lastMockResponse = data;
       renderPipelineModelViz(data.derived);
 
       const sex      = data.subject?.sex ?? sexSelect.value;
-      const heightCm = data.subject?.height_cm ?? heightInput.value;
-      const measurements = data.measurements ?? [];
-
-      // Render raw measurements table
+      const heightCm = data.subject?.height_cm ?? heightCmNum;
       resultsBody.innerHTML = "";
       for (const row of measurements) {
         const tr = document.createElement("tr");
         tr.innerHTML =
           "<td>" + escapeHtml(row.label_uk ?? row.id) +
-          "</td><td>" + escapeHtml(String(row.value_cm)) +
-          "</td><td>" + escapeHtml(String(row.confidence)) + "</td>";
+          "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
         resultsBody.appendChild(tr);
       }
 

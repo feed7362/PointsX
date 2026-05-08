@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PointsX — мірки (mock)</title>
+    <title>PointsX — мірки</title>
     <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
   </head>
   <body>
     <header class="header">
       <h1>PointsX</h1>
       <p class="sub">
-        Тестовий інтерфейс: дві фотографії, зріст, стать → mock-результат з сервера. Поза перевіряється в браузері (MediaPipe).
+        Дві фотографії, зріст, стать → результат з сервера, розміри за сітками. Поза перевіряється в браузері.
         <a href="/static/frame-editor.html">Редактор рамки</a>.
       </p>
     </header>
@@ -19,8 +19,8 @@
       <section class="card references" aria-labelledby="ref-heading" id="section-references">
         <h2 id="ref-heading">Приклади правильної пози</h2>
         <p class="ref-intro">
-          <strong>Анфас:</strong> ноги на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
-          <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки вперед на ~45°.
+          <strong>Анфас:</strong> ноги приблизно на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+          <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки злегка відведені на ~15–20° від корпусу.
           <br>Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
         </p>
         <div class="ref-grid">
@@ -54,12 +54,22 @@
             <option value="other">Інше</option>
           </select>
         </div>
+        <div class="field">
+          <label for="pose-backend">Модель пози (сервер)</label>
+          <select id="pose-backend" name="pose_backend" aria-describedby="pose-backend-hint">
+            <option value="custom">16 точок (кастомна, LV-MHP)</option>
+            <option value="coco" selected>COCO 17 (YOLO26, з перетворенням)</option>
+          </select>
+          <p id="pose-backend-hint" class="hint">
+            Кастомна модель зазвичай точніша для цього пайплайну; COCO — універсальна.
+          </p>
+        </div>
       </section>
 
       <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
         <h2 id="capture-heading">Зйомка</h2>
         <p id="step-label" class="step-label">Крок 1 з 2: анфас</p>
-        <div class="preview-wrap mirror">
+        <div class="preview-wrap mirror preview-wrap--idle" id="preview-wrap">
           <video id="video" playsinline autoplay muted></video>
           <canvas id="overlay" class="overlay" aria-hidden="true"></canvas>
           <div
@@ -69,6 +79,33 @@
             aria-live="assertive"
             aria-atomic="true"
           ></div>
+          <div
+            class="preview-idle"
+            id="preview-idle"
+            aria-hidden="false"
+          >
+            <div class="preview-idle-inner">
+              <svg
+                class="preview-idle-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              <p class="preview-idle-title">Камера вимкнена</p>
+              <p class="preview-idle-hint">
+                Натисніть «Увімкнути камеру», щоб побачити превʼю й ескіз пози для заміру.
+              </p>
+            </div>
+          </div>
         </div>
         <div class="actions capture-live-actions">
           <button type="button" id="btn-start" class="btn primary">Увімкнути камеру</button>
@@ -157,7 +194,6 @@
                 <tr>
                   <th>Показник</th>
                   <th>см</th>
-                  <th>Дост.</th>
                 </tr>
               </thead>
               <tbody id="tailoring-measures-body"></tbody>
@@ -212,7 +248,6 @@
               <tr>
                 <th>Показник</th>
                 <th>Значення (см)</th>
-                <th>Достовірність</th>
               </tr>
             </thead>
             <tbody id="results-body"></tbody>

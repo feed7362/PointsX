@@ -14,6 +14,8 @@ class Keypoints:
     points: np.ndarray  # (16, 2) pixel coordinates [x, y]
     confidence: np.ndarray  # (16,) per-keypoint confidence 0..1
     view: str  # "front" or "side"
+    nose_xy: np.ndarray | None = None  # optional raw nose point [x, y] when available
+    nose_conf: float | None = None  # optional raw nose confidence
 
 
 @dataclass
@@ -51,6 +53,7 @@ class BodyMeasurements:
 
     # Shoulders
     shoulder_width_cm: float | None = None
+    shoulder_slope_width_cm: float | None = None
 
     # Chest / torso
     torso_width_front_cm: float | None = None
@@ -60,6 +63,8 @@ class BodyMeasurements:
     waist_width_front_cm: float | None = None
     waist_width_side_cm: float | None = None
     waist_circumference_cm: float | None = None
+    waist_level_front_px: float | None = None
+    waist_level_side_px: float | None = None
 
     # Hips
     hip_width_front_cm: float | None = None

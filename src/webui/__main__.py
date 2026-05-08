@@ -5,12 +5,12 @@ Server bind:
     POINTSX_WEB_PORT    default 8000
 
 Model loading (consumed by the FastAPI lifespan in webui.app):
-    POINTSX_POSE_MODEL        path to YOLO11n-pose .pt
-                              default: runs/pose/best.pt (your fine-tuned weights)
-    POINTSX_SEG_MODEL         path to YOLO11n-seg .pt
-                              default: runs/seg/best.pt
-    POINTSX_REGRESSION_MODEL  path to circumference_regressor.pt
-                              default: models/circumference_regressor.pt if present;
+    POINTSX_POSE_MODEL_CUSTOM path to 16-keypoint pose .pt (default: models/pose-cus.pt)
+    POINTSX_POSE_MODEL_COCO   path to COCO-17 pose .pt (default: models/yolo26-pose.pt)
+    POINTSX_POSE_MODEL        legacy: overrides POINTSX_POSE_MODEL_CUSTOM when set
+    POINTSX_SEG_MODEL         path to segmentation .pt (default: models/yolo12l-person-seg-extended.pt)
+    POINTSX_REGRESSION_MODEL  path to regression .pt
+                              default: models/reg.pt if present;
                               set to "" to force the Ramanujan ellipse fallback.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …
                               default: auto
@@ -28,14 +28,16 @@ import os
 _DESCRIPTION = """\
 PointsX measurement web UI (FastAPI + static assets).
 
-Defaults assume your trained weights are at runs/pose/best.pt, runs/seg/best.pt,
-and models/circumference_regressor.pt — just run `pointsx-web --reload`.
+Defaults load custom 16-pt pose (models/pose-cus.pt), COCO pose (models/yolo26-pose.pt),
+and segmentation (models/yolo12l-person-seg-extended.pt). The UI lets you pick which
+pose backend to use per request.
 
 Override via env vars when needed:
 
-  POINTSX_POSE_MODEL=runs/pose/best.pt \\
-  POINTSX_SEG_MODEL=runs/seg/best.pt \\
-  POINTSX_REGRESSION_MODEL=models/circumference_regressor.pt \\
+  POINTSX_POSE_MODEL_CUSTOM=models/pose-cus.pt \\
+  POINTSX_POSE_MODEL_COCO=models/yolo26-pose.pt \\
+  POINTSX_SEG_MODEL=models/yolo12l-person-seg-extended.pt \\
+  POINTSX_REGRESSION_MODEL=models/reg.pt \\
   POINTSX_DEVICE=cpu \\
   pointsx-web --reload
 """

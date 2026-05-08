@@ -18,8 +18,10 @@ Input layout (produced by `synthetic/pipeline.py --mode both`):
 Usage:
     python -m pointsx.regression.build_dataset \
         --pose-root  data/synthetic-pose \
-        --pose-model models/yolo11n-pose.pt \
-        --seg-model  models/yolo11n-seg.pt \
+        --pose-backend custom \
+        --pose-model-custom models/pose-cus.pt \
+        --pose-model-coco models/yolo26-pose.pt \
+        --seg-model  models/yolo12l-person-seg-extended.pt \
         --output     data/regression_features.npz
 """
 from __future__ import annotations
@@ -35,7 +37,8 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, Ti
 
 from pointsx.calibration import calibrate
 from pointsx.measurements import extract_measurements
-from pointsx.models import BodyModels
+from pointsx.keypoints import MIN_CONFIDENCE
+from pointsx.models import BodyModels, PoseBackend
 from pointsx.regression.features import build_feature_vector
 from pointsx.schemas import Keypoints
 
@@ -75,7 +78,7 @@ def _pair_images(pose_root: Path) -> dict[int, dict[str, Path]]:
 
 def _reference_point(kp: Keypoints) -> tuple[float, float]:
     """Estimate subject center for seg-mask selection."""
-    valid = kp.confidence >= 0.3
+    valid = kp.confidence >= MIN_CONFIDENCE
     if np.any(valid):
         center = kp.points[valid].mean(axis=0)
     else:
@@ -85,9 +88,12 @@ def _reference_point(kp: Keypoints) -> tuple[float, float]:
 
 def build_dataset(
     pose_root: Path,
-    pose_model: Path,
+    pose_custom: Path,
+    pose_coco: Path,
     seg_model: Path,
     output: Path,
+    *,
+    pose_backend: PoseBackend = "custom",
     img_size: int = 640,
     device: str = "auto",
     limit: int | None = None,
@@ -97,7 +103,8 @@ def build_dataset(
     Returns (n_written, n_skipped).
     """
     models = BodyModels(
-        pose_model_path=pose_model,
+        pose_custom_path=pose_custom,
+        pose_coco_path=pose_coco,
         seg_model_path=seg_model,
         img_size=img_size,
         device=device,
@@ -159,8 +166,8 @@ def build_dataset(
                     _remember(f"body {body_id}: cv2.imread returned None")
                     continue
 
-                front_kp = models.predict_pose(front_img, view="front")
-                side_kp  = models.predict_pose(side_img,  view="side")
+                front_kp = models.predict_pose(front_img, view="front", pose_backend=pose_backend)
+                side_kp  = models.predict_pose(side_img,  view="side", pose_backend=pose_backend)
                 if front_kp is None or side_kp is None:
                     skipped_no_detect += 1
                     _remember(
@@ -265,10 +272,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build regression training .npz from synthetic data")
     parser.add_argument("--pose-root", required=True, type=Path,
                         help="Synthetic pose dataset root (contains train/, val/, measurements/)")
-    parser.add_argument("--pose-model", required=True, type=Path,
-                        help="Trained YOLO-pose weights (yolo11n-pose.pt)")
+    parser.add_argument(
+        "--pose-backend",
+        choices=("custom", "coco"),
+        default="custom",
+        help="Which pose checkpoint to run (custom=16pt native, coco=17pt→16)",
+    )
+    parser.add_argument(
+        "--pose-model-custom",
+        type=Path,
+        default=Path("models/pose-cus.pt"),
+        help="16-keypoint pose weights",
+    )
+    parser.add_argument(
+        "--pose-model-coco",
+        type=Path,
+        default=Path("models/yolo26-pose.pt"),
+        help="COCO 17-keypoint pose weights",
+    )
     parser.add_argument("--seg-model", required=True, type=Path,
-                        help="Trained YOLO-seg weights (yolo11n-pose.pt)")
+                        help="Trained YOLO-seg weights (e.g. models/yolo12l-person-seg-extended.pt)")
     parser.add_argument("--output", type=Path, default=Path("data/regression_features.npz"))
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--device", type=str, default="auto",
@@ -285,8 +308,10 @@ def main() -> None:
 
     n_ok, n_skipped = build_dataset(
         pose_root=args.pose_root,
-        pose_model=args.pose_model,
+        pose_custom=args.pose_model_custom,
+        pose_coco=args.pose_model_coco,
         seg_model=args.seg_model,
+        pose_backend=args.pose_backend,
         output=args.output,
         img_size=args.img_size,
         device=args.device,

@@ -13,6 +13,9 @@ import {
   importGuideGeometryJson,
   computeGuideBox,
   drawPoly,
+  drawProfileInteriorPaths,
+  profileNormX,
+  profileDenormX,
 } from "./guideGeometry.js";
 
 const MIN_MAIN_POLY = 3;
@@ -146,6 +149,20 @@ function currentMainPoly() {
   return editorStep === 1 ? guideGeom.frontPts : guideGeom.profilePts;
 }
 
+/** Box X pixel for stored polygon X (profile applies same horizontal widen as silhouette). */
+function boxPixelXStoredNorm(nxStored, box) {
+  const xDraw =
+    editorStep === 2 ? profileNormX(nxStored, guideGeom.guideFrame) : nxStored;
+  return box.left + xDraw * box.width;
+}
+
+/** Stored profile X from guide-box normalized draw X ((px-box.left)/width); identity on front step. */
+function storedNormXFromDrawNorm(drawNx) {
+  const t = Math.min(1, Math.max(0, drawNx));
+  if (editorStep !== 2) return t;
+  return Math.min(1, Math.max(0, profileDenormX(t, guideGeom.guideFrame)));
+}
+
 /** Map pointer client coordinates to canvas pixel space. */
 function clientToCanvas(clientX, clientY) {
   const r = cv.getBoundingClientRect();
@@ -162,7 +179,7 @@ function pickVertex(mx, my) {
   let best = -1;
   let bestD = 196;
   for (let i = 0; i < pts.length; i++) {
-    const px = box.left + pts[i][0] * box.width;
+    const px = boxPixelXStoredNorm(pts[i][0], box);
     const py = box.top + pts[i][1] * box.height;
     const d = (mx - px) ** 2 + (my - py) ** 2;
     if (d < bestD) {
@@ -191,18 +208,21 @@ function closestOnSeg(mx, my, ax, ay, bx, by) {
 }
 
 /** Find edge insert position on a closed polygon near (mx, my). */
-function findInsertClosed(pts, mx, my, box, threshPx) {
+function findInsertClosed(pts, mx, my, box, threshPx, profileHorizMap) {
   const thr2 = threshPx * threshPx;
   const n = pts.length;
   let bestI = -1;
   let bestD = Infinity;
   let bestPx = 0;
   let bestPy = 0;
+  const gf = guideGeom.guideFrame;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const ax = box.left + pts[i][0] * box.width;
+    const axi = profileHorizMap ? profileNormX(pts[i][0], gf) : pts[i][0];
+    const bxj = profileHorizMap ? profileNormX(pts[j][0], gf) : pts[j][0];
+    const ax = box.left + axi * box.width;
     const ay = box.top + pts[i][1] * box.height;
-    const bx = box.left + pts[j][0] * box.width;
+    const bx = box.left + bxj * box.width;
     const by = box.top + pts[j][1] * box.height;
     const { distSq, px, py } = closestOnSeg(mx, my, ax, ay, bx, by);
     if (distSq < bestD) {
@@ -213,7 +233,8 @@ function findInsertClosed(pts, mx, my, box, threshPx) {
     }
   }
   if (bestI < 0 || bestD > thr2) return null;
-  const nx = Math.min(1, Math.max(0, (bestPx - box.left) / box.width));
+  const drawNx = Math.min(1, Math.max(0, (bestPx - box.left) / box.width));
+  const nx = profileHorizMap ? storedNormXFromDrawNorm(drawNx) : drawNx;
   const ny = Math.min(1, Math.max(0, (bestPy - box.top) / box.height));
   return { afterIdx: bestI, nx, ny };
 }
@@ -225,7 +246,7 @@ function tryInsertShiftClick(mx, my) {
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
   const pts = editorStep === 1 ? guideGeom.frontPts : guideGeom.profilePts;
-  const r = findInsertClosed(pts, mx, my, box, EDGE_HIT_PX);
+  const r = findInsertClosed(pts, mx, my, box, EDGE_HIT_PX, editorStep === 2);
   if (!r) return false;
   pts.splice(r.afterIdx + 1, 0, [r.nx, r.ny]);
   return true;
@@ -255,11 +276,19 @@ function draw() {
   const box = computeGuideBox(cv.width, cv.height, h);
   ctx.fillStyle = "#121722";
   ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.strokeStyle = "rgba(91, 140, 255, 0.85)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(box.left + 0.5, box.top + 0.5, box.width - 1, box.height - 1);
 
-  ctx.strokeStyle = "rgba(91, 140, 255, 0.92)";
+  ctx.lineWidth = 2;
+  if (editorStep === 1) {
+    ctx.strokeStyle = "rgba(91, 140, 255, 0.85)";
+    ctx.strokeRect(box.left + 0.5, box.top + 0.5, box.width - 1, box.height - 1);
+  }
+
+  const silhouetteStroke =
+    editorStep === 2 ? "rgba(255, 255, 255, 0.92)" : "rgba(91, 140, 255, 0.92)";
+  const silhouetteFill =
+    editorStep === 2 ? "rgba(255, 255, 255, 0.08)" : "rgba(91, 140, 255, 0.08)";
+
+  ctx.strokeStyle = silhouetteStroke;
   ctx.lineWidth = Math.max(2, cv.width * 0.014);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -268,19 +297,26 @@ function draw() {
     drawPoly(ctx, guideGeom.frontPts, box);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(91, 140, 255, 0.08)";
+    ctx.fillStyle = silhouetteFill;
     ctx.fill();
   } else {
-    drawPoly(ctx, guideGeom.profilePts, box);
+    const gf = guideGeom.guideFrame;
+    const mapProfile = (p) => /** @type {[number, number]} */ ([profileNormX(p[0], gf), p[1]]);
+    drawPoly(ctx, guideGeom.profilePts, box, { linear: true, mapNormPt: mapProfile });
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(91, 140, 255, 0.08)";
+    ctx.fillStyle = silhouetteFill;
     ctx.fill();
+    if (guideGeom.profileInteriorPaths?.length) {
+      drawProfileInteriorPaths(ctx, box, guideGeom.profileInteriorPaths, {
+        profileInteriorStroke: "rgba(255, 255, 255, 0.78)",
+      }, mapProfile);
+    }
   }
 
   const pts = currentMainPoly();
   for (let i = 0; i < pts.length; i++) {
-    const px = box.left + pts[i][0] * box.width;
+    const px = boxPixelXStoredNorm(pts[i][0], box);
     const py = box.top + pts[i][1] * box.height;
     const sel = selectedVertex != null && selectedVertex === i;
     ctx.beginPath();
@@ -294,31 +330,35 @@ function draw() {
     }
   }
 
-  const ax = box.left + guideGeom.headAnchorFront.x * box.width;
-  const ay = box.top + guideGeom.headAnchorFront.y * box.height;
-  const bx = box.left + guideGeom.headAnchorProfile.x * box.width;
-  const by = box.top + guideGeom.headAnchorProfile.y * box.height;
-  ctx.fillStyle = editorStep === 1 ? "rgba(255,100,120,0.9)" : "rgba(255,100,120,0.35)";
-  ctx.beginPath();
-  ctx.arc(ax, ay, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = editorStep === 2 ? "rgba(255,100,120,0.9)" : "rgba(255,100,120,0.35)";
-  ctx.beginPath();
-  ctx.arc(bx, by, 5, 0, Math.PI * 2);
-  ctx.fill();
-
-  const f1x = box.left + guideGeom.footAnchorFront.x * box.width;
-  const f1y = box.top + guideGeom.footAnchorFront.y * box.height;
-  const f2x = box.left + guideGeom.footAnchorProfile.x * box.width;
-  const f2y = box.top + guideGeom.footAnchorProfile.y * box.height;
-  ctx.fillStyle = editorStep === 1 ? "rgba(120,220,255,0.95)" : "rgba(120,220,255,0.35)";
-  ctx.beginPath();
-  ctx.arc(f1x, f1y, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = editorStep === 2 ? "rgba(120,220,255,0.95)" : "rgba(120,220,255,0.35)";
-  ctx.beginPath();
-  ctx.arc(f2x, f2y, 5, 0, Math.PI * 2);
-  ctx.fill();
+  if (editorStep === 1) {
+    const ax = box.left + guideGeom.headAnchorFront.x * box.width;
+    const ay = box.top + guideGeom.headAnchorFront.y * box.height;
+    ctx.fillStyle = "rgba(255,100,120,0.9)";
+    ctx.beginPath();
+    ctx.arc(ax, ay, 5, 0, Math.PI * 2);
+    ctx.fill();
+    const f1x = box.left + guideGeom.footAnchorFront.x * box.width;
+    const f1y = box.top + guideGeom.footAnchorFront.y * box.height;
+    ctx.fillStyle = "rgba(120,220,255,0.95)";
+    ctx.beginPath();
+    ctx.arc(f1x, f1y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const bx =
+      box.left + profileNormX(guideGeom.headAnchorProfile.x, guideGeom.guideFrame) * box.width;
+    const by = box.top + guideGeom.headAnchorProfile.y * box.height;
+    ctx.fillStyle = "rgba(255,100,120,0.9)";
+    ctx.beginPath();
+    ctx.arc(bx, by, 5, 0, Math.PI * 2);
+    ctx.fill();
+    const f2x =
+      box.left + profileNormX(guideGeom.footAnchorProfile.x, guideGeom.guideFrame) * box.width;
+    const f2y = box.top + guideGeom.footAnchorProfile.y * box.height;
+    ctx.fillStyle = "rgba(120,220,255,0.95)";
+    ctx.beginPath();
+    ctx.arc(f2x, f2y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 buildGfFields();
@@ -379,9 +419,10 @@ window.addEventListener("mousemove", (e) => {
   const { x, y } = clientToCanvas(e.clientX, e.clientY);
   const h = heightPreview.value;
   const box = computeGuideBox(cv.width, cv.height, h);
-  let nx = (x - box.left) / box.width;
+  const drawNx = Math.min(1, Math.max(0, (x - box.left) / box.width));
+  const nx =
+    editorStep === 2 ? Math.min(1, Math.max(0, profileDenormX(drawNx, guideGeom.guideFrame))) : drawNx;
   let ny = (y - box.top) / box.height;
-  nx = Math.min(1, Math.max(0, nx));
   ny = Math.min(1, Math.max(0, ny));
   const pts = currentMainPoly();
   pts[dragIdx][0] = nx;

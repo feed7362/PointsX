@@ -10,11 +10,19 @@ import { syncOverlaySize } from "./overlay.js";
 import {
   cancelSpeechSynthesis,
   hideCountdownOverlay,
+  primeVoiceAfterUserGesture,
   showCountdownOverlay,
   speakCountdownDigit,
 } from "./speech.js";
 import { setStatus, setPoseStatus, setPoseStatusVisual, updateUiStep } from "./ui.js";
 import { clearThumbSlotPhoto, syncThumbSlotToImage } from "./thumbLayout.js";
+
+/** Camera off: idle art inside preview; camera on: show live feed. */
+function syncPreviewIdleState(cameraLive) {
+  const { previewWrap, previewIdle } = getCaptureDom();
+  previewWrap?.classList.toggle("preview-wrap--idle", !cameraLive);
+  previewIdle?.setAttribute("aria-hidden", cameraLive ? "true" : "false");
+}
 
 export const MIN_VIDEO_DIMENSION = 480;
 export const POSE_MIN_INTERVAL_MS = 120;
@@ -69,6 +77,32 @@ async function imageBitmapToBlob(bitmap, preferredMime) {
     if (blob && blob.size > 0) return blob;
   }
   return null;
+}
+
+/**
+ * Square output for pose/seg models: landscape → centered crop (H×H); portrait → pad sides to H×H.
+ * Near-square images return a fresh ImageBitmap copy.
+ */
+async function imageBitmapToSquare(bitmap) {
+  const w = bitmap.width;
+  const h = bitmap.height;
+  if (Math.abs(w - h) <= 1) {
+    return createImageBitmap(bitmap);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = h;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D unavailable");
+  if (w > h) {
+    const sx = (w - h) / 2;
+    ctx.drawImage(bitmap, sx, 0, h, h, 0, 0, h, h);
+  } else {
+    ctx.fillStyle = "#0f1218";
+    ctx.fillRect(0, 0, h, h);
+    ctx.drawImage(bitmap, (h - w) / 2, 0);
+  }
+  return createImageBitmap(canvas);
 }
 
 function nextPoseVideoTimestampMs() {
@@ -241,20 +275,22 @@ function gatePoseOnBitmap(viewStep, bitmap) {
  * Store uploaded blob(s), update thumbs and wizard step (shared by pose-validated and debug-skip paths).
  * @param {"front"|"side"} which
  * @param {File} file
- * @param {Blob} storageBlob  side may be a flipped re-encode; front path stores `file` as frontBlob
+ * @param {Blob} storageBlob  processed image (square) for API + thumbnail
  * @param {string} poseLine     copy for `#pose-status`
+ * @param {{ mirrored?: boolean }} [opts]
  */
-function commitUploadedImage(which, file, storageBlob, poseLine) {
+function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
+  const mirrored = Boolean(opts.mirrored);
   const { thumbFront, thumbSide } = getCaptureDom();
   resetAutoCaptureUi();
   cancelSpeechSynthesis();
-  setPoseStatus(poseLine, "ok");
-  const displayBlob = which === "front" ? file : storageBlob;
-  const url = URL.createObjectURL(displayBlob);
+  // Upload flow should be silent: keep visual pose status without TTS.
+  setPoseStatusVisual(poseLine, "ok");
+  const url = URL.createObjectURL(storageBlob);
   if (which === "front") {
     captureState.suspendPoseLoopAfterComplete = false;
     revokeThumbUrl(thumbFront);
-    captureState.frontBlob = file;
+    captureState.frontBlob = storageBlob;
     thumbFront.src = url;
     thumbFront.hidden = false;
     syncThumbSlotToImage(thumbFront);
@@ -278,7 +314,7 @@ function commitUploadedImage(which, file, storageBlob, poseLine) {
     thumbSide.src = url;
     thumbSide.hidden = false;
     syncThumbSlotToImage(thumbSide);
-    const flipHint = storageBlob !== file ? " Фото віддзеркалено автоматично." : "";
+    const flipHint = mirrored ? " Фото віддзеркалено автоматично." : "";
     if (captureState.frontBlob) {
       captureState.step = 2;
       captureState.suspendPoseLoopAfterComplete = true;
@@ -312,7 +348,27 @@ export async function applyUploadedImage(which, file) {
   }
 
   if (captureState.debugSkipUploadPoseGate) {
-    commitUploadedImage(which, file, file, "Debug: файл прийнято без перевірки пози");
+    let bmp;
+    try {
+      bmp = await createImageBitmap(file);
+    } catch {
+      setStatus("Не вдалося прочитати зображення.", true);
+      return;
+    }
+    try {
+      const squared = await imageBitmapToSquare(bmp);
+      bmp.close();
+      bmp = null;
+      const storageBlob = await imageBitmapToBlob(squared, file.type);
+      squared.close();
+      if (!storageBlob) {
+        setStatus("Не вдалося привести зображення до квадрата.", true);
+        return;
+      }
+      commitUploadedImage(which, file, storageBlob, "Файл прийнято без перевірки пози");
+    } finally {
+      if (bmp) bmp.close();
+    }
     return;
   }
 
@@ -336,8 +392,6 @@ export async function applyUploadedImage(which, file) {
       return;
     }
 
-    /** @type {Blob} */
-    let storageBlob = file;
     try {
       let poseChk = gatePoseOnBitmap(viewStep, bitmap);
       logPoseGateCheck(
@@ -348,6 +402,7 @@ export async function applyUploadedImage(which, file) {
         { ok: poseChk.ok, reason: poseChk.reason }
       );
 
+      let mirroredSide = false;
       if (!poseChk.ok && viewStep === 2) {
         let flipped = null;
         try {
@@ -365,13 +420,7 @@ export async function applyUploadedImage(which, file) {
             bitmap = flipped;
             flipped = null;
             poseChk = poseChkF;
-            const flippedBlob = await imageBitmapToBlob(bitmap, file.type);
-            if (!flippedBlob) {
-              setStatus("Не вдалося зберегти дзеркальне фото.", true);
-              setPoseStatus("", "bad");
-              return;
-            }
-            storageBlob = flippedBlob;
+            mirroredSide = true;
           }
         } finally {
           if (flipped) flipped.close();
@@ -383,11 +432,29 @@ export async function applyUploadedImage(which, file) {
         setPoseStatus(poseChk.reason || "Поза не відповідає вимогам.", "bad");
         return;
       }
+
+      let squared;
+      try {
+        squared = await imageBitmapToSquare(bitmap);
+      } finally {
+        bitmap.close();
+        bitmap = null;
+      }
+
+      const storageBlob = await imageBitmapToBlob(squared, file.type);
+      squared.close();
+      if (!storageBlob) {
+        setStatus("Не вдалося привести зображення до квадрата.", true);
+        setPoseStatus("", "bad");
+        return;
+      }
+
+      commitUploadedImage(which, file, storageBlob, "Поза на фото підходить", {
+        mirrored: which === "side" && mirroredSide,
+      });
     } finally {
       if (bitmap) bitmap.close();
     }
-
-    commitUploadedImage(which, file, storageBlob, "Поза на фото підходить");
   } finally {
     disposePoseLandmarkerImage();
   }
@@ -561,6 +628,7 @@ export async function startCamera() {
     });
     video.srcObject = captureState.stream;
     await video.play();
+    void primeVoiceAfterUserGesture();
     cancelAnimationFrame(captureState.raf);
     loop();
     btnStop.disabled = false;
@@ -568,8 +636,10 @@ export async function startCamera() {
     captureState.lastPoseGate = { ok: false, reason: "Аналіз пози…" };
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = true;
+    syncPreviewIdleState(true);
   } catch (e) {
     setStatus("Не вдалося отримати доступ до камери: " + (e && e.message ? e.message : String(e)), true);
+    syncPreviewIdleState(false);
   }
 }
 
@@ -595,10 +665,12 @@ export function stopCamera() {
   btnCaptureTimer.disabled = true;
   btnStop.disabled = true;
   setPoseStatus("", "");
+  syncPreviewIdleState(false);
 }
 
 /**
- * Re-verify pose on the exact frame, mirror the canvas like `.preview-wrap.mirror`, then JPEG toBlob.
+ * Re-verify pose on the exact frame, mirror the canvas like `.preview-wrap.mirror`,
+ * scale down if needed, crop/pad to a square, then JPEG toBlob.
  */
 export function captureFrameToBlob(callback) {
   const { video, captureCanvas } = getCaptureDom();
@@ -658,21 +730,51 @@ export function captureFrameToBlob(callback) {
   cctx.translate(tw, 0);
   cctx.scale(-1, 1);
   cctx.drawImage(video, 0, 0, tw, th);
-  captureCanvas.toBlob(
-    (blob) => {
-      captureState.awaitingCaptureBlob = false;
-      if (!blob) {
-        setStatus("Не вдалося створити знімок.", true);
+
+  void (async () => {
+    let bmp = null;
+    let sq = null;
+    try {
+      bmp = await createImageBitmap(captureCanvas);
+      sq = await imageBitmapToSquare(bmp);
+      bmp.close();
+      bmp = null;
+      const side = sq.width;
+      captureCanvas.width = side;
+      captureCanvas.height = side;
+      const cctxSq = captureCanvas.getContext("2d");
+      if (!cctxSq) {
+        captureState.awaitingCaptureBlob = false;
+        setStatus("Не вдалося отримати контекст.", true);
         return;
       }
-      if (captureDebugLm && captureDebugGate) {
-        logPoseDebugCapture(captureState.step, captureDebugLm, captureDebugWorld, captureDebugGate);
-      }
-      callback(blob);
-    },
-    "image/jpeg",
-    0.92
-  );
+      cctxSq.drawImage(sq, 0, 0);
+      sq.close();
+      sq = null;
+      captureCanvas.toBlob(
+        (blob) => {
+          captureState.awaitingCaptureBlob = false;
+          if (!blob) {
+            setStatus("Не вдалося створити знімок.", true);
+            return;
+          }
+          if (captureDebugLm && captureDebugGate) {
+            logPoseDebugCapture(captureState.step, captureDebugLm, captureDebugWorld, captureDebugGate);
+          }
+          callback(blob);
+        },
+        "image/jpeg",
+        0.92
+      );
+    } catch (e) {
+      captureState.awaitingCaptureBlob = false;
+      console.error(e);
+      setStatus("Не вдалося привести знімок до квадрата.", true);
+    } finally {
+      if (bmp) bmp.close();
+      if (sq) sq.close();
+    }
+  })();
 }
 
 /** After a blob is ready: update thumbs, advance step, and stop or restart the camera as needed. */
