@@ -74,10 +74,46 @@ class Combo:
 
 
 @dataclass
+class ErrorRow:
+    """Single (combo, subject, measurement) error observation."""
+    combo: str
+    subject_id: str
+    sex: str
+    measurement_id: str
+    predicted_cm: float
+    gt_cm: float
+    error_cm: float  # predicted - gt
+
+
+@dataclass
 class ComboStats:
     label: str
     errors: dict[str, list[float]] = field(default_factory=lambda: {m: [] for m in DISPLAY_IDS})
     n_failed: int = 0
+
+
+# ── Measurement category mapping (for the "per Обхват / Ширина / Довжина"
+#    breakdown). Built from the Ukrainian label prefixes in CANONICAL_MEASUREMENTS.
+def _category_for(mid: str) -> str:
+    label = LABEL_BY_ID.get(mid, mid)
+    if label.startswith("Обхват"):
+        return "Обхват"
+    if label.startswith("Ширина"):
+        return "Ширина"
+    if label.startswith("Довжина"):
+        return "Довжина"
+    if label.startswith("Висота"):
+        return "Висота"
+    return "Інше"
+
+
+def _agg(values: list[float]) -> tuple[float, float, float] | None:
+    """Return (MAE, RMSE, bias) over a list of signed errors, or None if empty."""
+    if not values:
+        return None
+    abs_arr = np.array([abs(v) for v in values])
+    rmse = math.sqrt(float(np.mean(np.square(abs_arr))))
+    return float(np.mean(abs_arr)), rmse, float(np.mean(values))
 
 
 # ── CSV ─────────────────────────────────────────────────────────────────────
@@ -171,6 +207,93 @@ def _aggregate_stats(stats: ComboStats) -> dict[str, float]:
     }
 
 
+def _print_per_subject(combo_label: str, rows: list[ErrorRow]) -> None:
+    """One block per subject with row-by-row pred/gt/Δ for the chosen combo."""
+    by_subj: dict[str, list[ErrorRow]] = {}
+    for r in rows:
+        if r.combo != combo_label:
+            continue
+        by_subj.setdefault(r.subject_id, []).append(r)
+    if not by_subj:
+        return
+    print(f"\n=== {combo_label}: per-subject detail ===")
+    for sid, subj_rows in by_subj.items():
+        sex = subj_rows[0].sex
+        print(f"\n── {sid} (sex={sex}) ──")
+        print(f"{'Показник':<58} {'Прогноз':>10} {'GT':>10} {'Δ см':>10}")
+        # Sort by canonical display order
+        ordered = sorted(subj_rows, key=lambda r: DISPLAY_IDS.index(r.measurement_id)
+                         if r.measurement_id in DISPLAY_IDS else 999)
+        for r in ordered:
+            label = LABEL_BY_ID[r.measurement_id]
+            print(f"{label:<58} {r.predicted_cm:>10.1f} {r.gt_cm:>10.1f} "
+                  f"{r.error_cm:>+10.1f}")
+        # Per-subject overall MAE
+        agg = _agg([r.error_cm for r in subj_rows])
+        if agg:
+            mae, rmse, bias = agg
+            print(f"{'  → overall':<58} {'':>10} {'':>10} "
+                  f"  MAE={mae:.2f}  RMSE={rmse:.2f}  bias={bias:+.2f}")
+
+
+def _print_per_sex(combo_label: str, rows: list[ErrorRow]) -> None:
+    """For one combo: MAE/RMSE per sex × measurement, plus per-sex overall."""
+    sex_groups = sorted({r.sex for r in rows if r.combo == combo_label})
+    if not sex_groups:
+        return
+    print(f"\n=== {combo_label}: per-sex per-measurement error ===")
+    header = f"{'Показник':<58} " + " ".join(f"{s:>16}" for s in sex_groups)
+    print(header)
+    print(f"{'':<58} " + " ".join(f"{'MAE / bias':>16}" for _ in sex_groups))
+    for mid in DISPLAY_IDS:
+        cells = []
+        for sex in sex_groups:
+            errs = [r.error_cm for r in rows
+                    if r.combo == combo_label and r.sex == sex and r.measurement_id == mid]
+            agg = _agg(errs)
+            if agg is None:
+                cells.append(f"{'—':>16}")
+            else:
+                mae, _rmse, bias = agg
+                cells.append(f"{mae:>6.2f} / {bias:>+6.2f} ")
+        print(f"{LABEL_BY_ID[mid]:<58} " + " ".join(cells))
+
+    # Per-sex overall
+    print(f"\n{combo_label}: per-sex overall —", end=" ")
+    bits = []
+    for sex in sex_groups:
+        errs = [r.error_cm for r in rows
+                if r.combo == combo_label and r.sex == sex]
+        agg = _agg(errs)
+        if agg:
+            mae, rmse, _ = agg
+            bits.append(f"{sex}: MAE={mae:.2f} RMSE={rmse:.2f} (n={len(errs)})")
+    print("  |  ".join(bits))
+
+
+def _print_per_category(combo_label: str, rows: list[ErrorRow]) -> None:
+    """For one combo: aggregate by Ukrainian category (Обхват / Ширина / Довжина / Висота)."""
+    print(f"\n=== {combo_label}: per-category error (Обхват / Ширина / Довжина / Висота) ===")
+    print(f"{'Категорія':<14} {'n':>4} {'MAE':>8} {'RMSE':>8} {'bias':>9}  members")
+    cats: dict[str, list[ErrorRow]] = {}
+    for r in rows:
+        if r.combo != combo_label:
+            continue
+        cats.setdefault(_category_for(r.measurement_id), []).append(r)
+    # Order: Обхват first (most measurements), then Ширина, Довжина, Висота
+    for cat in ("Обхват", "Ширина", "Довжина", "Висота", "Інше"):
+        cat_rows = cats.get(cat) or []
+        if not cat_rows:
+            continue
+        members = sorted({r.measurement_id for r in cat_rows})
+        agg = _agg([r.error_cm for r in cat_rows])
+        if agg is None:
+            continue
+        mae, rmse, bias = agg
+        print(f"{cat:<14} {len(cat_rows):>4} {mae:>7.2f}  {rmse:>7.2f} {bias:>+8.2f}  "
+              f"{', '.join(members)}")
+
+
 def _print_grid_ranking(combo_stats: list[ComboStats]) -> None:
     print("\n=== Grid ranking (by overall MAE, lower is better) ===")
     rows = [(s.label, _aggregate_stats(s)) for s in combo_stats]
@@ -201,10 +324,15 @@ def _print_grid_ranking(combo_stats: list[ComboStats]) -> None:
             print(f"{label:<58} {best_label:<32} {best_mae:>7.2f}")
 
 
-def _write_grid_report(output: Path, combo_stats: list[ComboStats]) -> None:
+def _write_grid_report(
+    output: Path, combo_stats: list[ComboStats], error_rows: list[ErrorRow],
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
+
+        # — per-combo per-measurement aggregates —
+        w.writerow(["# per-combo per-measurement"])
         w.writerow(["combo", "measurement", "n", "mae_cm", "rmse_cm", "bias_cm"])
         for s in combo_stats:
             for mid in DISPLAY_IDS:
@@ -221,12 +349,67 @@ def _write_grid_report(output: Path, combo_stats: list[ComboStats]) -> None:
                     round(float(np.mean(vals)), 2),
                 ])
         w.writerow([])
+        w.writerow(["# per-combo overall"])
         w.writerow(["combo", "overall_n", "overall_mae_cm", "overall_rmse_cm"])
         for s in combo_stats:
             agg = _aggregate_stats(s)
             w.writerow([s.label, agg["n"],
                         round(agg["mae"], 2) if agg["n"] else "",
                         round(agg["rmse"], 2) if agg["n"] else ""])
+
+        # — flat per-(combo, subject, measurement) rows for any pivot —
+        w.writerow([])
+        w.writerow(["# per-(combo, subject, measurement)"])
+        w.writerow(["combo", "subject_id", "sex", "measurement",
+                    "predicted_cm", "gt_cm", "error_cm"])
+        for r in error_rows:
+            w.writerow([r.combo, r.subject_id, r.sex, r.measurement_id,
+                        r.predicted_cm, r.gt_cm, r.error_cm])
+
+        # — per-(combo, subject) overall —
+        w.writerow([])
+        w.writerow(["# per-(combo, subject) overall"])
+        w.writerow(["combo", "subject_id", "sex", "n", "mae_cm", "rmse_cm", "bias_cm"])
+        by_cs: dict[tuple[str, str, str], list[float]] = {}
+        for r in error_rows:
+            by_cs.setdefault((r.combo, r.subject_id, r.sex), []).append(r.error_cm)
+        for (combo, sid, sex), vals in by_cs.items():
+            agg = _agg(vals)
+            if agg is None:
+                continue
+            mae, rmse, bias = agg
+            w.writerow([combo, sid, sex, len(vals),
+                        round(mae, 2), round(rmse, 2), round(bias, 2)])
+
+        # — per-(combo, sex, measurement) —
+        w.writerow([])
+        w.writerow(["# per-(combo, sex, measurement)"])
+        w.writerow(["combo", "sex", "measurement", "n", "mae_cm", "rmse_cm", "bias_cm"])
+        by_csm: dict[tuple[str, str, str], list[float]] = {}
+        for r in error_rows:
+            by_csm.setdefault((r.combo, r.sex, r.measurement_id), []).append(r.error_cm)
+        for (combo, sex, mid), vals in by_csm.items():
+            agg = _agg(vals)
+            if agg is None:
+                continue
+            mae, rmse, bias = agg
+            w.writerow([combo, sex, mid, len(vals),
+                        round(mae, 2), round(rmse, 2), round(bias, 2)])
+
+        # — per-(combo, category) —
+        w.writerow([])
+        w.writerow(["# per-(combo, category) — Обхват / Ширина / Довжина / Висота"])
+        w.writerow(["combo", "category", "n", "mae_cm", "rmse_cm", "bias_cm"])
+        by_cat: dict[tuple[str, str], list[float]] = {}
+        for r in error_rows:
+            by_cat.setdefault((r.combo, _category_for(r.measurement_id)), []).append(r.error_cm)
+        for (combo, cat), vals in by_cat.items():
+            agg = _agg(vals)
+            if agg is None:
+                continue
+            mae, rmse, bias = agg
+            w.writerow([combo, cat, len(vals),
+                        round(mae, 2), round(rmse, 2), round(bias, 2)])
 
 
 # ── Per-combo evaluation ────────────────────────────────────────────────────
@@ -325,6 +508,7 @@ def main() -> None:
     # then reuse it across all combos that share the same pose backend.
     needed_backends = sorted({c.pose_backend for c in combos})
     combo_stats = {c.label: ComboStats(label=c.label) for c in combos}
+    error_rows: list[ErrorRow] = []  # flat log for per-subject / per-sex / per-category pivots
 
     for subject in subjects:
         if not subject.front.is_file() or not subject.side.is_file():
@@ -380,24 +564,46 @@ def main() -> None:
                 pred_cm = preds.get(mid)
                 if gt_cm is None or pred_cm is None:
                     continue
-                combo_stats[combo.label].errors[mid].append(pred_cm - gt_cm)
+                err = pred_cm - gt_cm
+                combo_stats[combo.label].errors[mid].append(err)
+                error_rows.append(ErrorRow(
+                    combo=combo.label, subject_id=subject.subject_id,
+                    sex=subject.sex, measurement_id=mid,
+                    predicted_cm=round(pred_cm, 2), gt_cm=round(gt_cm, 2),
+                    error_cm=round(err, 2),
+                ))
 
     stats_list = list(combo_stats.values())
 
     if args.grid:
         for s in stats_list:
             _print_combo_summary(s, len(subjects))
+        # Pick the best combo (lowest overall MAE) for the deeper breakdowns —
+        # printing all four for every combo would be unreadable. The full
+        # per-subject / per-sex / per-category data is in the CSV report.
+        ranked = sorted(stats_list, key=lambda s: (
+            _aggregate_stats(s)["mae"]
+            if not math.isnan(_aggregate_stats(s)["mae"]) else float("inf")
+        ))
+        if ranked:
+            best = ranked[0].label
+            _print_per_subject(best, error_rows)
+            _print_per_sex(best, error_rows)
+            _print_per_category(best, error_rows)
         _print_grid_ranking(stats_list)
-        _write_grid_report(args.output, stats_list)
+        _write_grid_report(args.output, stats_list, error_rows)
         logger.info("Wrote grid report to %s", args.output)
     else:
         s = stats_list[0]
         _print_combo_summary(s, len(subjects))
+        _print_per_subject(s.label, error_rows)
+        _print_per_sex(s.label, error_rows)
+        _print_per_category(s.label, error_rows)
         agg = _aggregate_stats(s)
         if agg["n"]:
             print(f"\nOverall: MAE={agg['mae']:.2f} cm  RMSE={agg['rmse']:.2f} cm  "
                   f"observations={agg['n']}  failed={s.n_failed}/{len(subjects)}")
-        _write_grid_report(args.output, stats_list)
+        _write_grid_report(args.output, stats_list, error_rows)
         logger.info("Wrote report to %s", args.output)
 
 
