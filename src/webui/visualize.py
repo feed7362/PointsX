@@ -199,6 +199,103 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
         used_label_y.append(y_clamped)
         _put_label(out, text, x, y_clamped, color)
 
+    def left_arm_contour_path() -> list[tuple[int, int]]:
+        if not (view == "front" and is_valid(conf, KP.LEFT_SHOULDER, KP.LEFT_WRIST)):
+            return []
+        fm = mask.mask
+        h, w = fm.shape
+        y0 = int(round(float(pts[int(KP.LEFT_SHOULDER), 1])))
+        y1 = int(round(float(pts[int(KP.LEFT_WRIST), 1])))
+        y0 = int(np.clip(y0, 0, h - 1))
+        y1 = int(np.clip(y1, 0, h - 1))
+        x_shoulder = int(np.clip(int(round(float(pts[int(KP.LEFT_SHOULDER), 0]))), 0, w - 1))
+        y_wrist = y1
+
+        x_mid_img = 0.5 * (w - 1)
+        # Start: at shoulder y, then move up along left edge until segment corner.
+        max_jump = 18.0
+        cols0 = np.where(fm[y0])[0]
+        if len(cols0) < 2:
+            return []
+        diffs0 = np.diff(cols0)
+        split_points0 = np.where(diffs0 > 3)[0] + 1
+        segments0 = [s for s in np.split(cols0, split_points0) if len(s) >= 2]
+        left_half0 = [s for s in segments0 if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
+        if not left_half0:
+            return []
+        containing0 = [s for s in left_half0 if int(s[0]) <= x_shoulder <= int(s[-1])]
+        seg0 = (
+            min(containing0, key=lambda s: abs(((s[0] + s[-1]) * 0.5) - x_shoulder))
+            if containing0
+            else min(left_half0, key=lambda s: abs(((s[0] + s[-1]) * 0.5) - x_shoulder))
+        )
+        x_corner = int(seg0[0])
+        y_corner = y0
+
+        for y in range(y0 - 1, -1, -1):
+            cols = np.where(fm[y])[0]
+            if len(cols) < 2:
+                break
+            diffs = np.diff(cols)
+            split_points = np.where(diffs > 3)[0] + 1
+            segments = [s for s in np.split(cols, split_points) if len(s) >= 2]
+            left_half_segments = [s for s in segments if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
+            if not left_half_segments:
+                break
+            # Keep search anchored to the shoulder column to avoid drifting into head/torso.
+            containing = [s for s in left_half_segments if int(s[0]) <= x_shoulder <= int(s[-1])]
+            if not containing:
+                break
+            candidates = [s for s in containing if abs(float(s[0]) - x_corner) <= max_jump]
+            if not candidates:
+                break
+            seg = min(candidates, key=lambda s: abs(float(s[0]) - x_corner))
+            x_corner = int(seg[0])
+            y_corner = y
+
+        y_start = y_corner
+        x_track = float(x_corner)
+
+        step = 1 if y_wrist >= y_start else -1
+        path: list[tuple[int, int]] = [(int(round(x_track)), y_start)]
+        for y in range(y_start, y_wrist + step, step):
+            cols = np.where(fm[y])[0]
+            if len(cols) < 2:
+                continue
+            diffs = np.diff(cols)
+            split_points = np.where(diffs > 3)[0] + 1
+            segments = [s for s in np.split(cols, split_points) if len(s) >= 2]
+            if not segments:
+                continue
+            left_half_segments = [s for s in segments if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
+            candidates = [s for s in left_half_segments if abs(((s[0] + s[-1]) * 0.5) - x_track) <= max_jump]
+            pool = candidates if candidates else left_half_segments
+            if not pool:
+                continue
+            seg = min(pool, key=lambda s: abs(((s[0] + s[-1]) * 0.5) - x_track))
+            # Use only the left edge of the selected arm segment.
+            x = int(seg[0])
+            path.append((x, y))
+            x_track = float(x)
+
+        # End: left-most intersection of wrist y-line with the selected segment.
+        cols_w = np.where(fm[y_wrist])[0]
+        if len(cols_w) >= 2:
+            diffs_w = np.diff(cols_w)
+            split_points_w = np.where(diffs_w > 3)[0] + 1
+            segments_w = [s for s in np.split(cols_w, split_points_w) if len(s) >= 2]
+            if segments_w:
+                left_half_segments_w = [s for s in segments_w if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
+                candidates_w = [s for s in left_half_segments_w if abs(((s[0] + s[-1]) * 0.5) - x_track) <= max_jump]
+                pool_w = candidates_w if candidates_w else left_half_segments_w
+                if not pool_w:
+                    return path
+                seg_w = min(pool_w, key=lambda s: abs(((s[0] + s[-1]) * 0.5) - x_track))
+                x_end = int(seg_w[0])
+                if not path or path[-1] != (x_end, y_wrist):
+                    path.append((x_end, y_wrist))
+        return path
+
     # Linear distances from keypoints.
     if view == "front" and is_valid(conf, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
         a, b = p(KP.LEFT_SHOULDER), p(KP.RIGHT_SHOULDER)
@@ -223,27 +320,39 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
     if view == "front" and is_valid(conf, KP.UPPER_NECK, KP.LEFT_SHOULDER):
         n, ls = p(KP.UPPER_NECK), p(KP.LEFT_SHOULDER)
         cv2.line(out, n, ls, slope_color, 2, cv2.LINE_AA)
-    if view == "front" and is_valid(conf, KP.UPPER_NECK, KP.RIGHT_SHOULDER):
-        n, rs = p(KP.UPPER_NECK), p(KP.RIGHT_SHOULDER)
-        cv2.line(out, n, rs, slope_color, 2, cv2.LINE_AA)
-    if view == "front" and is_valid(conf, KP.UPPER_NECK) and (is_valid(conf, KP.LEFT_SHOULDER) or is_valid(conf, KP.RIGHT_SHOULDER)):
-        n = p(KP.UPPER_NECK)
-        put_label_smart("плечовий скат", n[0] + 8, n[1] - 10, slope_color)
+    if view == "front" and is_valid(conf, KP.UPPER_NECK, KP.LEFT_SHOULDER):
+        ls = p(KP.LEFT_SHOULDER)
+        put_label_smart("плечовий скат", ls[0] + 8, ls[1] - 10, slope_color)
 
-    if is_valid(conf, KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST):
-        a, b, c = p(KP.RIGHT_SHOULDER), p(KP.RIGHT_ELBOW), p(KP.RIGHT_WRIST)
-        cv2.line(out, a, b, (80, 220, 80), 2, cv2.LINE_AA)
-        cv2.line(out, b, c, (80, 220, 80), 2, cv2.LINE_AA)
-        put_label_smart("довжина руки", c[0] + 6, c[1], (80, 220, 80))
+    if view == "front":
+        arm_color = (80, 220, 80)
+        arm_path = left_arm_contour_path()
+        if len(arm_path) >= 2:
+            for i in range(1, len(arm_path)):
+                cv2.line(out, arm_path[i - 1], arm_path[i], arm_color, 2, cv2.LINE_AA)
+            lx, ly = arm_path[-1]
+            put_label_smart("довжина руки", lx + 6, ly, arm_color)
 
-    # leg_outer now comes from side pose only.
-    if view == "side" and is_valid(conf, KP.RIGHT_HIP, KP.RIGHT_KNEE, KP.RIGHT_ANKLE):
-        a, b, c = p(KP.RIGHT_HIP), p(KP.RIGHT_KNEE), p(KP.RIGHT_ANKLE)
-        cv2.line(out, a, b, (255, 80, 80), 2, cv2.LINE_AA)
-        cv2.line(out, b, c, (255, 80, 80), 2, cv2.LINE_AA)
-        put_label_smart("нога зовнішня", c[0] + 6, c[1], (255, 80, 80))
+    # leg_outer: side straight line from 25% above pelvis to bottom segmentation end.
+    if view == "side" and is_valid(conf, KP.PELVIS, KP.THORAX):
+        sm = mask.mask
+        h_s, _w_s = sm.shape
+        pelvis_y = float(pts[int(KP.PELVIS), 1])
+        thorax_y = float(pts[int(KP.THORAX), 1])
+        y_start = int(np.clip(int(round(pelvis_y + 0.25 * (thorax_y - pelvis_y))), 0, h_s - 1))
+        torso_x = float(pts[int(KP.PELVIS), 0])
+        cols_start = np.where(sm[y_start])[0]
+        ys_fg = np.where(sm.any(axis=1))[0]
+        if len(cols_start) >= 2 and len(ys_fg) > 0:
+            y_end = int(ys_fg[-1])
+            cols_end = np.where(sm[y_end])[0]
+            if len(cols_end) >= 2:
+                x_start = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
+                x_end = int(cols_end[0] if abs(cols_end[0] - torso_x) > abs(cols_end[-1] - torso_x) else cols_end[-1])
+                cv2.line(out, (x_start, y_start), (x_end, y_end), (255, 80, 80), 2, cv2.LINE_AA)
+                put_label_smart("нога зовнішня", x_end + 6, y_end, (255, 80, 80))
 
-    # leg_inner now comes from front mask path (ankle level -> 80% toward pelvis).
+    # leg_inner: one front vertical line with static x.
     if view == "front" and is_valid(conf, KP.PELVIS):
         fm = mask.mask
         h, w = fm.shape
@@ -251,7 +360,6 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
         pelvis_y = int(round(float(pts[int(KP.PELVIS), 1])))
         pelvis_x = int(np.clip(pelvis_x, 0, w - 1))
         pelvis_y = int(np.clip(pelvis_y, 0, h - 1))
-
         ankle_ys = []
         if is_valid(conf, KP.LEFT_ANKLE):
             ankle_ys.append(float(pts[int(KP.LEFT_ANKLE), 1]))
@@ -262,35 +370,28 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             knee_ys.append(float(pts[int(KP.LEFT_KNEE), 1]))
         if is_valid(conf, KP.RIGHT_KNEE):
             knee_ys.append(float(pts[int(KP.RIGHT_KNEE), 1]))
+        if ankle_ys:
+            y_ankle = int(round(np.mean(ankle_ys)))
+        elif knee_ys:
+            y_ankle = int(round(np.mean(knee_ys)))
+        else:
+            y_ankle = h - 1
+        y_ankle = int(np.clip(y_ankle, pelvis_y + 1, h - 1))
+        # Keep previous start anchor.
+        y_start = int(round(y_ankle + 0.8 * (pelvis_y - y_ankle)))
+        y_start = int(np.clip(y_start, pelvis_y, y_ankle - 1))
 
-        if ankle_ys or knee_ys:
-            y_ankle = int(round(np.mean(ankle_ys))) if ankle_ys else int(round(np.mean(knee_ys)))
-            y_ankle = int(np.clip(y_ankle, pelvis_y + 1, h - 1))
-            y_end = int(round(y_ankle + 0.8 * (pelvis_y - y_ankle)))
-            y_end = int(np.clip(y_end, pelvis_y, y_ankle - 1))
-
-            # Draw both inner contour paths; the computed metric averages both.
-            for side in ("left", "right"):
-                pts_path: list[tuple[int, int]] = []
-                for y in range(y_end, y_ankle + 1):
-                    cols = np.where(fm[y])[0]
-                    if len(cols) < 2:
-                        continue
-                    if side == "left":
-                        cands = cols[cols < pelvis_x]
-                        if len(cands) == 0:
-                            continue
-                        x = int(cands.max())
-                    else:
-                        cands = cols[cols > pelvis_x]
-                        if len(cands) == 0:
-                            continue
-                        x = int(cands.min())
-                    pts_path.append((x, y))
-                if len(pts_path) >= 2:
-                    for i in range(1, len(pts_path)):
-                        cv2.line(out, pts_path[i - 1], pts_path[i], (180, 120, 255), 2, cv2.LINE_AA)
-            put_label_smart("нога внутрішня", pelvis_x + 8, max(14, y_end - 8), (180, 120, 255))
+        cols_top = np.where(fm[y_start])[0]
+        if len(cols_top) >= 2:
+            top_cands = cols_top[cols_top < pelvis_x]
+            if len(top_cands) > 0:
+                x_line = int(top_cands.max())
+                ys_fg = np.where(fm.any(axis=1))[0]
+                ys_fg = ys_fg[ys_fg >= y_start]
+                if len(ys_fg) > 0:
+                    y_bottom = int(ys_fg[-1])
+                    cv2.line(out, (x_line, y_start), (x_line, y_bottom), (180, 120, 255), 2, cv2.LINE_AA)
+                    put_label_smart("нога внутрішня", x_line + 6, max(14, y_start - 8), (180, 120, 255))
 
     # Thigh width visualization (mirrors extraction rule).
     thigh_color = (80, 120, 255)

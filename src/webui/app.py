@@ -26,8 +26,10 @@ Speech hints use ``POST /api/tts`` (edge-tts, needs internet). If ``uv sync`` fa
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -45,9 +47,13 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+DATASET_DIR = Path(__file__).resolve().parents[2] / "dataset"
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DISALLOWED_CONTENT_PREFIXES = ("text/", "video/", "audio/")
+
+_DATASET_INDEX_RE = re.compile(r"^[ap](\d+)\.")
+_dataset_lock = asyncio.Lock()
 
 _UPLOAD_LABEL_UK = {"front": "Анфас", "side": "Профіль"}
 
@@ -131,6 +137,51 @@ def _validation_errors_to_uk(errors: list[Any]) -> str:
     return " ".join(parts) if parts else "Некоректні дані форми."
 
 
+def _build_visualization_only_envelope(
+    *,
+    preview_result: Any,
+    height_cm: float,
+    sex: Literal["male", "female", "other"],
+    pose_backend: Literal["custom", "coco"],
+    warning: str,
+    front_bgr: np.ndarray,
+    side_bgr: np.ndarray,
+) -> MeasurementEnvelope:
+    """Return a valid envelope with debug visualizations when calibration fails."""
+    from webui.visualize import pipeline_visualizations_b64
+
+    derived: dict[str, Any] = {}
+    try:
+        derived = pipeline_visualizations_b64(front_bgr, side_bgr, preview_result)
+    except Exception:
+        logger.exception("Failed to generate visualization-only debug images")
+
+    return MeasurementEnvelope(
+        schema="pointsx.measurement.envelope",
+        schema_version=2,
+        request_id=str(uuid.uuid4()),
+        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        pipeline=PipelineInfo(
+            source="mediapipe",
+            model_version="visualization-only",
+            unit_system="metric",
+            pose_backend=pose_backend,
+        ),
+        subject=SubjectInfo(
+            height_cm=height_cm,
+            sex=sex,
+            posture_flags=[],
+        ),
+        capture=CaptureInfo(
+            front=CaptureQuality(quality=1.0, pose_ok=True, occlusions=[]),
+            side=CaptureQuality(quality=1.0, pose_ok=True, occlusions=[]),
+        ),
+        measurements=[],
+        derived=derived,
+        warnings=[warning],
+    )
+
+
 def _looks_like_raster_image(data: bytes) -> bool:
     if len(data) < 12:
         return False
@@ -141,6 +192,61 @@ def _looks_like_raster_image(data: bytes) -> bool:
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return True
     return False
+
+
+def _detect_image_extension(data: bytes) -> str:
+    """Map raw image magic bytes to a filesystem extension."""
+    if len(data) >= 2 and data[:2] == b"\xff\xd8":
+        return "jpg"
+    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return "bin"
+
+
+def _next_dataset_index(directory: Path) -> int:
+    """Pick the next free `i` such that no `a{i}.*` or `p{i}.*` exists yet."""
+    if not directory.is_dir():
+        return 1
+    max_idx = 0
+    for entry in directory.iterdir():
+        if not entry.is_file():
+            continue
+        match = _DATASET_INDEX_RE.match(entry.name)
+        if not match:
+            continue
+        try:
+            idx = int(match.group(1))
+        except ValueError:
+            continue
+        if idx > max_idx:
+            max_idx = idx
+    return max_idx + 1
+
+
+async def _save_capture_pair_to_dataset(
+    front_bytes: bytes,
+    side_bytes: bytes,
+) -> int | None:
+    """Persist the (front, side) image pair as ``a{i}.ext`` / ``p{i}.ext``.
+
+    Failures are logged but never raised — saving the dataset is a best-effort
+    side effect of measurement and must not break the user-facing request.
+    """
+    try:
+        async with _dataset_lock:
+            DATASET_DIR.mkdir(parents=True, exist_ok=True)
+            idx = _next_dataset_index(DATASET_DIR)
+            front_path = DATASET_DIR / f"a{idx}.{_detect_image_extension(front_bytes)}"
+            side_path = DATASET_DIR / f"p{idx}.{_detect_image_extension(side_bytes)}"
+            front_path.write_bytes(front_bytes)
+            side_path.write_bytes(side_bytes)
+            logger.info("Saved capture pair to dataset: %s, %s", front_path, side_path)
+            return idx
+    except Exception:
+        logger.exception("Failed to save capture pair to dataset folder %s", DATASET_DIR)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -361,8 +467,15 @@ async def request_validation_exception_handler(
     return JSONResponse(status_code=422, content={"detail": message})
 
 
-async def _validate_and_decode(upload: UploadFile, label: str) -> np.ndarray:
-    """Validate upload bytes and decode to a BGR ndarray (cv2 convention)."""
+async def _validate_and_decode(
+    upload: UploadFile, label: str
+) -> tuple[np.ndarray, bytes]:
+    """Validate upload bytes and decode to a BGR ndarray (cv2 convention).
+
+    Returns the decoded image alongside the raw bytes so callers can persist
+    the original payload (e.g. into a dataset folder) without re-reading the
+    upload stream.
+    """
     uk = _UPLOAD_LABEL_UK.get(label, label)
     data = await upload.read()
     if len(data) == 0:
@@ -388,7 +501,7 @@ async def _validate_and_decode(upload: UploadFile, label: str) -> np.ndarray:
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None or img.size == 0:
         raise HTTPException(status_code=400, detail=f"{uk}: не вдалося розпізнати зображення.")
-    return img
+    return img, data
 
 
 @app.get("/")
@@ -437,15 +550,34 @@ async def measure(
             ),
         )
 
-    front_img = await _validate_and_decode(front, "front")
-    side_img  = await _validate_and_decode(side,  "side")
+    front_img, front_bytes = await _validate_and_decode(front, "front")
+    side_img,  side_bytes  = await _validate_and_decode(side,  "side")
+
+    await _save_capture_pair_to_dataset(front_bytes, side_bytes)
 
     try:
         result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
     except ValueError as exc:
+        err_text = str(exc).strip()
+        if err_text.startswith("Cannot calibrate "):
+            preview = pipeline.preview(front_img, side_img, pose_backend=pose_backend)
+            envelope = _build_visualization_only_envelope(
+                preview_result=preview,
+                height_cm=height_cm,
+                sex=sex,
+                pose_backend=pose_backend,
+                warning=_pipeline_value_error_detail(err_text),
+                front_bgr=front_img,
+                side_bgr=side_img,
+            )
+            logger.info(
+                "Full model output envelope: %s",
+                envelope.model_dump(mode="json", by_alias=True),
+            )
+            return envelope
         raise HTTPException(
             status_code=400,
-            detail=_pipeline_value_error_detail(str(exc)),
+            detail=_pipeline_value_error_detail(err_text),
         ) from exc
     except Exception as exc:
         logger.exception("Pipeline failed")
@@ -464,6 +596,7 @@ async def measure(
         front_bgr=front_img,
         side_bgr=side_img,
     )
+    logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
     return envelope
 
 
