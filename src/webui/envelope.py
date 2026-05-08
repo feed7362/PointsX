@@ -214,18 +214,11 @@ def _kp_to_midpoint_cm(
     return float(np.linalg.norm(p - m)) / px_per_cm
 
 
-# Average foot height (ankle keypoint to floor) as a fraction of subject
-# height. Anthropometric standard: ankle pivot sits ~3.8-4.5 % of total height
-# above the ground; we use 4 % as a midpoint.
-_ANKLE_TO_FLOOR_HEIGHT_FRACTION = 0.04
-
-
 def _derive_outer_leg_to_floor(
     bm: BodyMeasurements,
     front_kp: Keypoints,
     front_mask: Any,
     px_per_cm_front: float,
-    subject_height_cm: float,
 ) -> float | None:
     """Outer seam = vertical distance from anatomical waist to the floor.
 
@@ -234,11 +227,8 @@ def _derive_outer_leg_to_floor(
 
     Start: ``bm.waist_level_front_px`` (set by silhouette continuous-width
     search) when available; fall back to the THORAX→PELVIS interpolation.
-    End: the ankle keypoint (averaged left/right). The mask's bottom row was
-    tried first but on real photos the seg model frequently bleeds into the
-    floor/shadow, putting "floor" 18-20 cm below the actual ankle. Anatomical
-    foot height (ankle pivot → floor) is then added back as a constant
-    fraction of subject_height_cm.
+    End: the last row of the front mask containing any foreground — the floor
+    approximation when subjects stand with feet visible.
     """
     if px_per_cm_front <= 0:
         return None
@@ -248,25 +238,18 @@ def _derive_outer_leg_to_floor(
     if waist_y is None:
         return None
 
-    ankle_y = _avg_ankle_y(front_kp)
-    if ankle_y is None:
-        # Fall back to mask floor if we have no ankle (e.g. cropped photo).
-        mask = front_mask.mask if hasattr(front_mask, "mask") else front_mask
-        if mask is None:
-            return None
-        h, _w = mask.shape
-        for y in range(h - 1, int(waist_y), -1):
-            if mask[y].any():
-                ankle_y = float(y)
-                break
-        if ankle_y is None:
-            return None
-        # Mask floor already includes some foot, so don't add the extra.
-        return abs(float(ankle_y) - float(waist_y)) / px_per_cm_front
-
-    waist_to_ankle_cm = abs(float(ankle_y) - float(waist_y)) / px_per_cm_front
-    foot_cm = subject_height_cm * _ANKLE_TO_FLOOR_HEIGHT_FRACTION
-    return waist_to_ankle_cm + foot_cm
+    mask = front_mask.mask if hasattr(front_mask, "mask") else front_mask
+    if mask is None:
+        return None
+    h, _w = mask.shape
+    floor_y = None
+    for y in range(h - 1, int(waist_y), -1):
+        if mask[y].any():
+            floor_y = y
+            break
+    if floor_y is None:
+        return None
+    return abs(float(floor_y) - float(waist_y)) / px_per_cm_front
 
 
 def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
@@ -431,7 +414,6 @@ def body_to_envelope(
     # keypoint instead of the floor.
     outer_leg_cm = _derive_outer_leg_to_floor(
         bm, result.front_kp, result.front_mask, result.cal.px_per_cm_front,
-        subject_height_cm,
     )
     if outer_leg_cm is not None:
         bm.leg_length_outer_cm = outer_leg_cm
