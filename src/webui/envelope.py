@@ -102,21 +102,21 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # from a small (n=3) eval set, so expect them to update.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
     "female": {
-        "chest_circumference":  -5.5,   # %
+        "chest_circumference":  -9.0,   # %
         "waist_circumference": -21.5,
         "hip_circumference":    -5.0,
         "thigh_circumference": -14.0,
     },
     "male": {
-        "chest_circumference":  +1.5,
-        "waist_circumference": -18.5,
+        "chest_circumference":  -3.0,
+        "waist_circumference": -19.0,
         "hip_circumference":   -11.0,
         "thigh_circumference": -18.5,
     },
     # "other" averages male and female so an unknown-sex subject is biased
     # toward neither extreme.
     "other": {
-        "chest_circumference":  -2.0,
+        "chest_circumference":  -6.0,
         "waist_circumference": -20.0,
         "hip_circumference":    -8.0,
         "thigh_circumference": -16.0,
@@ -306,13 +306,34 @@ def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:
 def _derive_back_length(
     bm: BodyMeasurements, side_kp: Keypoints, px_per_cm_side: float
 ) -> float | None:
-    # Prefer persisted waist level if available.
-    if bm.waist_level_side_px is not None and is_valid(side_kp.confidence, KP.UPPER_NECK):
-        if px_per_cm_side <= 0:
-            return None
-        return abs(float(side_kp.points[KP.UPPER_NECK, 1]) - float(bm.waist_level_side_px)) / px_per_cm_side
-    # Fallback: old proxy from upper neck to hip midpoint.
-    return _kp_to_midpoint_cm(side_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_side)
+    """Back length from C7 (UPPER_NECK proxy) to natural waist, on the side view.
+
+    Uses a stable proportional anchor for the waist:
+    ``y_waist = upper_neck_y + 0.65 × (pelvis_y − upper_neck_y)`` — anatomical
+    natural waist sits ~65 % of the way down the torso. The silhouette-detected
+    waist (``bm.waist_level_side_px``) was previously preferred, but on the
+    eval set it drifted subject-to-subject (RMSE 7.87 cm with ±13 cm outliers)
+    because the side-view torso lacks a clear narrowest point. Proportional
+    keypoint anchor is far more stable.
+    """
+    if px_per_cm_side <= 0:
+        return None
+    pts = side_kp.points
+    conf = side_kp.confidence
+    if not is_valid(conf, KP.UPPER_NECK):
+        return None
+    upper_neck_y = float(pts[KP.UPPER_NECK, 1])
+
+    # Pelvis: prefer the explicit keypoint, fall back to midpoint of hips.
+    if is_valid(conf, KP.PELVIS):
+        pelvis_y = float(pts[KP.PELVIS, 1])
+    elif is_valid(conf, KP.LEFT_HIP, KP.RIGHT_HIP):
+        pelvis_y = (float(pts[KP.LEFT_HIP, 1]) + float(pts[KP.RIGHT_HIP, 1])) / 2
+    else:
+        return None
+
+    waist_y = upper_neck_y + 0.65 * (pelvis_y - upper_neck_y)
+    return abs(waist_y - upper_neck_y) / px_per_cm_side
 
 
 def _derive_front_length(

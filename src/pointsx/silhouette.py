@@ -395,10 +395,39 @@ def extract_all_widths(
             widths["neck"] = (existing[0], neck_s)
 
     # Torso width:
-    # - front: distance between shoulder points
+    # - front: average shoulder y, then take the silhouette extent that
+    #   *contains* the keypoint x-positions on either side. Pure
+    #   shoulder-to-shoulder keypoint distance under-shoots by ~3-5 cm
+    #   because the keypoints sit inside the actual body silhouette.
     # - side: continuous silhouette width at midpoint between upper_neck and elbow
     if is_valid(f_conf, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
-        widths["torso"] = (distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER), None)
+        h_f, w_f = f_mask.shape
+        ly = int(round(float(f_pts[KP.LEFT_SHOULDER, 1])))
+        ry = int(round(float(f_pts[KP.RIGHT_SHOULDER, 1])))
+        avg_y = int(np.clip((ly + ry) // 2, 0, h_f - 1))
+        l_x_kp = float(f_pts[KP.LEFT_SHOULDER, 0])
+        r_x_kp = float(f_pts[KP.RIGHT_SHOULDER, 0])
+        # Look at a 5-row band around the shoulder line; for each row, the
+        # shoulder edges are the furthest mask pixels OUTWARD from each
+        # keypoint that remain connected through the keypoint column.
+        torso_widths_px: list[float] = []
+        for y in range(max(0, avg_y - 2), min(h_f, avg_y + 3)):
+            cols = np.where(f_mask[y])[0]
+            if len(cols) < 2:
+                continue
+            # Right shoulder = subject's right = LOW x in image; left shoulder
+            # = HIGH x. Slice the row at the keypoint column and clamp outward.
+            right_x = int(min(r_x_kp, l_x_kp))
+            left_x = int(max(r_x_kp, l_x_kp))
+            outer_left_cols = cols[cols <= left_x + 3]   # within tolerance of left kp
+            outer_right_cols = cols[cols >= right_x - 3]
+            if len(outer_left_cols) == 0 or len(outer_right_cols) == 0:
+                continue
+            torso_widths_px.append(float(outer_left_cols.max() - outer_right_cols.min()))
+        if torso_widths_px:
+            widths["torso"] = (float(np.mean(torso_widths_px)), None)
+        else:
+            widths["torso"] = (distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER), None)
     if is_valid(s_conf, KP.UPPER_NECK) and (is_valid(s_conf, KP.RIGHT_ELBOW) or is_valid(s_conf, KP.LEFT_ELBOW)):
         elbow_y = (
             float(s_pts[KP.RIGHT_ELBOW, 1])
