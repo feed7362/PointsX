@@ -105,6 +105,56 @@ class WebuiPipeline:
         pose_backend: PoseBackend = "custom",
     ) -> InferenceResult:
         """Run the full pose+seg+regression pipeline on a pair of images."""
+        front_kp, side_kp, front_mask, side_mask = self._predict_pose_and_masks(
+            front_img, side_img, pose_backend=pose_backend
+        )
+
+        cal = calibrate(front_kp, side_kp, height_cm)
+        bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
+        bm = estimate_circumferences(bm, self.regressor)
+        bm = validate_measurements(bm)
+
+        return InferenceResult(
+            body=bm,
+            front_kp=front_kp,
+            side_kp=side_kp,
+            front_mask=front_mask,
+            side_mask=side_mask,
+            cal=cal,
+            has_regressor=self.regressor is not None,
+            pose_backend=pose_backend,
+        )
+
+    def preview(
+        self,
+        front_img: np.ndarray,
+        side_img: np.ndarray,
+        *,
+        pose_backend: PoseBackend = "custom",
+    ) -> InferenceResult:
+        """Run pose+seg only (no calibration/measurements), for debug visualizations."""
+        front_kp, side_kp, front_mask, side_mask = self._predict_pose_and_masks(
+            front_img, side_img, pose_backend=pose_backend
+        )
+        return InferenceResult(
+            body=BodyMeasurements(),
+            front_kp=front_kp,
+            side_kp=side_kp,
+            front_mask=front_mask,
+            side_mask=side_mask,
+            cal=CalibrationInfo(px_per_cm_front=1.0, px_per_cm_side=1.0),
+            has_regressor=False,
+            pose_backend=pose_backend,
+        )
+
+    def _predict_pose_and_masks(
+        self,
+        front_img: np.ndarray,
+        side_img: np.ndarray,
+        *,
+        pose_backend: PoseBackend,
+    ) -> tuple[Keypoints, Keypoints, SilhouetteMask, SilhouetteMask]:
+        """Common pose+seg stage shared by full measure and preview modes."""
         front_kp = self.models.predict_pose(front_img, view="front", pose_backend=pose_backend)
         if front_kp is None:
             raise ValueError("No person detected in front image")
@@ -123,18 +173,4 @@ class WebuiPipeline:
         if side_mask is None:
             raise ValueError("No body silhouette detected in side image")
 
-        cal = calibrate(front_kp, side_kp, height_cm)
-        bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
-        bm = estimate_circumferences(bm, self.regressor)
-        bm = validate_measurements(bm)
-
-        return InferenceResult(
-            body=bm,
-            front_kp=front_kp,
-            side_kp=side_kp,
-            front_mask=front_mask,
-            side_mask=side_mask,
-            cal=cal,
-            has_regressor=self.regressor is not None,
-            pose_backend=pose_backend,
-        )
+        return front_kp, side_kp, front_mask, side_mask

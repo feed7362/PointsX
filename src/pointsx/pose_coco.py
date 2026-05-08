@@ -22,9 +22,10 @@ COCO_RIGHT_KNEE = 14
 COCO_LEFT_ANKLE = 15
 COCO_RIGHT_ANKLE = 16
 
-# Place upper_neck slightly lower (closer to thorax) and raise head_top slightly more.
+# Place upper_neck slightly lower (closer to thorax) and keep head_top behavior unchanged.
 # Image y decreases upward.
-_UPPER_NECK_NOSE_BLEND = 0.30  # lower neck further (closer to thorax)
+_UPPER_NECK_NOSE_BLEND = 0.27  # 10% lower vs previous 0.30 neck offset
+_HEAD_TOP_NECK_REFERENCE_BLEND = 0.30  # preserve current head_top vertical behavior
 _HEAD_TOP_K_FRONT = 0.75  # keep front head_top lower
 _HEAD_TOP_K_SIDE = 1.10  # restore side head_top to previous behavior
 
@@ -98,9 +99,13 @@ def coco17_to_lv_mhp16(xy: np.ndarray, conf: np.ndarray, view: str) -> Keypoints
     out_xy[KP.UPPER_NECK] = upper_neck
     out_cf[KP.UPPER_NECK] = float(c_neck)
 
-    # Extend vertically from upper_neck toward nose; keep x on the torso centerline.
+    # Extend vertically using the previous neck reference to keep head_top unchanged.
+    upper_neck_for_head_top = np.array(
+        [thorax[0], thorax[1] + _HEAD_TOP_NECK_REFERENCE_BLEND * (nose[1] - thorax[1])],
+        dtype=np.float64,
+    )
     head_top_k = _HEAD_TOP_K_SIDE if view == "side" else _HEAD_TOP_K_FRONT
-    y_head_top = nose[1] + head_top_k * (nose[1] - upper_neck[1])
+    y_head_top = nose[1] + head_top_k * (nose[1] - upper_neck_for_head_top[1])
     out_xy[KP.HEAD_TOP] = np.array([upper_neck[0], y_head_top], dtype=np.float64)
     out_cf[KP.HEAD_TOP] = float(min(c_n, c_neck))
 

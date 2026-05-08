@@ -115,16 +115,29 @@ function orderMeasurementsManual(list) {
   return ordered;
 }
 
-const PIPELINE_VIZ_KEYS = [
-  ["viz_front_pose_png_b64", "Анфас — поза"],
-  ["viz_front_seg_png_b64", "Анфас — силует"],
-  ["viz_front_measures_png_b64", "Анфас — лінії зняття мірок"],
-  ["viz_side_pose_png_b64", "Профіль — поза"],
-  ["viz_side_seg_png_b64", "Профіль — силует"],
-  ["viz_side_measures_png_b64", "Профіль — лінії зняття мірок"],
+const PIPELINE_VIZ_ROWS = [
+  {
+    view: "front",
+    items: [
+      ["viz_front_pose_png_b64", "Анфас — поза"],
+      ["viz_front_seg_png_b64", "Анфас — силует"],
+      ["viz_front_measures_png_b64", "Анфас — лінії зняття мірок"],
+    ],
+  },
+  {
+    view: "side",
+    items: [
+      ["viz_side_pose_png_b64", "Профіль — поза"],
+      ["viz_side_seg_png_b64", "Профіль — силует"],
+      ["viz_side_measures_png_b64", "Профіль — лінії зняття мірок"],
+    ],
+  },
 ];
 
-/** Show base64 PNGs from envelope `derived` (server pipeline debug). */
+/** Show base64 PNGs from envelope `derived` (server pipeline debug).
+ *
+ * Layout: анфас tiles share the first row, профіль tiles share the second.
+ */
 function renderPipelineModelViz(derived) {
   const wrap = document.getElementById("model-viz");
   const grid = document.getElementById("model-viz-grid");
@@ -132,19 +145,28 @@ function renderPipelineModelViz(derived) {
   grid.innerHTML = "";
   const d = derived && typeof derived === "object" ? derived : {};
   let any = false;
-  for (const [key, caption] of PIPELINE_VIZ_KEYS) {
-    const b64 = d[key];
-    if (typeof b64 !== "string" || !b64.length) continue;
-    any = true;
-    const fig = document.createElement("figure");
-    fig.className = "model-viz-item";
-    const cap = document.createElement("figcaption");
-    cap.textContent = caption;
-    const img = document.createElement("img");
-    img.src = "data:image/png;base64," + b64;
-    img.alt = caption;
-    fig.append(cap, img);
-    grid.appendChild(fig);
+  for (const row of PIPELINE_VIZ_ROWS) {
+    const rowEl = document.createElement("div");
+    rowEl.className = `model-viz-row model-viz-row--${row.view}`;
+    let rowAny = false;
+    for (const [key, caption] of row.items) {
+      const b64 = d[key];
+      if (typeof b64 !== "string" || !b64.length) continue;
+      rowAny = true;
+      const fig = document.createElement("figure");
+      fig.className = "model-viz-item";
+      const cap = document.createElement("figcaption");
+      cap.textContent = caption;
+      const img = document.createElement("img");
+      img.src = "data:image/png;base64," + b64;
+      img.alt = caption;
+      fig.append(cap, img);
+      rowEl.appendChild(fig);
+    }
+    if (rowAny) {
+      any = true;
+      grid.appendChild(rowEl);
+    }
   }
   wrap.hidden = !any;
 }
@@ -189,7 +211,7 @@ const VERDICT_LABEL = {
   unanimous_edge: "Однозначно (крайній розмір)",
   majority:       "Більшість 2/3",
   majority_edge:  "Більшість (крайній розмір)",
-  no_consensus:   "Без консенсусу",
+  no_consensus:   "Неоднозначно",
   insufficient:   "Недостатньо даних",
 };
 
@@ -633,6 +655,7 @@ export function attachMeasureHandler() {
         throw new Error(formatMeasureHttpError(res, text));
       }
       const data = await res.json();
+      console.log("[PointsX] Full model output:", data);
       const measurements = orderMeasurementsManual(data.measurements ?? []);
       if (!measurements.length) {
         captureState.lastMockResponse = null;
