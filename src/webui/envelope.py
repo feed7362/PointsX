@@ -108,18 +108,18 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
         "thigh_circumference": -21.5,
     },
     "male": {
-        "chest_circumference":  -2.5,
-        "waist_circumference": -20.0,
-        "hip_circumference":   -13.5,
-        "thigh_circumference": -21.0,
+        "chest_circumference":  +1.5,
+        "waist_circumference": -18.5,
+        "hip_circumference":   -11.0,
+        "thigh_circumference": -18.5,
     },
     # "other" averages male and female so an unknown-sex subject is biased
     # toward neither extreme.
     "other": {
-        "chest_circumference":  -5.0,
-        "waist_circumference": -21.0,
-        "hip_circumference":   -10.0,
-        "thigh_circumference": -21.0,
+        "chest_circumference":  -3.0,
+        "waist_circumference": -20.0,
+        "hip_circumference":    -9.0,
+        "thigh_circumference": -20.0,
     },
 }
 
