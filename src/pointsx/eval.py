@@ -767,6 +767,39 @@ def main() -> None:
                 set(FIT_TARGET_IDS),
             )
 
+            # Per-subject × per-Обхват matrix: signed error before/after.
+            # Lets you see exactly which (subject, measurement) cell still
+            # has residual error vs which the fit nailed.
+            print("\n=== Per-subject × per-Обхват: signed error (cm) before → after ===")
+            short_label = {
+                "chest_circumference": "грудей",
+                "waist_circumference": "талії",
+                "hip_circumference":   "стегон",
+                "thigh_circumference": "стегна",
+            }
+            cols = FIT_TARGET_IDS
+            header = f"{'subject':<14} " + "".join(
+                f"{short_label[m]:>20}" for m in cols
+            )
+            print(header)
+            # Index rows by (combo, subject, mid) for fast lookup
+            before_idx: dict[tuple[str, str], float] = {
+                (r.subject_id, r.measurement_id): r.error_cm for r in error_rows
+            }
+            after_idx: dict[tuple[str, str], float] = {
+                (r.subject_id, r.measurement_id): r.error_cm for r in r_rows
+            }
+            for sid in [s.subject_id for s in subjects]:
+                cells: list[str] = []
+                for mid in cols:
+                    b = before_idx.get((sid, mid))
+                    a = after_idx.get((sid, mid))
+                    if b is None or a is None:
+                        cells.append(f"{'—':>20}")
+                    else:
+                        cells.append(f"{b:>+8.1f} → {a:>+6.1f}  ")
+                print(f"{sid:<14} " + "".join(cells))
+
             stats_list = stats_list + r_list
             error_rows = error_rows + r_rows
 
