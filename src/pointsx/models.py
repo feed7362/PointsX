@@ -38,6 +38,35 @@ def _adjust_custom_keypoint_confidence(conf: np.ndarray) -> np.ndarray:
 PoseBackend = Literal["custom", "coco"]
 
 
+def _ensure_yolo_weights(path: Path) -> Path | None:
+    """If `path` doesn't exist, try Ultralytics' built-in auto-download by basename.
+
+    Ultralytics' YOLO() resolves a bare filename (e.g. ``yolo26-pose.pt``)
+    against its release assets and downloads to cwd on first use. We invoke it
+    that way, then move the resulting file into `path` so subsequent runs are
+    offline. Returns the final path if the file ends up on disk, else None.
+    """
+    if path.is_file():
+        return path
+    name = path.name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Auto-downloading YOLO weights %s via Ultralytics…", name)
+    try:
+        YOLO(name)  # triggers download into cwd (or HF cache, depending on version)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-download of %s failed: %s", name, exc)
+        return None
+
+    cwd_candidate = Path.cwd() / name
+    if cwd_candidate.is_file() and cwd_candidate.resolve() != path.resolve():
+        try:
+            cwd_candidate.replace(path)
+        except OSError as exc:
+            logger.warning("Could not move %s to %s: %s", cwd_candidate, path, exc)
+            return cwd_candidate if cwd_candidate.is_file() else None
+    return path if path.is_file() else None
+
+
 class BodyModels:
     """Loads and runs YOLO pose (custom 16-pt + COCO-17) + segmentation."""
 
@@ -62,10 +91,16 @@ class BodyModels:
         else:
             logger.warning("Custom pose weights not found (%s); backend 'custom' disabled", pose_custom_path)
 
-        if pose_coco_path and Path(pose_coco_path).is_file():
-            self._pose_coco = YOLO(str(pose_coco_path))
-        else:
-            logger.warning("COCO pose weights not found (%s); backend 'coco' disabled", pose_coco_path)
+        if pose_coco_path:
+            resolved = _ensure_yolo_weights(Path(pose_coco_path))
+            if resolved is not None:
+                self._pose_coco = YOLO(str(resolved))
+            else:
+                logger.warning(
+                    "COCO pose weights not found (%s) and auto-download failed; "
+                    "backend 'coco' disabled",
+                    pose_coco_path,
+                )
 
         self._seg = YOLO(str(seg_model_path))
 
