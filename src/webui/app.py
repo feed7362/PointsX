@@ -404,7 +404,7 @@ async def measure(
     request: Request,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
-    pose_backend: Literal["custom", "coco"] = Form("custom"),
+    pose_backend: Literal["custom", "coco"] = Form("coco"),
     front: UploadFile = File(...),
     side: UploadFile = File(...),
 ) -> MeasurementEnvelope:
