@@ -561,6 +561,18 @@ def main() -> None:
     if not regressor_loaded:
         logger.warning("Regressor not loaded — Ramanujan fallback only")
 
+    # --fit-offsets defaults to Ramanujan: fitting a multiplicative bias on top
+    # of an unstable regressor (which can output negative cm) produces garbage
+    # scales. The user can opt back into the regressor by passing --regressor
+    # explicitly… but there isn't a flag for that today, so we just force
+    # Ramanujan and log it.
+    if args.fit_offsets and not args.no_regressor and regressor_loaded:
+        logger.warning(
+            "--fit-offsets implies --no-regressor: fitting bias on top of the "
+            "regressor isn't meaningful while the regressor produces outliers."
+        )
+        args.no_regressor = True
+
     # --fit-offsets is a single-combo, two-pass workflow. The first pass runs
     # with offsets OFF to collect raw bias; the second pass replays with the
     # fitted offsets so the user sees the projected MAE.
