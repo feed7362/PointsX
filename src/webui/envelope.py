@@ -295,8 +295,19 @@ def body_to_envelope(
     request_id: str,
     front_bgr: Any | None = None,
     side_bgr: Any | None = None,
+    *,
+    apply_sex_offsets: bool = True,
+    sex_offsets_override: dict[str, dict[str, float]] | None = None,
 ) -> Any:
-    """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult."""
+    """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult.
+
+    Args:
+        apply_sex_offsets: when False, skip the per-sex circumference bias
+            correction. Useful for evaluation runs that want raw model output.
+        sex_offsets_override: when provided (and apply_sex_offsets is True),
+            substitute this dict for the module-level _SEX_CIRCUMFERENCE_OFFSETS_CM
+            so callers can A/B-test alternative offset tables.
+    """
     (
         MeasurementEnvelope,
         MeasurementItem,
@@ -308,7 +319,11 @@ def body_to_envelope(
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
-    sex_offsets = _SEX_CIRCUMFERENCE_OFFSETS_CM.get(sex, {})
+    if apply_sex_offsets:
+        offsets_table = sex_offsets_override or _SEX_CIRCUMFERENCE_OFFSETS_CM
+        sex_offsets = offsets_table.get(sex, {})
+    else:
+        sex_offsets = {}
 
     items = []
     dropped_implausible: list[str] = []
