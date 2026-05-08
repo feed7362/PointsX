@@ -160,6 +160,9 @@ def extract_measurements(
             x1, y1 = left_arm_path[i]
             arm_px += float(np.hypot(x1 - x0, y1 - y0))
         m.arm_length_cm = arm_px / pf
+    elif is_valid(f_conf, KP.LEFT_SHOULDER, KP.LEFT_WRIST):
+        # Fallback: keep arm length available when contour extraction is too sparse.
+        m.arm_length_cm = distance(f_pts, KP.LEFT_SHOULDER, KP.LEFT_WRIST) / pf
 
     # ── Arm length from neck ──
     if m.arm_length_cm is not None:

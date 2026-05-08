@@ -332,6 +332,11 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
                 cv2.line(out, arm_path[i - 1], arm_path[i], arm_color, 2, cv2.LINE_AA)
             lx, ly = arm_path[-1]
             put_label_smart("довжина руки", lx + 6, ly, arm_color)
+        elif is_valid(conf, KP.LEFT_SHOULDER, KP.LEFT_WRIST):
+            # Fallback matches measurement fallback in extraction.
+            a, b = p(KP.LEFT_SHOULDER), p(KP.LEFT_WRIST)
+            cv2.line(out, a, b, arm_color, 2, cv2.LINE_AA)
+            put_label_smart("довжина руки", b[0] + 6, b[1], arm_color)
 
     # leg_outer: side straight line from 25% above pelvis to bottom segmentation end.
     if view == "side" and is_valid(conf, KP.PELVIS, KP.THORAX):

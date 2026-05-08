@@ -148,7 +148,7 @@ function checkFrontPose(lm, rawWorldLm) {
   const leftAbd = upperArmAbductionRad(ls, le);
   const rightAbd = upperArmAbductionRad(rs, re);
   if (leftAbd < DEG(10) || rightAbd < DEG(10)) {
-    return { ok: false, reason: "A-поза: відведіть руки на ~15–20° від тіла" };
+    return { ok: false, reason: "Відведіть руки на ~15–20° від тіла" };
   }
   if (leftAbd > DEG(50) || rightAbd > DEG(50)) {
     return { ok: false, reason: "Не розводьте руки занадто широко (достатньо ~15–20°)." };
