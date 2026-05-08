@@ -436,17 +436,16 @@ def body_to_envelope(
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
 
-    # Override leg_length_outer_seam with the front-view "waist → floor"
-    # straight-line measurement. The pose-based (hip→knee→ankle) version that
-    # extract_measurements writes into bm.leg_length_outer_cm under-shoots by
-    # ~22 cm because it starts at hip level, not waist, and stops at the ankle
-    # keypoint instead of the floor.
-    outer_leg_cm = _derive_outer_leg_to_floor(
-        bm, result.front_kp, result.front_mask, result.cal.px_per_cm_front,
-        subject_height_cm,
-    )
-    if outer_leg_cm is not None:
-        bm.leg_length_outer_cm = outer_leg_cm
+    # Outer-leg override DISABLED for A/B test against the merged
+    # extract_measurements implementation (side-view diagonal from 20% above
+    # pelvis to bottom of side mask). Re-enable by un-commenting the block
+    # below if our envelope-side derivation wins on the eval set.
+    # outer_leg_cm = _derive_outer_leg_to_floor(
+    #     bm, result.front_kp, result.front_mask, result.cal.px_per_cm_front,
+    #     subject_height_cm,
+    # )
+    # if outer_leg_cm is not None:
+    #     bm.leg_length_outer_cm = outer_leg_cm
 
     if apply_sex_offsets:
         scales_table = sex_offsets_override or _SEX_CIRCUMFERENCE_SCALES_PCT

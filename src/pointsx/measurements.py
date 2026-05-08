@@ -210,21 +210,44 @@ def extract_measurements(
         else:
             y_ankle = h - 1
         y_ankle = int(np.clip(y_ankle, pelvis_y + 1, h - 1))
-        # Keep previous start anchor.
-        y_start = int(round(y_ankle + 0.8 * (pelvis_y - y_ankle)))
-        y_start = int(np.clip(y_start, pelvis_y, y_ankle - 1))
+        # Inner-leg arc path (restored after empirical A/B): trace the
+        # inner-mask edge between the leg gap from y_end up to y_ankle.
+        # The branch's static-vertical-line variant over-shot by ~5 cm on
+        # the n=7 eval set vs this arc-path approach.
+        y_end = int(round(y_ankle + 0.8 * (pelvis_y - y_ankle)))
+        y_end = int(np.clip(y_end, pelvis_y, y_ankle - 1))
 
-        cols_top = np.where(fm[y_start])[0]
-        if len(cols_top) >= 2:
-            # Keep one inner-leg line (left side), x stays static.
-            top_cands = cols_top[cols_top < pelvis_x]
-            if len(top_cands) > 0:
-                x_line = int(top_cands.max())
-                ys_fg = np.where(fm.any(axis=1))[0]
-                ys_fg = ys_fg[ys_fg >= y_start]
-                if len(ys_fg) > 0:
-                    y_bottom = int(ys_fg[-1])
-                    m.leg_length_inner_cm = float(abs(y_bottom - y_start)) / pf
+        def inner_path_len(side: str) -> float | None:
+            pts_path: list[tuple[int, int]] = []
+            for y in range(y_end, y_ankle + 1):
+                cols = np.where(fm[y])[0]
+                if len(cols) < 2:
+                    continue
+                if side == "left":
+                    cands = cols[cols < pelvis_x]
+                    if len(cands) == 0:
+                        continue
+                    x = int(cands.max())  # inner edge of left leg
+                else:
+                    cands = cols[cols > pelvis_x]
+                    if len(cands) == 0:
+                        continue
+                    x = int(cands.min())  # inner edge of right leg
+                pts_path.append((x, y))
+            if len(pts_path) < 2:
+                return None
+            d = 0.0
+            for i in range(1, len(pts_path)):
+                x0, y0 = pts_path[i - 1]
+                x1, y1 = pts_path[i]
+                d += float(np.hypot(x1 - x0, y1 - y0))
+            return d
+
+        left_len = inner_path_len("left")
+        right_len = inner_path_len("right")
+        side_len = _avg(left_len, right_len)
+        if side_len is not None:
+            m.leg_length_inner_cm = side_len / pf
 
     # ── Silhouette widths ──
     widths, selected_y = extract_all_widths(front_mask, side_mask, front_kp, side_kp)
