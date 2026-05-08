@@ -728,6 +728,32 @@ def main() -> None:
                       f"(was {agg['mae']:.2f} cm — improvement "
                       f"{agg['mae'] - r_agg['mae']:+.2f} cm)")
 
+            # Per-person before/after comparison so you can see which
+            # subjects the fit helps the most (and which it doesn't).
+            print("\n=== Per-subject before/after fit ===")
+            print(f"{'subject':<14} {'sex':<8} {'n':>3} "
+                  f"{'before':>10} {'after':>10} {'Δ MAE':>10}")
+            before_by_subj: dict[str, list[float]] = {}
+            after_by_subj: dict[str, list[float]] = {}
+            sex_by_subj: dict[str, str] = {}
+            for r in error_rows:
+                before_by_subj.setdefault(r.subject_id, []).append(r.error_cm)
+                sex_by_subj[r.subject_id] = r.sex
+            for r in r_rows:
+                after_by_subj.setdefault(r.subject_id, []).append(r.error_cm)
+            for sid in [s.subject_id for s in subjects]:
+                bvals = before_by_subj.get(sid, [])
+                avals = after_by_subj.get(sid, [])
+                if not bvals or not avals:
+                    continue
+                bmae = float(np.mean([abs(v) for v in bvals]))
+                amae = float(np.mean([abs(v) for v in avals]))
+                delta = amae - bmae
+                marker = "↓" if delta < -0.05 else ("↑" if delta > 0.05 else "·")
+                print(f"{sid:<14} {sex_by_subj.get(sid, '?'):<8} "
+                      f"{len(bvals):>3} {bmae:>9.2f}  {amae:>9.2f}  "
+                      f"{delta:>+8.2f} {marker}")
+
             stats_list = stats_list + r_list
             error_rows = error_rows + r_rows
 
