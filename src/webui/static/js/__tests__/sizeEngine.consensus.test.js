@@ -77,7 +77,7 @@ describe("unanimous", () => {
     assert.equal(result.confidence, "high");
   });
 
-  it("all three land on XS → ordinal 0", () => {
+  it("all three land on smallest band → ordinal 0", () => {
     const measures = { chest_circumference: 79, waist_circumference: 60, hip_circumference: 85 };
     const result   = evalUa(dressGarment, measures);
     assert.equal(result.verdict, "unanimous");
