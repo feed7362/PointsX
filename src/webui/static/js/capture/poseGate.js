@@ -332,6 +332,16 @@ function checkFullBodyVisible(lm, viewStep) {
 }
 
 /**
+ * Profile / side step: maximum normalized spread in X between shoulders or hips (~1 = full frame).
+ * True ~90° profile stacks shoulders in image plane → small spread. Front-facing photos remain much larger.
+ * Stricter values reject quarter-turn (~45°) and loose "profile".
+ */
+const PROFILE_MAX_FRONTAL_WIDTH = 0.052;
+const PROFILE_MAX_TORSO_FRONTALITY = 0.048;
+/** Above this shoulder X-separation (normalized), classify as frontal / quarter-turn, not side. */
+const PROFILE_MAX_SHOULDER_X_SPREAD = 0.088;
+
+/**
  * Profile pose: right side to camera. Uses shoulder width, visibility asymmetry, eye separation,
  * and head alignment; rejects too-frontal or left-side-dominant poses where landmarks are noisy.
  */
@@ -362,11 +372,13 @@ function checkProfilePose(lm) {
   const hipW = Math.abs((lm[23]?.x ?? ls.x) - (lm[24]?.x ?? rs.x));
   const frontalWidth = Math.max(shoulderW, hipW);
   const torsoFrontality = shoulderW * 0.62 + hipW * 0.38;
-  const tooFrontal = shoulderW > 0.195;
-  if (tooFrontal) {
-    return { ok: false, reason: "Поверніться боком на ~90°" };
+  if (shoulderW > PROFILE_MAX_SHOULDER_X_SPREAD) {
+    return {
+      ok: false,
+      reason: "Поверніться боком на ~90°",
+    };
   }
-  if (frontalWidth > 0.086 || torsoFrontality > 0.082) {
+  if (frontalWidth > PROFILE_MAX_FRONTAL_WIDTH || torsoFrontality > PROFILE_MAX_TORSO_FRONTALITY) {
     return { ok: false, reason: "Поверніться боком на ~90°" };
   }
   if (lsV > rsV + 0.112) {

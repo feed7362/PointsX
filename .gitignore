@@ -10,7 +10,6 @@ dist/
 build/
 .ruff_cache/
 .idea/
-data/
 /assets/hdri/
 
 /.cursor

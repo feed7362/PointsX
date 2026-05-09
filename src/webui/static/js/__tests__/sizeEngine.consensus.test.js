@@ -231,7 +231,7 @@ describe("pants trio", () => {
     const result   = evaluateGarmentSize(catalog, pantsGarment, measures, {}, "eu", "female");
     assert.equal(result.verdict, "unanimous");
     assert.equal(result.ordinal, 2);
-    assert.equal(result.code, "38");
+    assert.equal(result.code, "EU 38");
   });
 
   it("pants waist/hip agree M, thigh is one step L → majority", () => {

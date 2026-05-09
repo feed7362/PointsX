@@ -8,11 +8,11 @@ It is consumed by frontend sizing and pattern-generation logic.
 ## File and Version
 
 - Config file: `src/webui/static/data/tailoring_config.json`
-- Current version: `4` (top-level `version`)
+- Current version: `5` (top-level `version`)
 
 When updating semantics, increment `version` and keep migration notes with the change.
 
-**v3 note:** Women's `eu_*` and `us_*` grid `code` values use the same Continental numerals as `ua_*` (`34`, `36`, …, `44` per ordinal) so UA / EU / US tabs agree on однаковий розмір.
+**v5 note:** Restored regional `code` strings on all **`eu_*`** and **`us_*`** grids from the canonical `EU …` / letter labels (reference: legacy `tailoring_config` v2). **`min_cm` / `max_cm` bands** stay at current project values (e.g. men v4 boundaries). **`ua_*`** grids unchanged.
 
 **v4 note:** Men's consensus band boundaries (cm) were shifted so S/M splits align better with mainstream RTW (e.g. обхват грудей від ~94 см — це зазвичай M, не S).
 
@@ -102,7 +102,7 @@ Required semantics per entry:
 - `bands`: ordered band list with:
   - `min_cm`
   - `max_cm`
-  - `code` (display label — women's UA/EU/US grids share Continental numerals `34`…`44`; men's EU keeps `EU …` prefixes where needed)
+  - `code` (display label — `EU …` / `EU …/…` on `eu_*` grids, `XS`…`XXL` or `S`…`XXL` on `us_*` grids; `ua_*` uses numeric codes)
   - `ordinal` (index into scale)
 
 Band interpretation follows the sizing baseline convention:
