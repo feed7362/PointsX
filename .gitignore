@@ -17,3 +17,4 @@ build/
 /assets/
 yolo12l-person-seg-extended.pt
 /dataset
+.dev-certs/

@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PointsX — мірки</title>
+    <title>FitMeasure AI — мірки</title>
     <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
   </head>
   <body>
     <header class="header">
-      <h1>PointsX</h1>
+      <h1>FitMeasure AI</h1>
       <p class="sub">
         Дві фотографії, зріст, стать → результат з сервера, розміри за сітками. Поза перевіряється в браузері.
         <a href="/static/frame-editor.html">Редактор рамки</a>.
@@ -103,6 +103,7 @@
               <p class="preview-idle-title">Камера вимкнена</p>
               <p class="preview-idle-hint">
                 Натисніть «Увімкнути камеру», щоб побачити превʼю й ескіз пози для заміру.
+                На телефоні в локальній мережі потрібен <strong>HTTPS</strong> (див. RUN-WEBUI.md) або завантажте фото.
               </p>
             </div>
           </div>
@@ -257,6 +258,6 @@
     </main>
 
     <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
-    <script type="module" src="/static/js/app.js?v=auto-capture1"></script>
+    <script type="module" src="/static/js/app.js?v=camera-https1"></script>
   </body>
 </html>
