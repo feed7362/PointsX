@@ -160,6 +160,13 @@ class _LazyClient:
                         "Add `boto3>=1.35.0` to pyproject and reinstall."
                     )
                     return None
+                # boto3 1.36+ defaults to "flexible checksums" that send a
+                # streaming-aws-chunked body and omit Content-Length — strict
+                # providers (ElasticLake, some MinIO setups) reject this with
+                # `MissingContentLength`. Pin checksum calculation to "when
+                # required" and disable response validation; combined with the
+                # explicit ContentLength on put_object below this forces a
+                # regular non-chunked request.
                 self._client = boto3.client(
                     "s3",
                     endpoint_url=cfg.endpoint,
@@ -169,6 +176,8 @@ class _LazyClient:
                     config=BotoConfig(
                         signature_version="s3v4",
                         retries={"max_attempts": 2, "mode": "standard"},
+                        request_checksum_calculation="when_required",
+                        response_checksum_validation="when_required",
                         s3={"addressing_style": "path" if cfg.force_path_style else "virtual"},
                     ),
                 )
