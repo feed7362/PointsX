@@ -68,6 +68,12 @@ docker run --rm -p 7860:7860 --env-file .env pointsx-demo
 
 ## Deploy
 
+> 📘 **Full walkthrough**: [`docs/deployment.md`](docs/deployment.md) — env-var
+> tables per surface (Vercel / HF Space / `.env`), `S3_ENDPOINT` URL shapes
+> for every common provider, smoke-test recipes, free-tier limits.
+
+The condensed version:
+
 ### 1. Backend → Hugging Face Space
 
 1. Create a Space at https://huggingface.co/new-space
