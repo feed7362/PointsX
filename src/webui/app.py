@@ -583,6 +583,58 @@ async def measure(
 
     await _save_capture_pair_to_dataset(front_bytes, side_bytes)
 
+    # One request_id per call, used for both the envelope and the archive prefix.
+    request_id = str(uuid.uuid4())
+
+    def _archive(envelope_obj, *, outcome: str) -> None:
+        """Push photos + envelope to S3 regardless of pipeline outcome.
+
+        outcome ∈ {"ok", "calibration_failed"}. Photos archived even when
+        calibration fails — the failure itself is valuable data for the
+        scientific demo (camera framing, lighting, etc.). Print()'d to
+        stderr so uvicorn's logging config can't hide the trace while
+        diagnosing.
+        """
+        import sys
+        try:
+            from webui import storage
+            enabled = storage.is_enabled()
+            print(
+                f"[archive hook] outcome={outcome} "
+                f"storage.is_enabled()={enabled} request_id={request_id}",
+                file=sys.stderr,
+                flush=True,
+            )
+            if not enabled:
+                return
+            ok = storage.archive_measurement(
+                request_id=request_id,
+                front_bytes=front_bytes,
+                front_content_type=(front.content_type or "image/jpeg"),
+                side_bytes=side_bytes,
+                side_content_type=(side.content_type or "image/jpeg"),
+                envelope_json=envelope_obj.model_dump(mode="json", by_alias=True),
+                metadata={
+                    "height_cm": str(height_cm),
+                    "sex": sex,
+                    "pose_backend": pose_backend,
+                    "outcome": outcome,
+                    "created_at": envelope_obj.created_at,
+                },
+            )
+            print(
+                f"[archive hook] archive_measurement returned {ok}",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[archive hook] raised: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            logger.exception("S3 archive raised — measurement response is unaffected.")
+
     try:
         result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
     except ValueError as exc:
@@ -598,10 +650,12 @@ async def measure(
                 front_bgr=front_img,
                 side_bgr=side_img,
             )
+            envelope.request_id = request_id
             logger.info(
                 "Full model output envelope: %s",
                 envelope.model_dump(mode="json", by_alias=True),
             )
+            _archive(envelope, outcome="calibration_failed")
             return envelope
         raise HTTPException(
             status_code=400,
@@ -616,7 +670,6 @@ async def measure(
 
     from webui.envelope import body_to_envelope
 
-    request_id = str(uuid.uuid4())
     envelope = body_to_envelope(
         result=result,
         subject_height_cm=height_cm,
@@ -627,48 +680,7 @@ async def measure(
     )
     logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
 
-    # ── Optional S3-compatible archival for the scientific demo ──────────────
-    # Disabled silently when S3_* env vars are missing. Never blocks the
-    # response — failures are logged and swallowed inside storage.archive_*.
-    # Uses print() (not logger) so output cannot be hidden by uvicorn's
-    # logging config — important while diagnosing whether the hook fires.
-    import sys
-    try:
-        from webui import storage
-
-        enabled = storage.is_enabled()
-        print(
-            f"[archive hook] storage.is_enabled()={enabled} request_id={request_id}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if enabled:
-            ok = storage.archive_measurement(
-                request_id=request_id,
-                front_bytes=front_bytes,
-                front_content_type=(front.content_type or "image/jpeg"),
-                side_bytes=side_bytes,
-                side_content_type=(side.content_type or "image/jpeg"),
-                envelope_json=envelope.model_dump(mode="json", by_alias=True),
-                metadata={
-                    "height_cm": str(height_cm),
-                    "sex": sex,
-                    "pose_backend": pose_backend,
-                    "created_at": envelope.created_at,
-                },
-            )
-            print(
-                f"[archive hook] archive_measurement returned {ok}",
-                file=sys.stderr,
-                flush=True,
-            )
-    except Exception as exc:  # noqa: BLE001
-        print(
-            f"[archive hook] raised: {type(exc).__name__}: {exc}",
-            file=sys.stderr,
-            flush=True,
-        )
-        logger.exception("S3 archive raised — measurement response is unaffected.")
+    _archive(envelope, outcome="ok")
 
     return envelope
 
