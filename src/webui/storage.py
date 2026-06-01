@@ -53,30 +53,65 @@ class S3Config:
     force_path_style: bool  # most non-AWS S3-compatible providers need this
 
 
+# Env-var prefixes we try, in order. Lets users paste the example .env block
+# from any S3-compatible provider's docs without renaming variables:
+#
+#   S3_*    canonical (recommended)
+#   ELK_*   ElasticLake
+#   R2_*    Cloudflare R2 examples
+#   B2_*    Backblaze B2 examples
+#   AWS_*   AWS / boto3 native names (uses AWS_ACCESS_KEY_ID etc.)
+#
+# Within one .env, only one prefix should appear. The first prefix whose four
+# required vars are all set wins.
+_ENV_PREFIXES = ("S3_", "ELK_", "R2_", "B2_", "AWS_")
+
+
+def _read_prefixed(prefix: str) -> dict[str, str | None]:
+    # Most providers use the same suffix names as AWS:
+    #   <PREFIX>ENDPOINT, <PREFIX>ACCESS_KEY_ID, <PREFIX>SECRET_ACCESS_KEY,
+    #   <PREFIX>BUCKET, <PREFIX>REGION, <PREFIX>PREFIX, <PREFIX>FORCE_PATH_STYLE
+    return {
+        "endpoint": os.environ.get(f"{prefix}ENDPOINT"),
+        "access_key_id": os.environ.get(f"{prefix}ACCESS_KEY_ID"),
+        "secret_access_key": os.environ.get(f"{prefix}SECRET_ACCESS_KEY"),
+        "bucket": os.environ.get(f"{prefix}BUCKET"),
+        "region": os.environ.get(f"{prefix}REGION"),
+        "prefix": os.environ.get(f"{prefix}PREFIX"),
+        "force_path_style": os.environ.get(f"{prefix}FORCE_PATH_STYLE"),
+    }
+
+
 def _load_config() -> S3Config | None:
-    required = (
-        ("S3_ENDPOINT", os.environ.get("S3_ENDPOINT")),
-        ("S3_ACCESS_KEY_ID", os.environ.get("S3_ACCESS_KEY_ID")),
-        ("S3_SECRET_ACCESS_KEY", os.environ.get("S3_SECRET_ACCESS_KEY")),
-        ("S3_BUCKET", os.environ.get("S3_BUCKET")),
-    )
-    missing = [name for name, value in required if not value]
-    if missing:
-        # WARNING (not INFO) so it shows under uvicorn's default config —
-        # otherwise the message would be invisible and you'd think archival
-        # was working when it never even tried.
+    # Pick the first prefix that has the four required values filled in.
+    chosen: str | None = None
+    values: dict[str, str | None] = {}
+    for prefix in _ENV_PREFIXES:
+        candidate = _read_prefixed(prefix)
+        if all(candidate[k] for k in ("endpoint", "access_key_id", "secret_access_key", "bucket")):
+            chosen = prefix
+            values = candidate
+            break
+
+    if chosen is None:
         logger.warning(
-            "Object-storage archival DISABLED — missing env vars: %s. "
-            "Set them in .env (local) or the HF Space's Variables and secrets.",
-            ", ".join(missing),
+            "Object-storage archival DISABLED — set one of these prefix groups "
+            "in .env or the HF Space's Variables and secrets: %s (need ENDPOINT, "
+            "ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET).",
+            "|".join(p.rstrip("_") for p in _ENV_PREFIXES),
         )
         return None
-    endpoint = os.environ["S3_ENDPOINT"].rstrip("/")
+    if chosen != "S3_":
+        logger.warning(
+            "Object-storage: detected %s* env-var prefix (recommended canonical name is S3_*).",
+            chosen,
+        )
+    endpoint = values["endpoint"].rstrip("/")  # type: ignore[union-attr]
     # Heuristic: AWS S3 is the only major provider that *prefers* virtual-hosted
     # addressing; almost every other S3-compatible provider (R2, B2, MinIO,
-    # Wasabi, iDrive, Scaleway, the Storj gateway, …) wants path-style. The
-    # env var ``S3_FORCE_PATH_STYLE`` overrides the heuristic if needed.
-    force_raw = (os.environ.get("S3_FORCE_PATH_STYLE") or "").strip().lower()
+    # Wasabi, iDrive, Scaleway, ElasticLake, …) wants path-style. The env var
+    # <PREFIX>FORCE_PATH_STYLE overrides the heuristic if needed.
+    force_raw = (values.get("force_path_style") or "").strip().lower()
     if force_raw in ("1", "true", "yes", "on"):
         force_path_style = True
     elif force_raw in ("0", "false", "no", "off"):
@@ -85,11 +120,11 @@ def _load_config() -> S3Config | None:
         force_path_style = "amazonaws.com" not in endpoint.lower()
     return S3Config(
         endpoint=endpoint,
-        access_key_id=os.environ["S3_ACCESS_KEY_ID"],
-        secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"],
-        bucket=os.environ["S3_BUCKET"],
-        region=os.environ.get("S3_REGION") or "us-east-1",
-        prefix=(os.environ.get("S3_PREFIX") or "").rstrip("/"),
+        access_key_id=values["access_key_id"],          # type: ignore[arg-type]
+        secret_access_key=values["secret_access_key"],  # type: ignore[arg-type]
+        bucket=values["bucket"],                        # type: ignore[arg-type]
+        region=values.get("region") or "us-east-1",
+        prefix=(values.get("prefix") or "").rstrip("/"),
         force_path_style=force_path_style,
     )
 
