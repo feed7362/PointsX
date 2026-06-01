@@ -61,8 +61,12 @@ def _load_config() -> S3Config | None:
     )
     missing = [name for name, value in required if not value]
     if missing:
-        logger.info(
-            "Object-storage archival disabled (missing env vars: %s)",
+        # WARNING (not INFO) so it shows under uvicorn's default config —
+        # otherwise the message would be invisible and you'd think archival
+        # was working when it never even tried.
+        logger.warning(
+            "Object-storage archival DISABLED — missing env vars: %s. "
+            "Set them in .env (local) or the HF Space's Variables and secrets.",
             ", ".join(missing),
         )
         return None
@@ -118,8 +122,8 @@ class _LazyClient:
                         retries={"max_attempts": 2, "mode": "standard"},
                     ),
                 )
-                logger.info(
-                    "Object-storage client ready (bucket=%s, endpoint=%s)",
+                logger.warning(
+                    "Object-storage client READY — bucket=%s endpoint=%s",
                     cfg.bucket, cfg.endpoint,
                 )
             return self._client
@@ -200,6 +204,10 @@ def archive_measurement(
                 Metadata=md or {},
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Object-storage archive failed for request_id=%s: %s", rid, exc)
+        logger.warning("Object-storage archive FAILED for request_id=%s: %s", rid, exc)
         return False
+    logger.warning(
+        "Object-storage archive OK — request_id=%s key_prefix=%s",
+        rid, _key(rid, "").rstrip("/"),
+    )
     return True

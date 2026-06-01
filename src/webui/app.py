@@ -444,6 +444,19 @@ async def lifespan(app: FastAPI):
             "Failed to load WebuiPipeline (endpoint will return 503): %s", exc,
         )
 
+    # Probe storage on startup so the operator immediately knows whether
+    # archival is configured. Forces the lazy config to resolve and writes
+    # a single WARNING-level line either way.
+    try:
+        from webui import storage as _storage_probe
+
+        if _storage_probe.is_enabled():
+            logger.warning("Storage probe: archival is ENABLED on startup")
+        else:
+            logger.warning("Storage probe: archival is DISABLED on startup")
+    except Exception:  # noqa: BLE001
+        logger.exception("Storage probe failed unexpectedly")
+
     yield
 
     app.state.pipeline = None
