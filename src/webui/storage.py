@@ -248,10 +248,15 @@ def archive_measurement(
     ]
     try:
         for key, body, content_type in uploads:
+            # ContentLength explicit: some stricter S3-compatible providers
+            # (ElasticLake, certain MinIO configs) reject chunked-encoded
+            # uploads where boto3 omits the header. Passing len(body)
+            # bypasses chunked encoding for bytes payloads.
             client.put_object(
                 Bucket=cfg.bucket,
                 Key=key,
                 Body=body,
+                ContentLength=len(body),
                 ContentType=content_type,
                 Metadata=md or {},
             )
