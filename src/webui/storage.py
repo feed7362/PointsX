@@ -49,7 +49,8 @@ class S3Config:
     secret_access_key: str
     bucket: str
     region: str
-    prefix: str  # may be empty; trailing slash always stripped
+    prefix: str             # may be empty; trailing slash always stripped
+    force_path_style: bool  # most non-AWS S3-compatible providers need this
 
 
 def _load_config() -> S3Config | None:
@@ -70,13 +71,26 @@ def _load_config() -> S3Config | None:
             ", ".join(missing),
         )
         return None
+    endpoint = os.environ["S3_ENDPOINT"].rstrip("/")
+    # Heuristic: AWS S3 is the only major provider that *prefers* virtual-hosted
+    # addressing; almost every other S3-compatible provider (R2, B2, MinIO,
+    # Wasabi, iDrive, Scaleway, the Storj gateway, …) wants path-style. The
+    # env var ``S3_FORCE_PATH_STYLE`` overrides the heuristic if needed.
+    force_raw = (os.environ.get("S3_FORCE_PATH_STYLE") or "").strip().lower()
+    if force_raw in ("1", "true", "yes", "on"):
+        force_path_style = True
+    elif force_raw in ("0", "false", "no", "off"):
+        force_path_style = False
+    else:
+        force_path_style = "amazonaws.com" not in endpoint.lower()
     return S3Config(
-        endpoint=os.environ["S3_ENDPOINT"].rstrip("/"),
+        endpoint=endpoint,
         access_key_id=os.environ["S3_ACCESS_KEY_ID"],
         secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"],
         bucket=os.environ["S3_BUCKET"],
-        region=os.environ.get("S3_REGION", "auto"),
+        region=os.environ.get("S3_REGION") or "us-east-1",
         prefix=(os.environ.get("S3_PREFIX") or "").rstrip("/"),
+        force_path_style=force_path_style,
     )
 
 
@@ -120,11 +134,14 @@ class _LazyClient:
                     config=BotoConfig(
                         signature_version="s3v4",
                         retries={"max_attempts": 2, "mode": "standard"},
+                        s3={"addressing_style": "path" if cfg.force_path_style else "virtual"},
                     ),
                 )
                 logger.warning(
-                    "Object-storage client READY — bucket=%s endpoint=%s",
-                    cfg.bucket, cfg.endpoint,
+                    "Object-storage client READY — bucket=%s endpoint=%s "
+                    "region=%s addressing=%s",
+                    cfg.bucket, cfg.endpoint, cfg.region,
+                    "path" if cfg.force_path_style else "virtual",
                 )
             return self._client
 
