@@ -4,7 +4,6 @@ __pycache__/
 *.pyo
 .ipynb_checkpoints/
 runs/
-/models/
 *.egg-info/
 dist/
 build/
@@ -16,4 +15,19 @@ data/
 /.cursor
 /.claude/
 /assets/
-yolo12l-person-seg-extended.pt
+
+# Local environment files (R2 secrets, etc.) — never committed.
+.env
+.env.local
+.env.*.local
+
+# Models dir: weights ship via LFS (.gitattributes). Allowlist the three
+# .pt files we serve from the container and SMPL-X .npz. Everything else
+# under /models/ stays out (intermediate training weights, etc.).
+/models/*
+!/models/yolo26-pose.pt
+!/models/yolo12l-person-seg-extended.pt
+!/models/circumference_regressor.pt
+!/models/smplx/
+/models/smplx/*
+!/models/smplx/*.npz

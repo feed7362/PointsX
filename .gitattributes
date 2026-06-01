@@ -1,0 +1,4 @@
+# Git LFS — YOLO weights + SMPL-X archives. Required by HF Spaces (any blob
+# > 10 MB must be LFS-tracked to push to a Space repo).
+models/*.pt filter=lfs diff=lfs merge=lfs -text
+models/smplx/*.npz filter=lfs diff=lfs merge=lfs -text

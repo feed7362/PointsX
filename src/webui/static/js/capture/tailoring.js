@@ -631,7 +631,11 @@ export function attachMeasureHandler() {
     const fd = new FormData();
     fd.append("height_cm", String(heightCmNum));
     fd.append("sex",       sexSelect.value);
-    const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
+    // POINTSX_API_BASE is injected by the static host (Vercel) via
+    // /static/config.js — empty string falls back to same-origin (HF Space
+    // dev where frontend + backend share the host).
+    const apiBase = (window.POINTSX_API_BASE || "").replace(/\/+$/, "");
+    const measureUrl = apiBase + (useTestImages ? "/api/measure/mock" : "/api/measure");
     if (!useTestImages) {
       if (poseBackendSelect && poseBackendSelect.value) {
         fd.append("pose_backend", poseBackendSelect.value);

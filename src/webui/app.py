@@ -456,6 +456,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="PointsX WebUI", version="0.3.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# ── CORS for the demo deployment ───────────────────────────────────────────
+# The static SPA lives on Vercel; the inference API lives on Hugging Face
+# Spaces. CORS_ALLOW_ORIGINS env var is a comma-separated list of allowed
+# origins. ``*`` allows any origin (fine for an open scientific demo).
+from fastapi.middleware.cors import CORSMiddleware
+
+_cors_raw = os.environ.get("CORS_ALLOW_ORIGINS", "*")
+_cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(RequestValidationError)
 async def request_validation_exception_handler(
@@ -587,15 +603,41 @@ async def measure(
 
     from webui.envelope import body_to_envelope
 
+    request_id = str(uuid.uuid4())
     envelope = body_to_envelope(
         result=result,
         subject_height_cm=height_cm,
         sex=sex,
-        request_id=str(uuid.uuid4()),
+        request_id=request_id,
         front_bgr=front_img,
         side_bgr=side_img,
     )
     logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
+
+    # ── Optional R2 archival for the scientific demo ─────────────────────────
+    # Disabled silently when R2_* env vars are missing. Never blocks the
+    # response — failures are logged and swallowed inside storage.archive_*.
+    try:
+        from webui import storage
+
+        if storage.is_enabled():
+            storage.archive_measurement(
+                request_id=request_id,
+                front_bytes=front_bytes,
+                front_content_type=(front.content_type or "image/jpeg"),
+                side_bytes=side_bytes,
+                side_content_type=(side.content_type or "image/jpeg"),
+                envelope_json=envelope.model_dump(mode="json", by_alias=True),
+                metadata={
+                    "height_cm": str(height_cm),
+                    "sex": sex,
+                    "pose_backend": pose_backend,
+                    "created_at": envelope.created_at,
+                },
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("R2 archive raised — measurement response is unaffected.")
+
     return envelope
 
 

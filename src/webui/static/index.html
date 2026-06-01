@@ -257,6 +257,11 @@
     </main>
 
     <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
+    <!-- Runtime config: sets window.POINTSX_API_BASE. On Vercel it's rewritten
+         at deploy to point at the HF Space; locally / on the Space itself it
+         stays empty (same-origin). MUST load before any module script that
+         reads it. -->
+    <script src="/static/config.js"></script>
     <script type="module" src="/static/js/app.js?v=auto-capture1"></script>
   </body>
 </html>
