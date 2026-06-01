@@ -627,14 +627,23 @@ async def measure(
     )
     logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
 
-    # ── Optional R2 archival for the scientific demo ─────────────────────────
-    # Disabled silently when R2_* env vars are missing. Never blocks the
+    # ── Optional S3-compatible archival for the scientific demo ──────────────
+    # Disabled silently when S3_* env vars are missing. Never blocks the
     # response — failures are logged and swallowed inside storage.archive_*.
+    # Uses print() (not logger) so output cannot be hidden by uvicorn's
+    # logging config — important while diagnosing whether the hook fires.
+    import sys
     try:
         from webui import storage
 
-        if storage.is_enabled():
-            storage.archive_measurement(
+        enabled = storage.is_enabled()
+        print(
+            f"[archive hook] storage.is_enabled()={enabled} request_id={request_id}",
+            file=sys.stderr,
+            flush=True,
+        )
+        if enabled:
+            ok = storage.archive_measurement(
                 request_id=request_id,
                 front_bytes=front_bytes,
                 front_content_type=(front.content_type or "image/jpeg"),
@@ -648,8 +657,18 @@ async def measure(
                     "created_at": envelope.created_at,
                 },
             )
-    except Exception:  # noqa: BLE001
-        logger.exception("R2 archive raised — measurement response is unaffected.")
+            print(
+                f"[archive hook] archive_measurement returned {ok}",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[archive hook] raised: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        logger.exception("S3 archive raised — measurement response is unaffected.")
 
     return envelope
 
