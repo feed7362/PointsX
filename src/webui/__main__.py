@@ -23,6 +23,24 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
+
+
+def _load_dotenv_if_present() -> None:
+    """Best-effort load of a ``.env`` in the working dir for local dev.
+
+    No-op when python-dotenv isn't installed or when no .env file exists.
+    On HF Spaces / Docker the env is injected by the platform, so this just
+    runs and does nothing.
+    """
+    env_path = Path.cwd() / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(env_path, override=False)
 
 
 _DESCRIPTION = """\
@@ -44,6 +62,9 @@ Override via env vars when needed:
 
 
 def main() -> None:
+    # Load .env first so the argparse defaults below see the values.
+    _load_dotenv_if_present()
+
     parser = argparse.ArgumentParser(
         description=_DESCRIPTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
