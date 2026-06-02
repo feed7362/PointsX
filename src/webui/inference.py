@@ -146,16 +146,51 @@ class WebuiPipeline:
         height_cm: float,
         *,
         pose_backend: PoseBackend = "custom",
+        timings: "Timings | None" = None,
     ) -> InferenceResult:
-        """Run the full pose+seg+regression pipeline on a pair of images."""
-        front_kp, side_kp, front_mask, side_mask = self._predict_pose_and_masks(
-            front_img, side_img, pose_backend=pose_backend
-        )
+        """Run the full pose+seg+regression pipeline on a pair of images.
 
-        cal = calibrate(front_kp, side_kp, height_cm)
-        bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
-        bm = estimate_circumferences(bm, self.regressor)
-        bm = validate_measurements(bm)
+        When a ``Timings`` instance is supplied, each blocking phase is
+        bracketed by ``with timings(phase_name):`` so the caller gets a
+        wall-clock breakdown without instrumenting every line.
+        """
+        from webui._timing import Timings as _T
+        tm = timings if isinstance(timings, _T) else _T()
+
+        with tm("pose_front"):
+            front_kp = self.models.predict_pose(
+                front_img, view="front", pose_backend=pose_backend,
+            )
+        if front_kp is None:
+            raise ValueError("No person detected in front image")
+        with tm("pose_side"):
+            side_kp = self.models.predict_pose(
+                side_img, view="side", pose_backend=pose_backend,
+            )
+        if side_kp is None:
+            raise ValueError("No person detected in side image")
+
+        with tm("seg_front"):
+            front_mask = self.models.predict_segmentation(
+                front_img, view="front", reference_point=_reference_point(front_kp),
+            )
+        if front_mask is None:
+            raise ValueError("No body silhouette detected in front image")
+        with tm("seg_side"):
+            side_mask = self.models.predict_segmentation(
+                side_img, view="side", reference_point=_reference_point(side_kp),
+            )
+        if side_mask is None:
+            raise ValueError("No body silhouette detected in side image")
+
+        with tm("calibrate"):
+            cal = calibrate(front_kp, side_kp, height_cm)
+        with tm("extract"):
+            bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
+        with tm("circumferences"):
+            bm = estimate_circumferences(bm, self.regressor)
+        with tm("validate"):
+            bm = validate_measurements(bm)
 
         return InferenceResult(
             body=bm,

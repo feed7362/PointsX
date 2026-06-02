@@ -607,6 +607,25 @@ async def request_validation_exception_handler(
     return JSONResponse(status_code=422, content={"detail": message})
 
 
+def _downscale_for_inference(img: np.ndarray, max_side: int = 1280) -> np.ndarray:
+    """Resize a phone-camera photo so its longest side is <= max_side px.
+
+    YOLO runs at imgsz=640 internally anyway — passing a 4000×3000 photo
+    only buys CPU time on its built-in resize step (~0.5–1.5 s per
+    image on free CPU). Keeping max_side at 1280 leaves headroom for
+    silhouette quality at the limbs without throwing away signal.
+    """
+    if img is None or img.size == 0:
+        return img
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / float(longest)
+    new_w, new_h = int(round(w * scale)), int(round(h * scale))
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
 async def _validate_and_decode(
     upload: UploadFile, label: str
 ) -> tuple[np.ndarray, bytes]:
@@ -699,8 +718,19 @@ async def measure(
             ),
         )
 
-    front_img, front_bytes = await _validate_and_decode(front, "front")
-    side_img,  side_bytes  = await _validate_and_decode(side,  "side")
+    from webui._timing import Timings
+    tm = Timings()
+
+    with tm("decode"):
+        front_img, front_bytes = await _validate_and_decode(front, "front")
+        side_img,  side_bytes  = await _validate_and_decode(side,  "side")
+
+    # Pre-downscale large phone-camera shots so YOLO's resize step isn't
+    # the bottleneck. The model runs at imgsz=640 internally anyway —
+    # passing a 4000×3000 image only costs CPU on the resize step.
+    with tm("downscale"):
+        front_img = _downscale_for_inference(front_img)
+        side_img = _downscale_for_inference(side_img)
 
     await _save_capture_pair_to_dataset(front_bytes, side_bytes)
 
@@ -776,12 +806,23 @@ async def measure(
             )
             logger.exception("S3 archive raised — measurement response is unaffected.")
 
+    import asyncio
     try:
-        result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
+        # Pipeline is sync (PyTorch + numpy). asyncio.to_thread keeps the
+        # event loop responsive so /api/tts and health checks can still
+        # answer while this request crunches pose+seg.
+        result = await asyncio.to_thread(
+            pipeline.measure,
+            front_img, side_img, height_cm,
+            pose_backend=pose_backend, timings=tm,
+        )
     except ValueError as exc:
         err_text = str(exc).strip()
         if err_text.startswith("Cannot calibrate "):
-            preview = pipeline.preview(front_img, side_img, pose_backend=pose_backend)
+            preview = await asyncio.to_thread(
+                pipeline.preview,
+                front_img, side_img, pose_backend=pose_backend,
+            )
             envelope = _build_visualization_only_envelope(
                 preview_result=preview,
                 height_cm=height_cm,
@@ -811,15 +852,23 @@ async def measure(
 
     from webui.envelope import body_to_envelope
 
-    envelope = body_to_envelope(
-        result=result,
-        subject_height_cm=height_cm,
-        sex=sex,
-        request_id=request_id,
-        front_bgr=front_img,
-        side_bgr=side_img,
-    )
-    logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
+    # `with_viz` query param gates the heavy base64-PNG render. Default
+    # ON for backward-compat; set ?with_viz=0 in the frontend to shave
+    # ~1-2 s off the response when overlays aren't needed.
+    with_viz_raw = request.query_params.get("with_viz", "1").strip().lower()
+    with_viz = with_viz_raw not in ("0", "false", "no", "off")
+
+    with tm("envelope"):
+        envelope = body_to_envelope(
+            result=result,
+            subject_height_cm=height_cm,
+            sex=sex,
+            request_id=request_id,
+            front_bgr=front_img if with_viz else None,
+            side_bgr=side_img if with_viz else None,
+        )
+
+    logger.warning("Measurement timings — %s", tm.format())
 
     _archive(envelope, outcome="ok")
 
