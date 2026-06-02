@@ -1,0 +1,172 @@
+"""Convert white-on-black silhouette renders to YOLO segmentation polygon labels.
+
+Input layout (produced by `blender_render.py --mode mask`):
+    <root>/train/images/s00001_front.jpg
+    <root>/val/images/s00002_side.jpg
+    ...
+
+Output: corresponding `.txt` files in `<root>/{train,val}/labels/` with one line per image:
+    0 x1 y1 x2 y2 ... xN yN       # class 0 = "person", polygon vertices normalized to [0,1]
+
+The largest connected component is used (ignores noise). Contours are simplified with
+Douglas-Peucker so each polygon has 30-100 vertices — dense enough for accurate training,
+sparse enough for fast loading.
+
+Usage:
+    python -m pointsx.synthetic.masks_to_polygons --data /path/to/seg-dataset
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import cv2
+import numpy as np
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
+# Tune these if polygons look too blocky / too dense
+MIN_POLYGON_POINTS = 30
+MAX_POLYGON_POINTS = 100
+# Binarization: anything > THRESHOLD is treated as body (white emission render is ~255)
+BINARY_THRESHOLD = 40
+
+
+def mask_to_polygon(mask: np.ndarray) -> list[tuple[float, float]] | None:
+    """Extract a YOLO-style polygon (normalized) from a binary silhouette mask.
+
+    Returns a list of (x_norm, y_norm) points, or None if no body found.
+    """
+    h, w = mask.shape[:2]
+    if mask.ndim == 3:
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+
+    _, binary = cv2.threshold(mask, BINARY_THRESHOLD, 255, cv2.THRESH_BINARY)
+
+    # Find all external contours; pick the largest (the body)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return None
+
+    largest = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(largest) < 500:  # noise filter (tiny specks)
+        return None
+
+    # Adaptive Douglas-Peucker: target MIN..MAX vertex count
+    perimeter = cv2.arcLength(largest, closed=True)
+    # Binary search for an epsilon that gives point count in target range
+    eps_lo, eps_hi = 0.0001 * perimeter, 0.02 * perimeter
+    best = largest
+    for _ in range(20):
+        eps = (eps_lo + eps_hi) / 2
+        approx = cv2.approxPolyDP(largest, eps, closed=True)
+        n = len(approx)
+        if n > MAX_POLYGON_POINTS:
+            eps_lo = eps  # need coarser → larger epsilon
+        elif n < MIN_POLYGON_POINTS:
+            eps_hi = eps  # need finer → smaller epsilon
+        else:
+            best = approx
+            break
+        best = approx
+
+    # Normalize to [0,1]
+    pts = [(float(p[0][0]) / w, float(p[0][1]) / h) for p in best]
+    return pts
+
+
+def write_yolo_polygon_label(label_path: Path, polygon: list[tuple[float, float]]) -> None:
+    """Write a YOLO-seg .txt label file (single-object, class 0 = person)."""
+    label_path.parent.mkdir(parents=True, exist_ok=True)
+    # Clamp just in case (keypoints outside [0,1] confuse Ultralytics)
+    parts = ["0"]
+    for x, y in polygon:
+        parts.append(f"{max(0.0, min(1.0, x)):.6f}")
+        parts.append(f"{max(0.0, min(1.0, y)):.6f}")
+    label_path.write_text(" ".join(parts) + "\n")
+
+
+def convert_directory(data_root: Path) -> dict[str, int]:
+    """Walk train/ and val/ subdirs, convert every image into a YOLO polygon label."""
+    stats = {"total": 0, "ok": 0, "empty": 0, "skipped": 0}
+
+    images = []
+    for split in ("train", "val"):
+        img_dir = data_root / split / "images"
+        if img_dir.exists():
+            images.extend(sorted(img_dir.glob("*.jpg")) + sorted(img_dir.glob("*.png")))
+
+    if not images:
+        print(f"No images found under {data_root}/(train|val)/images/")
+        return stats
+
+    stats["total"] = len(images)
+
+    with Progress(
+        TextColumn("[bold blue]Converting masks"),
+        BarColumn(bar_width=30),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        TextColumn("eta"),
+        TimeRemainingColumn(),
+    ) as progress:
+        task = progress.add_task("convert", total=len(images))
+
+        for img_path in images:
+            progress.update(task, advance=1)
+            label_path = img_path.parent.parent / "labels" / img_path.with_suffix(".txt").name
+
+            if label_path.exists():
+                stats["skipped"] += 1
+                continue
+
+            mask = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                continue
+
+            polygon = mask_to_polygon(mask)
+            if polygon is None:
+                stats["empty"] += 1
+                continue
+
+            write_yolo_polygon_label(label_path, polygon)
+            stats["ok"] += 1
+
+    return stats
+
+
+def write_dataset_yaml(data_root: Path) -> Path:
+    """Write dataset.yaml for YOLO-seg training."""
+    yaml_path = data_root / "dataset.yaml"
+    content = (
+        "# Auto-generated by PointsX synthetic seg pipeline\n"
+        f"path: {data_root.resolve()}\n"
+        "train: train/images\n"
+        "val: val/images\n"
+        "\n"
+        "names:\n"
+        "  0: person\n"
+    )
+    yaml_path.write_text(content)
+    return yaml_path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Convert silhouette PNGs to YOLO-seg polygon labels")
+    parser.add_argument("--data", required=True, type=Path,
+                        help="Dataset root (contains train/images/ and val/images/)")
+    parser.add_argument("--skip-yaml", action="store_true",
+                        help="Don't write dataset.yaml")
+    args = parser.parse_args()
+
+    stats = convert_directory(args.data)
+    print(f"\nTotal: {stats['total']}  |  Written: {stats['ok']}  |  "
+          f"Empty: {stats['empty']}  |  Skipped (already exists): {stats['skipped']}")
+
+    if not args.skip_yaml and stats["ok"] > 0:
+        yaml_path = write_dataset_yaml(args.data)
+        print(f"Wrote {yaml_path}")
+
+
+if __name__ == "__main__":
+    main()
