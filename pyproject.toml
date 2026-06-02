@@ -26,6 +26,10 @@ dependencies = [
     "rich>=15.0.0",
     "python-multipart>=0.0.26",
     "edge-tts>=7.0.0",
+    # Fallback TTS used when edge-tts can't reach Microsoft (e.g. on HF
+    # Spaces — Microsoft started blocking datacenter IPs in 2024). gTTS
+    # uses Google Translate's TTS endpoint which doesn't IP-filter.
+    "gtts>=2.5.0",
     # Demo-branch only: Cloudflare R2 archival for /api/measure. boto3 talks
     # to R2 via its S3-compatible endpoint. Silently noop'd when the R2_*
     # env vars are missing, so this is safe to ship on any deployment.
