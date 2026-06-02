@@ -8,14 +8,14 @@ keypoints + widths (no extra ML required).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 from pointsx.circumference import ramanujan_ellipse_circumference
 from pointsx.keypoints import KP, distance, is_valid, midpoint
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints
 
-from webui.inference import InferenceResult
-from webui.visualize import pipeline_visualizations_b64
+if TYPE_CHECKING:
+    from webui.inference import InferenceResult
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +447,7 @@ def body_to_envelope(
     derived: dict[str, Any] = {}
     if front_bgr is not None and side_bgr is not None:
         try:
+            from webui.visualize import pipeline_visualizations_b64
             derived = pipeline_visualizations_b64(front_bgr, side_bgr, result)
         except Exception:
             # Keep API response valid even if debug visualization generation fails.

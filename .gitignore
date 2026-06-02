@@ -18,3 +18,6 @@ build/
 yolo12l-person-seg-extended.pt
 /dataset
 .dev-certs/
+uv.lock
+.vercel
+.env*

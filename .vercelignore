@@ -1,0 +1,33 @@
+# Development tools and local-only files
+.venv
+.venv_vercel_test
+.pytest_cache
+.dev-certs
+.git
+.cursor
+.claude
+
+# Large data/training artifacts
+dataset
+notebooks
+image
+screen
+tests
+deploy
+old_weights
+
+# Model weights (too large for Vercel; loaded via env var paths at runtime)
+models
+
+# Python build artifacts
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Lock files (installCommand uses requirements.txt directly)
+pyproject.toml
+uv.lock
+
+# Documentation
+START.md
+RUN-WEBUI.md

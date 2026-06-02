@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "env": {
+    "POINTSX_INFERENCE_ENDPOINT": "https://secret0123-pointx-backend.hf.space",
+    "POINTSX_TTS_DISABLE": "0"
+  },
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "src/webui/static/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/src/webui/static/$1"
+    },
+    {
+      "src": "/frame-editor.html",
+      "dest": "/src/webui/static/frame-editor.html"
+    },
+    {
+      "src": "/",
+      "dest": "/src/webui/static/index.html"
+    }
+  ]
+}

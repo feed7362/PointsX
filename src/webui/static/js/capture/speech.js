@@ -76,15 +76,28 @@ async function fetchTtsMp3Blob(text) {
 
 /**
  * Chrome / Safari often load speech voices only after a user gesture; call once after camera starts.
+ * Also fires a silent warmup request to /api/tts so the Vercel serverless function is pre-warmed
+ * before the first real pose-hint message fires — otherwise cold-start latency can exceed the
+ * fetch timeout and cause the first message to fall back to the browser SpeechSynthesis voice.
  */
 export function primeVoiceAfterUserGesture() {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
-  ensureUkVoiceList();
-  try {
-    window.speechSynthesis.getVoices();
-  } catch {
-    /* ignore */
+  if (typeof window === "undefined") return;
+
+  // Prime browser voice list.
+  if (window.speechSynthesis) {
+    ensureUkVoiceList();
+    try {
+      window.speechSynthesis.getVoices();
+    } catch {
+      /* ignore */
+    }
   }
+
+  // Warm up the server TTS function with a short text so the cold start happens now,
+  // not during the first real spoken message. Result lands in audioBlobCache automatically.
+  void fetchTtsMp3Blob("готово").catch(() => {
+    /* warmup failure is silent — fallback voice will be used if needed */
+  });
 }
 
 /**

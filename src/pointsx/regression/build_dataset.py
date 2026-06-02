@@ -93,7 +93,7 @@ def build_dataset(
     seg_model: Path,
     output: Path,
     *,
-    pose_backend: PoseBackend = "custom",
+    pose_backend: PoseBackend = "coco",
     img_size: int = 640,
     device: str = "auto",
     limit: int | None = None,
@@ -275,7 +275,7 @@ def main() -> None:
     parser.add_argument(
         "--pose-backend",
         choices=("custom", "coco"),
-        default="custom",
+        default="coco",
         help="Which pose checkpoint to run (custom=16pt native, coco=17pt→16)",
     )
     parser.add_argument(

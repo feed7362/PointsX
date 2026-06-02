@@ -13,7 +13,7 @@ import {
 import { sizeAndPatternHandler, validateEnvelope } from "../patternEngine.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
-import { setStatus } from "./ui.js";
+import { setStatus, updateUiStep } from "./ui.js";
 
 // ---------------------------------------------------------------------------
 // Catalog loading
@@ -594,18 +594,20 @@ export function ensureSizeTabsWired() {
 // ---------------------------------------------------------------------------
 
 export function attachMeasureHandler() {
-    const {
+  const {
     btnMeasure,
     btnMeasureTest,
     resultsSection,
     resultsBody,
     heightInput,
     sexSelect,
-    poseBackendSelect,
     tailoringIntro,
     garmentStripWrap,
     tailoringPanels,
     tailoringDisclaimer,
+    measureLoading,
+    measureLoadingTitle,
+    measureLoadingStep,
   } = getCaptureDom();
 
   async function runMeasureRequest(mode = "capture") {
@@ -628,14 +630,49 @@ export function attachMeasureHandler() {
     const modelVizEl = document.getElementById("model-viz");
     if (modelVizEl) modelVizEl.hidden = true;
 
+    // Disable action buttons during active computation
+    btnMeasure.disabled = true;
+    if (btnMeasureTest) btnMeasureTest.disabled = true;
+
+    // Show loading spinner and details
+    if (measureLoading) {
+      measureLoading.hidden = false;
+      measureLoading.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (measureLoadingTitle) {
+        measureLoadingTitle.textContent = useTestImages ? "Тестовий розрахунок..." : "Обчислення мірок...";
+      }
+      if (measureLoadingStep) {
+        measureLoadingStep.textContent = useTestImages ? "Генерація демо-даних..." : "Підготовка даних...";
+      }
+    }
+
+    let progressTimer = null;
+    if (!useTestImages && measureLoadingStep) {
+      const steps = [
+        { time: 1000, text: "Надсилання знімків на сервер..." },
+        { time: 3500, text: "Локалізація ключових точок (YOLO Pose)..." },
+        { time: 6500, text: "Сегментація силуету тіла..." },
+        { time: 9500, text: "Розрахунок обʼємів та антропометрії..." },
+        { time: 13000, text: "Завершення обчислень..." }
+      ];
+      let currentStep = 0;
+      const updateStep = () => {
+        if (currentStep < steps.length) {
+          measureLoadingStep.textContent = steps[currentStep].text;
+          const nextDelay = currentStep === 0 ? steps[0].time : (steps[currentStep].time - steps[currentStep-1].time);
+          currentStep++;
+          progressTimer = setTimeout(updateStep, nextDelay);
+        }
+      };
+      updateStep();
+    }
+
     const fd = new FormData();
     fd.append("height_cm", String(heightCmNum));
     fd.append("sex",       sexSelect.value);
     const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
     if (!useTestImages) {
-      if (poseBackendSelect && poseBackendSelect.value) {
-        fd.append("pose_backend", poseBackendSelect.value);
-      }
+      fd.append("pose_backend", "coco");
       const frontName =
         captureState.frontBlob instanceof File && captureState.frontBlob.name
           ? captureState.frontBlob.name
@@ -728,6 +765,11 @@ export function attachMeasureHandler() {
       const mv = document.getElementById("model-viz");
       if (mv) mv.hidden = true;
       setStatus("Помилка запиту: " + (e?.message ?? String(e)), true);
+    } finally {
+      if (progressTimer) clearTimeout(progressTimer);
+      if (measureLoading) measureLoading.hidden = true;
+      updateUiStep();
+      if (btnMeasureTest) btnMeasureTest.disabled = false;
     }
   }
 

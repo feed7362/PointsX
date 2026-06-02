@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import fields as dataclass_fields
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -12,7 +13,10 @@ from PIL import Image, ImageDraw, ImageFont
 from pointsx.keypoints import KP, SKELETON, interpolate_y, is_valid
 from pointsx.schemas import BodyMeasurements, Keypoints, SilhouetteMask
 
-from webui.inference import InferenceResult
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from webui.inference import InferenceResult
 
 __all__ = ["pipeline_visualizations_b64"]
 
@@ -21,9 +25,17 @@ _MIN_POINT_CONF = 0.18
 _SEG_COLOR = (64, 180, 255)  # BGR
 _SEG_ALPHA = 0.38
 _FONT_CANDIDATES = (
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    # MacOS Supplemental & Standard Fonts
     "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Helvetica.ttc",
+    "/System/Library/Fonts/Helvetica.ttc",
+    # Linux Standard DejaVu & Liberation Fonts
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    # Windows Standard Arial Font
+    "C:\\Windows\\Fonts\\arial.ttf",
 )
 _FONT_CACHE: dict[int, ImageFont.ImageFont] = {}
 
@@ -32,7 +44,12 @@ def _get_font(size: int) -> ImageFont.ImageFont:
     cached = _FONT_CACHE.get(size)
     if cached is not None:
         return cached
-    for path in _FONT_CANDIDATES:
+
+    # Try bundled font first to ensure consistent Cyrillic support across all deployment platforms
+    bundled_path = Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"
+    paths = [str(bundled_path)] + list(_FONT_CANDIDATES)
+
+    for path in paths:
         try:
             font = ImageFont.truetype(path, size=size)
             _FONT_CACHE[size] = font

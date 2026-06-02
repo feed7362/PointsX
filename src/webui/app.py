@@ -35,13 +35,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-import cv2
-import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Inference endpoint routing
+# ---------------------------------------------------------------------------
+# When POINTSX_INFERENCE_ENDPOINT is set (e.g. on Vercel), /api/measure is
+# proxied to that URL (the HuggingFace Space).  Mock + TTS are always local.
+_INFERENCE_ENDPOINT: str | None = os.environ.get("POINTSX_INFERENCE_ENDPOINT", "").strip() or None
+_IS_VERCEL_PROXY_MODE = bool(os.environ.get("POINTSX_VERCEL")) and _INFERENCE_ENDPOINT is not None
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +148,8 @@ def _build_visualization_only_envelope(
     sex: Literal["male", "female", "other"],
     pose_backend: Literal["custom", "coco"],
     warning: str,
-    front_bgr: np.ndarray,
-    side_bgr: np.ndarray,
+    front_bgr: Any,
+    side_bgr: Any,
 ) -> MeasurementEnvelope:
     """Return a valid envelope with debug visualizations when calibration fails."""
     from webui.visualize import pipeline_visualizations_b64
@@ -394,9 +400,24 @@ def _resolve_path(env_var: str, default: str) -> str:
 async def lifespan(app: FastAPI):
     """Load the WebuiPipeline once, store on app.state.pipeline.
 
+    In Vercel proxy mode (POINTSX_VERCEL + POINTSX_INFERENCE_ENDPOINT set),
+    model loading is intentionally skipped — /api/measure is proxied to the
+    remote inference backend instead.
+
     Failures are logged but do not crash the server — the endpoint will return
     503 until env vars are corrected and the server is restarted.
     """
+    app.state.pipeline = None
+    app.state.pipeline_load_error = None
+
+    if _IS_VERCEL_PROXY_MODE:
+        logger.info(
+            "Vercel proxy mode: /api/measure will be forwarded to %s",
+            _INFERENCE_ENDPOINT,
+        )
+        yield
+        return
+
     pose_custom = _resolve_path("POINTSX_POSE_MODEL_CUSTOM", "models/pose-cus.pt")
     pose_coco = _resolve_path("POINTSX_POSE_MODEL_COCO", "models/yolo26-pose.pt")
     legacy_pose = os.environ.get("POINTSX_POSE_MODEL")
@@ -413,9 +434,6 @@ async def lifespan(app: FastAPI):
     else:
         reg_path = reg_raw.strip() or None
     device    = _resolve_path("POINTSX_DEVICE", "auto")
-
-    app.state.pipeline = None
-    app.state.pipeline_load_error = None
 
     try:
         from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
@@ -458,7 +476,11 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="FitMeasure AI WebUI", version="0.3.0", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# On Vercel, static files are served directly via rewrite rules — skip the mount.
+# Locally the mount is needed so uvicorn serves CSS/JS/images from the static dir.
+if not os.environ.get("POINTSX_VERCEL"):
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.middleware("http")
@@ -480,7 +502,7 @@ async def request_validation_exception_handler(
 
 async def _validate_and_decode(
     upload: UploadFile, label: str
-) -> tuple[np.ndarray, bytes]:
+) -> tuple[Any, bytes]:
     """Validate upload bytes and decode to a BGR ndarray (cv2 convention).
 
     Returns the decoded image alongside the raw bytes so callers can persist
@@ -508,6 +530,9 @@ async def _validate_and_decode(
             detail=f"{uk}: очікується JPEG, PNG або WebP.",
         )
 
+    import cv2
+    import numpy as np
+
     arr = np.frombuffer(data, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None or img.size == 0:
@@ -523,21 +548,84 @@ async def index() -> FileResponse:
     return FileResponse(index_path)
 
 
+async def _proxy_measure_to_hf(
+    height_cm: float,
+    sex: str,
+    pose_backend: str,
+    front: UploadFile,
+    side: UploadFile,
+) -> Response:
+    """Forward the parsed multipart /api/measure request parameters to the HF Space backend.
+
+    The upstream response (JSON or error) is returned verbatim to the client.
+    Uses httpx with a generous timeout for heavy GPU inference.
+    """
+    import httpx
+
+    target_url = f"{_INFERENCE_ENDPOINT.rstrip('/')}/api/measure"  # type: ignore[union-attr]
+    front_bytes = await front.read()
+    side_bytes = await side.read()
+
+    files = {
+        "front": (front.filename or "front.jpg", front_bytes, front.content_type or "image/jpeg"),
+        "side": (side.filename or "side.jpg", side_bytes, side.content_type or "image/jpeg"),
+    }
+    data = {
+        "height_cm": str(height_cm),
+        "sex": sex,
+        "pose_backend": pose_backend,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            upstream = await client.post(target_url, data=data, files=files)
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "application/json"),
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Час очікування відповіді від сервера інференсу вичерпано. Спробуйте ще раз.",
+        )
+    except httpx.RequestError as exc:
+        logger.error("Proxy request to HF Space failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Не вдалося зʼєднатися з сервером інференсу: {exc}",
+        )
+
+
 @app.post("/api/measure", response_model=MeasurementEnvelope)
 async def measure(
     request: Request,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
-    pose_backend: Literal["custom", "coco"] = Form("custom"),
+    pose_backend: Literal["custom", "coco"] = Form("coco"),
     front: UploadFile = File(...),
     side: UploadFile = File(...),
-) -> MeasurementEnvelope:
+) -> Response:
     """Run pose + seg + (optional) regression on the supplied photo pair.
+
+    In Vercel proxy mode, the request is forwarded transparently to the
+    HuggingFace Space inference backend (POINTSX_INFERENCE_ENDPOINT).
 
     Returns a `MeasurementEnvelope` with up to 18 canonical body measurements.
     Measurements that the pipeline cannot derive are simply omitted; the
     frontend size engine tolerates a small number of missing values.
     """
+    # --- Vercel proxy mode: forward to the HF Space ---
+    if _IS_VERCEL_PROXY_MODE:
+        return await _proxy_measure_to_hf(
+            height_cm=height_cm,
+            sex=sex,
+            pose_backend=pose_backend,
+            front=front,
+            side=side,
+        )
+
+    # --- Local / self-hosted mode: run models directly ---
     pipeline = getattr(request.app.state, "pipeline", None)
     if pipeline is None:
         err = getattr(request.app.state, "pipeline_load_error", None) or "pipeline not initialised"
