@@ -673,10 +673,39 @@ async def index() -> Any:
         return JSONResponse({
             "service": "pointx-backend",
             "status": "ok",
-            "api": ["/api/measure", "/api/measure/mock", "/api/tts"],
+            "api": ["/api/measure", "/api/measure/mock", "/api/tts", "/api/health"],
             "frontend": "see Pointx-frontend (Vercel deployment)",
         })
     return FileResponse(index_path)
+
+
+@app.get("/api/health")
+async def health(request: Request) -> JSONResponse:
+    """Cheap liveness + readiness probe.
+
+    Returns 200 with a small JSON snapshot. Useful for:
+      • HF Spaces "container healthy" detection
+      • Vercel / monitoring keep-alive pings (avoids the 48 h sleep)
+      • Quick smoke test before submitting a measurement
+
+    Reports pipeline-loaded state separately so a caller can distinguish
+    "Space is up" from "Space is up AND ready to measure".
+    """
+    pipeline = getattr(request.app.state, "pipeline", None)
+    err = getattr(request.app.state, "pipeline_load_error", None)
+    backends: list[str] = []
+    if pipeline is not None:
+        try:
+            backends = sorted(pipeline.models.available_pose_backends())
+        except Exception:  # noqa: BLE001
+            pass
+    return JSONResponse({
+        "service": "pointx-backend",
+        "status": "ok",
+        "pipeline_ready": pipeline is not None,
+        "pose_backends": backends,
+        "pipeline_load_error": err,
+    })
 
 
 @app.post("/api/measure", response_model=MeasurementEnvelope)
