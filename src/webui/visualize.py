@@ -333,7 +333,9 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             lx, ly = arm_path[-1]
             put_label_smart("довжина руки", lx + 6, ly, arm_color)
 
-    # leg_outer: side straight line from 25% above pelvis to bottom segmentation end.
+    # leg_outer: side VERTICAL line from 25% above pelvis to bottom segmentation
+    # end. Drawn straight (single x) so it visually matches the measured value
+    # (which is the vertical span — measurements.py uses abs(y_end - y_start)).
     if view == "side" and is_valid(conf, KP.PELVIS, KP.THORAX):
         sm = mask.mask
         h_s, _w_s = sm.shape
@@ -345,12 +347,12 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
         ys_fg = np.where(sm.any(axis=1))[0]
         if len(cols_start) >= 2 and len(ys_fg) > 0:
             y_end = int(ys_fg[-1])
-            cols_end = np.where(sm[y_end])[0]
-            if len(cols_end) >= 2:
-                x_start = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
-                x_end = int(cols_end[0] if abs(cols_end[0] - torso_x) > abs(cols_end[-1] - torso_x) else cols_end[-1])
-                cv2.line(out, (x_start, y_start), (x_end, y_end), (255, 80, 80), 2, cv2.LINE_AA)
-                put_label_smart("нога зовнішня", x_end + 6, y_end, (255, 80, 80))
+            # Same x for top and bottom = vertical line. Pick the silhouette
+            # extreme at the WAIST row that's farther from the torso x (= the
+            # back of the body, which is what the outer seam follows).
+            x_line = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
+            cv2.line(out, (x_line, y_start), (x_line, y_end), (255, 80, 80), 2, cv2.LINE_AA)
+            put_label_smart("нога зовнішня", x_line + 6, y_end, (255, 80, 80))
 
     # leg_inner: one front vertical line with static x.
     if view == "front" and is_valid(conf, KP.PELVIS):
