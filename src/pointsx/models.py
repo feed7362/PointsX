@@ -162,10 +162,12 @@ class BodyModels:
         # (px-per-cm derived from head-to-ankle pixel distance) stays
         # accurate. We accept the extra ~4 s/pose on the 2 vCPU container.
         pose_coco_path: str | Path | None = "models/yolo26-pose.pt",
-        # yolo11n-seg: nano segmentation is fine for full-body silhouette
-        # extraction — the heavy yolo12l-person-seg-extended.pt was a 47-s
-        # bottleneck on CPU and barely improved mask quality at the limbs.
-        seg_model_path: str | Path = "models/yolo11n-seg.pt",
+        # yolo12l-person-seg-extended: heavier (~58 MB) but produces more
+        # stable masks around hair, fingers, and the leg-gap region than
+        # yolo11n-seg. We accept the extra ~20 s on CPU; the warmed-up
+        # mask quality difference shows up in body-side widths and the
+        # outer-leg seam alignment.
+        seg_model_path: str | Path = "models/yolo12l-person-seg-extended.pt",
         img_size: int = 640,
         device: str = "auto",
     ):

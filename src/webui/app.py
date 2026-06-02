@@ -10,8 +10,10 @@ Configuration (environment variables, all optional):
                               Auto-downloaded + bucket-mirrored on first boot.)
     POINTSX_POSE_MODEL        legacy: if set, overrides POINTSX_POSE_MODEL_CUSTOM only
     POINTSX_SEG_MODEL         path to YOLO segmentation .pt
-                              default: models/yolo11n-seg.pt
-                              (same auto-download + bucket-mirror as pose)
+                              default: models/yolo12l-person-seg-extended.pt
+                              (heavier but more stable masks — accuracy matters
+                              for body-width measurements; warm-cached in
+                              LOCAL_DATA_DIR after the first boot)
     POINTSX_REGRESSION_MODEL  path to regression .pt
                               default: models/circumference_regressor.pt if present;
                               set to an empty string to force the Ramanujan ellipse
@@ -404,7 +406,7 @@ async def lifespan(app: FastAPI):
     if legacy_pose is not None and str(legacy_pose).strip():
         pose_custom = str(legacy_pose).strip()
         logger.info("POINTSX_POSE_MODEL set — using as custom pose path (legacy override).")
-    seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo11n-seg.pt")
+    seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
     # Regressor disabled by default — currently it's known to produce outliers
     # on real photos (e.g. negative-cm hips/thighs on certain subjects), and
     # the per-sex bias scales in envelope.py were fit against the Ramanujan
