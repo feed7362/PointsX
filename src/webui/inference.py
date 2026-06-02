@@ -96,6 +96,49 @@ class WebuiPipeline:
                     reg_path,
                 )
 
+    def warmup(self) -> dict[str, float]:
+        """Run one dummy forward pass through each model.
+
+        PyTorch + Ultralytics defer JIT compilation, NMS kernel setup, and
+        memory-pool allocation to the first call. Warming up at startup
+        moves that ~3-5 s/model penalty from "first user request" to
+        "container boot", so the first real measurement isn't 2× slower
+        than the steady-state rate.
+
+        Sequential (not parallel) so peak memory stays bounded — important
+        on free CPU tiers where parallel model init can OOM.
+
+        Returns wall-clock timing per stage for the logs.
+        """
+        import time
+        timings: dict[str, float] = {}
+
+        # 640×640 mid-grey BGR image — enough pixels for the pose/seg
+        # heads to run through their full code paths but cheap to compute.
+        # Grey (not pure black) reduces the chance of degenerate behaviour
+        # in conv layers (anti-flat-input).
+        dummy = np.full((self.models.img_size, self.models.img_size, 3),
+                        128, dtype=np.uint8)
+
+        for backend in sorted(self.models.available_pose_backends()):
+            t0 = time.perf_counter()
+            try:
+                self.models.predict_pose(dummy, view="front", pose_backend=backend)
+                timings[f"pose:{backend}"] = time.perf_counter() - t0
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Warmup pose:%s failed: %s", backend, exc)
+
+        t0 = time.perf_counter()
+        try:
+            # Segmentation gets a synthetic reference point at image centre.
+            ref = (self.models.img_size / 2.0, self.models.img_size / 2.0)
+            self.models.predict_segmentation(dummy, view="front", reference_point=ref)
+            timings["seg"] = time.perf_counter() - t0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Warmup seg failed: %s", exc)
+
+        return timings
+
     def measure(
         self,
         front_img: np.ndarray,

@@ -525,6 +525,23 @@ async def lifespan(app: FastAPI):
             reg_path or "<ellipse-fallback>",
             device,
         )
+
+        # Warm up each model with a dummy forward pass so the very first
+        # /api/measure request isn't ~2× slower than the warm rate. Disable
+        # by setting POINTSX_WARMUP_DISABLE=1 if startup time is more
+        # precious than first-request latency (e.g. autoscale-on-demand).
+        warmup_off = (os.environ.get("POINTSX_WARMUP_DISABLE") or "").strip().lower()
+        if warmup_off not in ("1", "true", "yes", "on"):
+            try:
+                timings = app.state.pipeline.warmup()
+                pretty = ", ".join(f"{k}={v:.2f}s" for k, v in timings.items())
+                logger.warning(
+                    "Pipeline warmed up — %s. First /api/measure will run at "
+                    "steady-state speed (no JIT penalty).",
+                    pretty or "no models warmed",
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Warmup raised — first request may be slow: %s", exc)
     except Exception as exc:  # noqa: BLE001 — we want the server to keep running
         app.state.pipeline_load_error = str(exc)
         logger.error(
