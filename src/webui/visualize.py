@@ -21,9 +21,20 @@ _MIN_POINT_CONF = 0.18
 _SEG_COLOR = (64, 180, 255)  # BGR
 _SEG_ALPHA = 0.38
 _FONT_CANDIDATES = (
+    # macOS Supplemental / System fonts (with Cyrillic support)
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Supplemental/Helvetica.ttc",
+    "/System/Library/Fonts/Helvetica.ttc",
+    # Linux common paths (Ubuntu, Debian, Fedora, Arch)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    # Windows
+    "C:\\Windows\\Fonts\\arial.ttf",
 )
 _FONT_CACHE: dict[int, ImageFont.ImageFont] = {}
 
@@ -39,6 +50,15 @@ def _get_font(size: int) -> ImageFont.ImageFont:
             return font
         except Exception:
             continue
+    try:
+        import matplotlib.font_manager as fm
+        path = fm.findfont("DejaVu Sans")
+        if path:
+            font = ImageFont.truetype(path, size=size)
+            _FONT_CACHE[size] = font
+            return font
+    except Exception:
+        pass
     font = ImageFont.load_default()
     _FONT_CACHE[size] = font
     return font
