@@ -4,10 +4,10 @@ Configuration (environment variables, all optional):
     POINTSX_POSE_MODEL_CUSTOM path to 16-keypoint (LV-MHP) pose .pt
                               default: models/pose-cus.pt
     POINTSX_POSE_MODEL_COCO   path to COCO-17 pose .pt (mapped to 16 internally)
-                              default: models/yolo11n-pose.pt
-                              (auto-downloaded by Ultralytics on first boot
-                              if missing; mirrored into LOCAL_DATA_DIR so
-                              subsequent restarts skip the download)
+                              default: models/yolo26-pose.pt
+                              (we keep the heavier pose model — calibration
+                              accuracy depends on HEAD_TOP/ankle stability.
+                              Auto-downloaded + bucket-mirrored on first boot.)
     POINTSX_POSE_MODEL        legacy: if set, overrides POINTSX_POSE_MODEL_CUSTOM only
     POINTSX_SEG_MODEL         path to YOLO segmentation .pt
                               default: models/yolo11n-seg.pt
@@ -399,7 +399,7 @@ async def lifespan(app: FastAPI):
     503 until env vars are corrected and the server is restarted.
     """
     pose_custom = _resolve_path("POINTSX_POSE_MODEL_CUSTOM", "models/pose-cus.pt")
-    pose_coco = _resolve_path("POINTSX_POSE_MODEL_COCO", "models/yolo11n-pose.pt")
+    pose_coco = _resolve_path("POINTSX_POSE_MODEL_COCO", "models/yolo26-pose.pt")
     legacy_pose = os.environ.get("POINTSX_POSE_MODEL")
     if legacy_pose is not None and str(legacy_pose).strip():
         pose_custom = str(legacy_pose).strip()
@@ -742,7 +742,7 @@ async def measure(
 
     avail = pipeline.models.available_pose_backends()
     if pose_backend not in avail:
-        need = "pose-cus.pt (16 точок)" if pose_backend == "custom" else "yolo11n-pose.pt (COCO 17)"
+        need = "pose-cus.pt (16 точок)" if pose_backend == "custom" else "yolo26-pose.pt (COCO 17)"
         raise HTTPException(
             status_code=503,
             detail=(

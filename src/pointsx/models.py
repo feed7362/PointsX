@@ -40,15 +40,15 @@ PoseBackend = Literal["custom", "coco"]
 
 # Ultralytics-published pose checkpoints (release assets, auto-downloadable
 # by passing the bare filename to YOLO()). Tried in order if the user's
-# requested filename isn't itself a known asset. yolo11n-pose first now
-# (was yolo11x-pose): on a 2 vCPU container the nano model runs ~6× faster
-# and keypoint accuracy is still fine for a standing full-body shot.
+# requested filename isn't itself a known asset. yolo11x-pose first because
+# pose calibration is sensitive to HEAD_TOP / ankle accuracy — the size
+# trade-off matters less than the keypoint reliability.
 _FALLBACK_POSE_ASSETS = (
-    "yolo11n-pose.pt",
-    "yolo11s-pose.pt",
-    "yolo11m-pose.pt",
-    "yolo11l-pose.pt",
     "yolo11x-pose.pt",
+    "yolo11l-pose.pt",
+    "yolo11m-pose.pt",
+    "yolo11s-pose.pt",
+    "yolo11n-pose.pt",
 )
 
 # Ultralytics-published seg checkpoints. Same nano-first ordering — on
@@ -157,7 +157,14 @@ class BodyModels:
     def __init__(
         self,
         pose_custom_path: str | Path | None = "models/pose-cus.pt",
-        pose_coco_path: str | Path | None = "models/yolo11n-pose.pt",
+        # yolo26-pose: heavier (~8 MB) than yolo11n-pose but its HEAD_TOP /
+        # ankle keypoints are noticeably more stable, so calibration
+        # (px-per-cm derived from head-to-ankle pixel distance) stays
+        # accurate. We accept the extra ~4 s/pose on the 2 vCPU container.
+        pose_coco_path: str | Path | None = "models/yolo26-pose.pt",
+        # yolo11n-seg: nano segmentation is fine for full-body silhouette
+        # extraction — the heavy yolo12l-person-seg-extended.pt was a 47-s
+        # bottleneck on CPU and barely improved mask quality at the limbs.
         seg_model_path: str | Path = "models/yolo11n-seg.pt",
         img_size: int = 640,
         device: str = "auto",
