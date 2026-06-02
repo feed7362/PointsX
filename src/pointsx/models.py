@@ -40,14 +40,26 @@ PoseBackend = Literal["custom", "coco"]
 
 # Ultralytics-published pose checkpoints (release assets, auto-downloadable
 # by passing the bare filename to YOLO()). Tried in order if the user's
-# requested filename isn't itself a known asset. yolo11x-pose first because
-# it's the strongest COCO pose model that still loads on a single GPU.
+# requested filename isn't itself a known asset. yolo11n-pose first now
+# (was yolo11x-pose): on a 2 vCPU container the nano model runs ~6× faster
+# and keypoint accuracy is still fine for a standing full-body shot.
 _FALLBACK_POSE_ASSETS = (
-    "yolo11x-pose.pt",
-    "yolo11l-pose.pt",
-    "yolo11m-pose.pt",
-    "yolo11s-pose.pt",
     "yolo11n-pose.pt",
+    "yolo11s-pose.pt",
+    "yolo11m-pose.pt",
+    "yolo11l-pose.pt",
+    "yolo11x-pose.pt",
+)
+
+# Ultralytics-published seg checkpoints. Same nano-first ordering — on
+# real-photo body silhouettes, yolo11n-seg's mask quality is within ~1 px
+# of the heavier variants but runs ~10× faster on CPU.
+_FALLBACK_SEG_ASSETS = (
+    "yolo11n-seg.pt",
+    "yolo11s-seg.pt",
+    "yolo11m-seg.pt",
+    "yolo11l-seg.pt",
+    "yolo11x-seg.pt",
 )
 
 
@@ -68,20 +80,28 @@ def _try_ultralytics_download(name: str) -> Path | None:
     return None
 
 
-def _ensure_yolo_weights(path: Path) -> Path | None:
+def _ensure_yolo_weights(
+    path: Path,
+    fallback_assets: "tuple[str, ...] | None" = None,
+) -> Path | None:
     """If `path` doesn't exist, fetch via Ultralytics auto-download.
 
-    First tries the requested basename (works if the user named the file after
-    a real Ultralytics release asset). Falls back to a list of known pose
-    checkpoints — when one downloads, it's moved/renamed to `path` so the
-    cached weights match what the rest of the system expects.
+    First tries the requested basename (works if the user named the file
+    after a real Ultralytics release asset). Falls back to ``fallback_assets``
+    (defaults to the pose-family list) — when one downloads, it's
+    moved/renamed to ``path`` so the rest of the system finds the weights
+    under the expected filename.
+
+    Bonus: after a successful download, also mirror the file into the
+    LOCAL_DATA_DIR (HF Storage Bucket mount, if configured) so the next
+    cold start finds it locally and skips the download entirely.
     """
     if path.is_file():
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
 
     candidates: list[str] = [path.name]
-    for fb in _FALLBACK_POSE_ASSETS:
+    for fb in (fallback_assets or _FALLBACK_POSE_ASSETS):
         if fb not in candidates:
             candidates.append(fb)
 
@@ -94,11 +114,41 @@ def _ensure_yolo_weights(path: Path) -> Path | None:
             if downloaded.resolve() != path.resolve():
                 downloaded.replace(path)
             logger.info("Saved weights to %s (origin=%s)", path, name)
-            return path
         except OSError as exc:
             logger.warning("Could not move %s to %s: %s", downloaded, path, exc)
             return downloaded
+
+        # Mirror into the bucket mount so the next boot skips the download.
+        _mirror_to_local_data_dir(path)
+        return path
     return None
+
+
+def _mirror_to_local_data_dir(src: Path) -> None:
+    """Copy `src` to LOCAL_DATA_DIR/<basename> (best-effort, never raises).
+
+    The bucket-mount lookup in webui/storage.py looks under both
+    /data/models/ and /data/. We write to /data/ root so the file is
+    immediately discoverable on the next restart.
+    """
+    import os
+    import shutil
+
+    base = os.environ.get("LOCAL_DATA_DIR")
+    if not base:
+        return
+    try:
+        target = Path(base) / src.name
+        if target.is_file() and target.stat().st_size == src.stat().st_size:
+            return  # already mirrored
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, target)
+        logger.warning(
+            "Mirrored weights to bucket — %s → %s (size=%d). Next boot is cached.",
+            src, target, target.stat().st_size,
+        )
+    except OSError as exc:
+        logger.warning("Mirror to %s failed: %s", base, exc)
 
 
 class BodyModels:
@@ -107,8 +157,8 @@ class BodyModels:
     def __init__(
         self,
         pose_custom_path: str | Path | None = "models/pose-cus.pt",
-        pose_coco_path: str | Path | None = "models/yolo26-pose.pt",
-        seg_model_path: str | Path = "models/yolo12l-person-seg-extended.pt",
+        pose_coco_path: str | Path | None = "models/yolo11n-pose.pt",
+        seg_model_path: str | Path = "models/yolo11n-seg.pt",
         img_size: int = 640,
         device: str = "auto",
     ):
@@ -126,7 +176,9 @@ class BodyModels:
             logger.warning("Custom pose weights not found (%s); backend 'custom' disabled", pose_custom_path)
 
         if pose_coco_path:
-            resolved = _ensure_yolo_weights(Path(pose_coco_path))
+            resolved = _ensure_yolo_weights(
+                Path(pose_coco_path), fallback_assets=_FALLBACK_POSE_ASSETS,
+            )
             if resolved is not None:
                 self._pose_coco = YOLO(str(resolved))
             else:
@@ -136,7 +188,12 @@ class BodyModels:
                     pose_coco_path,
                 )
 
-        self._seg = YOLO(str(seg_model_path))
+        seg_resolved = _ensure_yolo_weights(
+            Path(seg_model_path), fallback_assets=_FALLBACK_SEG_ASSETS,
+        )
+        # If even auto-download failed, hand the raw path to YOLO and let
+        # it raise — there's nothing more we can do.
+        self._seg = YOLO(str(seg_resolved if seg_resolved is not None else seg_model_path))
 
     def available_pose_backends(self) -> set[PoseBackend]:
         """Backends with loaded weights."""
