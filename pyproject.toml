@@ -34,6 +34,9 @@ dependencies = [
     # wrapper shell script. On HF Spaces / Docker the env is injected by the
     # platform and python-dotenv is a no-op.
     "python-dotenv>=1.0.0",
+    # HF Hub for pulling model weights from a model repo (free, unlimited
+    # public bandwidth + storage) instead of paying for S3 transfer.
+    "huggingface_hub>=0.26.0",
 ]
 
 [project.scripts]

@@ -410,27 +410,58 @@ async def lifespan(app: FastAPI):
     reg_path = reg_raw.strip() if (reg_raw and reg_raw.strip()) else None
     device    = _resolve_path("POINTSX_DEVICE", "auto")
 
-    # ── Pull missing model weights from S3 ────────────────────────────────────
-    # Enabled when the same bucket used for archival also hosts the weights
-    # under a configurable prefix (env: MODELS_S3_KEY_PREFIX, default "models/").
-    # The download is idempotent — files that already exist locally are kept,
-    # so the path stays cheap on warm restarts.
+    # ── Pull missing model weights ────────────────────────────────────────────
+    # Two sources in priority order:
+    #   1. HF Hub model repo (env: HF_MODELS_REPO, e.g. "Secret0123/pointx-models")
+    #      — recommended; HF gives free unlimited public bandwidth.
+    #   2. S3 bucket under MODELS_S3_KEY_PREFIX (default "models/")
+    #      — used when HF_MODELS_REPO isn't set; reuses the archival bucket.
+    # The download is idempotent: files already on disk stay, so warm restarts
+    # don't re-download anything.
     try:
-        from webui import storage as _storage
+        from pathlib import Path as _Path
 
-        models_prefix = (os.environ.get("MODELS_S3_KEY_PREFIX") or "models/").lstrip("/")
-        if not models_prefix.endswith("/"):
-            models_prefix += "/"
+        hf_repo = (os.environ.get("HF_MODELS_REPO") or "").strip()
+        hf_revision = (os.environ.get("HF_MODELS_REVISION") or "main").strip()
+        hf_token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None)
 
         def _pull(local: str | None) -> None:
             if not local:
                 return
-            from pathlib import Path
-            p = Path(local)
+            p = _Path(local)
             if p.is_file() and p.stat().st_size > 0:
                 return
+
+            # First: HF Hub model repo (free, unlimited public).
+            if hf_repo:
+                try:
+                    from huggingface_hub import hf_hub_download
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    downloaded = hf_hub_download(
+                        repo_id=hf_repo,
+                        filename=p.name,
+                        revision=hf_revision,
+                        token=hf_token,
+                        local_dir=str(p.parent),
+                    )
+                    logger.warning(
+                        "HF Hub download OK — repo=%s file=%s → %s (size=%d bytes)",
+                        hf_repo, p.name, downloaded, _Path(downloaded).stat().st_size,
+                    )
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "HF Hub download FAILED — repo=%s file=%s err=%s. Will try S3 next.",
+                        hf_repo, p.name, exc,
+                    )
+
+            # Fallback: S3 bucket (when archival is configured).
+            from webui import storage as _storage
             if not _storage.is_enabled():
                 return
+            models_prefix = (os.environ.get("MODELS_S3_KEY_PREFIX") or "models/").lstrip("/")
+            if not models_prefix.endswith("/"):
+                models_prefix += "/"
             _storage.download_to_path(models_prefix + p.name, local)
 
         _pull(pose_coco)
@@ -438,7 +469,7 @@ async def lifespan(app: FastAPI):
         if reg_path:
             _pull(reg_path)
     except Exception:  # noqa: BLE001
-        logger.exception("Weight pre-fetch from S3 raised — pipeline will try local paths.")
+        logger.exception("Weight pre-fetch raised — pipeline will try local paths.")
 
     app.state.pipeline = None
     app.state.pipeline_load_error = None
