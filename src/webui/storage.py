@@ -255,6 +255,90 @@ def download_to_path(key: str, local_path) -> bool:
     return True
 
 
+# ── Local-filesystem archival (HF Storage Bucket mounted at /data) ─────────
+# HF Storage Buckets attached to a Space appear at /data inside the container
+# (read-write). When LOCAL_DATA_DIR is set, archive_measurement writes
+# directly to disk under that path instead of (or in addition to) S3.
+# Same layout as S3: <LOCAL_DATA_DIR>/measurements/<uuid>/{front.jpg,...}.
+
+def _local_data_dir() -> "Path | None":
+    from pathlib import Path as _Path
+    raw = (os.environ.get("LOCAL_DATA_DIR") or "").strip()
+    if not raw:
+        return None
+    p = _Path(raw)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.warning("LOCAL_DATA_DIR=%s not writable: %s", raw, exc)
+        return None
+    return p
+
+
+def archive_measurement_local(
+    request_id: str,
+    *,
+    front_bytes: bytes,
+    front_content_type: str,
+    side_bytes: bytes,
+    side_content_type: str,
+    envelope_json: dict | str,
+    metadata: dict[str, str] | None = None,
+) -> bool:
+    """Write photos + envelope to the local data directory (HF bucket mount).
+
+    Mirrors the bucket key layout used by archive_measurement so analysis
+    scripts can treat both stores interchangeably.
+    """
+    base = _local_data_dir()
+    if base is None:
+        return False
+    rid = _sanitise_request_id(request_id)
+    folder = base / "measurements" / rid
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"front.{_extension_for(front_content_type)}").write_bytes(front_bytes)
+        (folder / f"side.{_extension_for(side_content_type)}").write_bytes(side_bytes)
+        json_body = (
+            envelope_json
+            if isinstance(envelope_json, str)
+            else json.dumps(envelope_json, ensure_ascii=False)
+        )
+        (folder / "envelope.json").write_text(json_body, encoding="utf-8")
+        if metadata:
+            (folder / "metadata.json").write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+    except OSError as exc:
+        logger.warning(
+            "Local archive FAILED — request_id=%s base=%s err=%s",
+            rid, base, exc,
+        )
+        return False
+    logger.warning(
+        "Local archive OK — request_id=%s folder=%s",
+        rid, folder,
+    )
+    return True
+
+
+def local_model_path(name: str) -> "Path | None":
+    """Look up a model file inside LOCAL_DATA_DIR/models/<name>.
+
+    Returns the Path if the file exists and is non-empty, else None.
+    Used by the boot path to prefer a bucket-mounted weight over an
+    HF Hub or S3 download.
+    """
+    base = _local_data_dir()
+    if base is None:
+        return None
+    candidate = base / "models" / name
+    if candidate.is_file() and candidate.stat().st_size > 0:
+        return candidate
+    return None
+
+
 def _extension_for(content_type: str) -> str:
     ct = (content_type or "").lower().strip()
     if "jpeg" in ct or "jpg" in ct:

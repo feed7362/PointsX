@@ -410,12 +410,11 @@ async def lifespan(app: FastAPI):
     reg_path = reg_raw.strip() if (reg_raw and reg_raw.strip()) else None
     device    = _resolve_path("POINTSX_DEVICE", "auto")
 
-    # ── Pull missing model weights ────────────────────────────────────────────
-    # Two sources in priority order:
-    #   1. HF Hub model repo (env: HF_MODELS_REPO, e.g. "Secret0123/pointx-models")
-    #      — recommended; HF gives free unlimited public bandwidth.
-    #   2. S3 bucket under MODELS_S3_KEY_PREFIX (default "models/")
-    #      — used when HF_MODELS_REPO isn't set; reuses the archival bucket.
+    # ── Resolve model weights ─────────────────────────────────────────────────
+    # Three sources in priority order:
+    #   1. LOCAL_DATA_DIR/models/<name>   ← HF Storage Bucket mounted at /data
+    #   2. HF Hub model repo (env: HF_MODELS_REPO)
+    #   3. S3 bucket under MODELS_S3_KEY_PREFIX (env: MODELS_S3_KEY_PREFIX)
     # The download is idempotent: files already on disk stay, so warm restarts
     # don't re-download anything.
     try:
@@ -432,7 +431,34 @@ async def lifespan(app: FastAPI):
             if p.is_file() and p.stat().st_size > 0:
                 return
 
-            # First: HF Hub model repo (free, unlimited public).
+            # First: HF Storage Bucket mounted at LOCAL_DATA_DIR/models/.
+            try:
+                from webui import storage as _storage_check
+                bucket_path = _storage_check.local_model_path(p.name)
+                if bucket_path is not None:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    # Symlink if possible (saves disk + matches mount semantics),
+                    # else copy. Falls back to copy on Windows without privilege.
+                    try:
+                        if p.exists() or p.is_symlink():
+                            p.unlink()
+                        p.symlink_to(bucket_path)
+                        logger.warning(
+                            "Bucket-mount linked — file=%s → %s",
+                            p.name, bucket_path,
+                        )
+                    except (OSError, NotImplementedError):
+                        import shutil as _sh
+                        _sh.copy2(bucket_path, p)
+                        logger.warning(
+                            "Bucket-mount copied — file=%s ← %s",
+                            p.name, bucket_path,
+                        )
+                    return
+            except Exception:  # noqa: BLE001
+                pass
+
+            # Second: HF Hub model repo (free, unlimited public).
             if hf_repo:
                 try:
                     from huggingface_hub import hf_hub_download
@@ -664,27 +690,18 @@ async def measure(
     request_id = str(uuid.uuid4())
 
     def _archive(envelope_obj, *, outcome: str) -> None:
-        """Push photos + envelope to S3 regardless of pipeline outcome.
+        """Persist photos + envelope to whichever store(s) are configured.
 
-        outcome ∈ {"ok", "calibration_failed"}. Photos archived even when
-        calibration fails — the failure itself is valuable data for the
-        scientific demo (camera framing, lighting, etc.). Print()'d to
-        stderr so uvicorn's logging config can't hide the trace while
-        diagnosing.
+        Order of preference:
+          1. Local filesystem (LOCAL_DATA_DIR — HF Storage Bucket mount)
+          2. S3-compatible bucket (ELK_*/S3_*/R2_*/... env vars)
+
+        Both can be enabled simultaneously; the response is never blocked.
         """
         import sys
         try:
             from webui import storage
-            enabled = storage.is_enabled()
-            print(
-                f"[archive hook] outcome={outcome} "
-                f"storage.is_enabled()={enabled} request_id={request_id}",
-                file=sys.stderr,
-                flush=True,
-            )
-            if not enabled:
-                return
-            ok = storage.archive_measurement(
+            args = dict(
                 request_id=request_id,
                 front_bytes=front_bytes,
                 front_content_type=(front.content_type or "image/jpeg"),
@@ -699,8 +716,14 @@ async def measure(
                     "created_at": envelope_obj.created_at,
                 },
             )
+
+            local_ok = storage.archive_measurement_local(**args)
+            s3_enabled = storage.is_enabled()
+            s3_ok = storage.archive_measurement(**args) if s3_enabled else False
+
             print(
-                f"[archive hook] archive_measurement returned {ok}",
+                f"[archive hook] outcome={outcome} request_id={request_id} "
+                f"local={local_ok} s3_enabled={s3_enabled} s3_ok={s3_ok}",
                 file=sys.stderr,
                 flush=True,
             )
