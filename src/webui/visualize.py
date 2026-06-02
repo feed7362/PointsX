@@ -332,11 +332,16 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
                 cv2.line(out, arm_path[i - 1], arm_path[i], arm_color, 2, cv2.LINE_AA)
             lx, ly = arm_path[-1]
             put_label_smart("довжина руки", lx + 6, ly, arm_color)
+        elif is_valid(conf, KP.LEFT_SHOULDER, KP.LEFT_WRIST):
+            # Fallback matches measurement fallback in extraction.
+            a, b = p(KP.LEFT_SHOULDER), p(KP.LEFT_WRIST)
+            cv2.line(out, a, b, arm_color, 2, cv2.LINE_AA)
+            put_label_smart("довжина руки", b[0] + 6, b[1], arm_color)
 
     # leg_outer: side straight line from 25% above pelvis to bottom segmentation end.
     if view == "side" and is_valid(conf, KP.PELVIS, KP.THORAX):
         sm = mask.mask
-        h_s, _w_s = sm.shape
+        h_s, w_s = sm.shape
         pelvis_y = float(pts[int(KP.PELVIS), 1])
         thorax_y = float(pts[int(KP.THORAX), 1])
         y_start = int(np.clip(int(round(pelvis_y + 0.25 * (thorax_y - pelvis_y))), 0, h_s - 1))
@@ -345,12 +350,10 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
         ys_fg = np.where(sm.any(axis=1))[0]
         if len(cols_start) >= 2 and len(ys_fg) > 0:
             y_end = int(ys_fg[-1])
-            cols_end = np.where(sm[y_end])[0]
-            if len(cols_end) >= 2:
-                x_start = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
-                x_end = int(cols_end[0] if abs(cols_end[0] - torso_x) > abs(cols_end[-1] - torso_x) else cols_end[-1])
-                cv2.line(out, (x_start, y_start), (x_end, y_end), (255, 80, 80), 2, cv2.LINE_AA)
-                put_label_smart("нога зовнішня", x_end + 6, y_end, (255, 80, 80))
+            x_line = cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1]
+            x_line = int(np.clip(int(x_line), 0, w_s - 1))
+            cv2.line(out, (x_line, y_start), (x_line, y_end), (255, 80, 80), 2, cv2.LINE_AA)
+            put_label_smart("нога зовнішня", x_line + 6, y_end, (255, 80, 80))
 
     # leg_inner: one front vertical line with static x.
     if view == "front" and is_valid(conf, KP.PELVIS):

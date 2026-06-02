@@ -105,7 +105,7 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
         "chest_circumference":  -9.0,   # %
         "waist_circumference": -21.5,
         "hip_circumference":    -5.0,
-        "thigh_circumference": -14.0,
+        "thigh_circumference": -24.0,
     },
     "male": {
         "chest_circumference":  -3.0,
@@ -212,73 +212,6 @@ def _kp_to_midpoint_cm(
     m = midpoint(kp.points, mid_a, mid_b)
     import numpy as np
     return float(np.linalg.norm(p - m)) / px_per_cm
-
-
-def _avg_ankle_y(kp: Keypoints) -> float | None:
-    """Average y-pixel of left/right ankles (whichever pass the confidence gate)."""
-    ys: list[float] = []
-    if is_valid(kp.confidence, KP.LEFT_ANKLE):
-        ys.append(float(kp.points[int(KP.LEFT_ANKLE), 1]))
-    if is_valid(kp.confidence, KP.RIGHT_ANKLE):
-        ys.append(float(kp.points[int(KP.RIGHT_ANKLE), 1]))
-    if not ys:
-        return None
-    return sum(ys) / len(ys)
-
-
-# Anatomical foot height (ankle pivot → floor) as a fraction of total subject
-# height. ~3.8-4.5 % across adults; midpoint 4 %.
-_ANKLE_TO_FLOOR_FRACTION = 0.04
-
-
-def _derive_outer_leg_to_floor(
-    bm: BodyMeasurements,
-    front_kp: Keypoints,
-    front_mask: Any,  # kept for signature stability; used only as a last-resort fallback
-    px_per_cm_front: float,
-    subject_height_cm: float,
-) -> float | None:
-    """Outer seam = vertical distance from anatomical waist to the floor.
-
-    Tailoring convention: tape runs from natural waist (narrowest point) down
-    the side of the leg to where the foot meets the ground. Pure vertical span.
-
-    Start: ``bm.waist_level_front_px`` (silhouette continuous-width search);
-    fall back to the THORAX→PELVIS interpolation.
-    End: ankle keypoint + ``_ANKLE_TO_FLOOR_FRACTION × subject_height_cm`` for
-    the foot. We do NOT use the mask floor here — seg models bleed into
-    floor/shadow pixels and produce 10-20 cm of variance, which is bigger
-    than the foot itself. Going through the keypoint is more deterministic.
-    """
-    if px_per_cm_front <= 0:
-        return None
-    waist_y = bm.waist_level_front_px
-    if waist_y is None:
-        waist_y = _waist_y(front_kp)
-    if waist_y is None:
-        return None
-
-    ankle_y = _avg_ankle_y(front_kp)
-    if ankle_y is None:
-        # Last-resort fallback: bottom of the front mask. Less accurate but
-        # still beats returning None on cropped/occluded shots.
-        mask = front_mask.mask if hasattr(front_mask, "mask") else front_mask
-        if mask is None:
-            return None
-        h, _w = mask.shape
-        for y in range(h - 1, int(waist_y), -1):
-            if mask[y].any():
-                ankle_y = float(y)
-                break
-        if ankle_y is None:
-            return None
-        # When falling back to mask bottom, skip the foot offset — the mask
-        # already extends to (or past) the floor.
-        return abs(float(ankle_y) - float(waist_y)) / px_per_cm_front
-
-    waist_to_ankle_cm = abs(float(ankle_y) - float(waist_y)) / px_per_cm_front
-    foot_cm = subject_height_cm * _ANKLE_TO_FLOOR_FRACTION
-    return waist_to_ankle_cm + foot_cm
 
 
 def _derive_chest_circumference(bm: BodyMeasurements) -> float | None:

@@ -29,7 +29,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -52,7 +51,6 @@ DATASET_DIR = Path(__file__).resolve().parents[2] / "dataset"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DISALLOWED_CONTENT_PREFIXES = ("text/", "video/", "audio/")
 
-_DATASET_INDEX_RE = re.compile(r"^[ap](\d+)\.")
 _dataset_lock = asyncio.Lock()
 
 _UPLOAD_LABEL_UK = {"front": "Анфас", "side": "Профіль"}
@@ -205,48 +203,53 @@ def _detect_image_extension(data: bytes) -> str:
     return "bin"
 
 
-def _next_dataset_index(directory: Path) -> int:
-    """Pick the next free `i` such that no `a{i}.*` or `p{i}.*` exists yet."""
-    if not directory.is_dir():
-        return 1
-    max_idx = 0
-    for entry in directory.iterdir():
-        if not entry.is_file():
-            continue
-        match = _DATASET_INDEX_RE.match(entry.name)
-        if not match:
-            continue
-        try:
-            idx = int(match.group(1))
-        except ValueError:
-            continue
-        if idx > max_idx:
-            max_idx = idx
-    return max_idx + 1
+def _dataset_pair_stem_exists(directory: Path, stem: str) -> bool:
+    """True if any ``a{stem}.*`` or ``p{stem}.*`` file already exists."""
+    for prefix in ("a", "p"):
+        if any(directory.glob(f"{prefix}{stem}.*")):
+            return True
+    return False
+
+
+def _unique_dataset_stem(directory: Path) -> str:
+    """UTC timestamp stem for a capture pair; suffix ``_N`` if a collision exists."""
+    now = datetime.now(timezone.utc)
+    base = now.strftime("%Y%m%d_%H%M%S_") + f"{now.microsecond // 1000:03d}"
+    stem = base
+    n = 0
+    while directory.is_dir() and _dataset_pair_stem_exists(directory, stem):
+        n += 1
+        stem = f"{base}_{n}"
+    return stem
 
 
 async def _save_capture_pair_to_dataset(
     front_bytes: bytes,
     side_bytes: bytes,
-) -> int | None:
-    """Persist the (front, side) image pair as ``a{i}.ext`` / ``p{i}.ext``.
+) -> tuple[str | None, str | None]:
+    """Persist the (front, side) image pair as ``a{timestamp}.ext`` / ``p{timestamp}.ext``.
 
-    Failures are logged but never raised — saving the dataset is a best-effort
-    side effect of measurement and must not break the user-facing request.
+    On failure, logs and returns a Ukrainian warning string for the API
+    ``warnings`` list (measurement flow still succeeds).
     """
     try:
         async with _dataset_lock:
             DATASET_DIR.mkdir(parents=True, exist_ok=True)
-            idx = _next_dataset_index(DATASET_DIR)
-            front_path = DATASET_DIR / f"a{idx}.{_detect_image_extension(front_bytes)}"
-            side_path = DATASET_DIR / f"p{idx}.{_detect_image_extension(side_bytes)}"
+            stem = _unique_dataset_stem(DATASET_DIR)
+            front_path = DATASET_DIR / f"a{stem}.{_detect_image_extension(front_bytes)}"
+            side_path = DATASET_DIR / f"p{stem}.{_detect_image_extension(side_bytes)}"
             front_path.write_bytes(front_bytes)
             side_path.write_bytes(side_bytes)
             logger.info("Saved capture pair to dataset: %s, %s", front_path, side_path)
-            return idx
-    except Exception:
+            return stem, None
+    except Exception as exc:  # noqa: BLE001 — best-effort persistence
         logger.exception("Failed to save capture pair to dataset folder %s", DATASET_DIR)
-        return None
+        detail = str(exc).strip() or type(exc).__name__
+        msg = (
+            "Не вдалося зберегти знімки у папку датасету "
+            f"({DATASET_DIR}): {detail}"
+        )
+        return None, msg
 
 
 # ---------------------------------------------------------------------------
@@ -453,8 +456,16 @@ async def lifespan(app: FastAPI):
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="PointsX WebUI", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="FitMeasure AI WebUI", version="0.3.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.middleware("http")
+async def _camera_permissions_policy(request: Request, call_next):  # noqa: ANN001
+    """Allow in-page camera on this origin (required for some mobile browsers)."""
+    response = await call_next(request)
+    response.headers["Permissions-Policy"] = "camera=(self)"
+    return response
 
 
 @app.exception_handler(RequestValidationError)
@@ -552,7 +563,9 @@ async def measure(
     front_img, front_bytes = await _validate_and_decode(front, "front")
     side_img,  side_bytes  = await _validate_and_decode(side,  "side")
 
-    await _save_capture_pair_to_dataset(front_bytes, side_bytes)
+    _, dataset_save_warning = await _save_capture_pair_to_dataset(
+        front_bytes, side_bytes,
+    )
 
     try:
         result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
@@ -569,6 +582,10 @@ async def measure(
                 front_bgr=front_img,
                 side_bgr=side_img,
             )
+            if dataset_save_warning:
+                envelope = envelope.model_copy(
+                    update={"warnings": [*envelope.warnings, dataset_save_warning]},
+                )
             logger.info(
                 "Full model output envelope: %s",
                 envelope.model_dump(mode="json", by_alias=True),
@@ -595,6 +612,10 @@ async def measure(
         front_bgr=front_img,
         side_bgr=side_img,
     )
+    if dataset_save_warning:
+        envelope = envelope.model_copy(
+            update={"warnings": [*envelope.warnings, dataset_save_warning]},
+        )
     logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
     return envelope
 

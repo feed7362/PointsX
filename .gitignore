@@ -10,10 +10,11 @@ dist/
 build/
 .ruff_cache/
 .idea/
-data/
 /assets/hdri/
 
 /.cursor
 /.claude/
 /assets/
 yolo12l-person-seg-extended.pt
+/dataset
+.dev-certs/

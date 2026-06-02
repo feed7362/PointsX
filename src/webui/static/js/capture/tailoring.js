@@ -655,7 +655,7 @@ export function attachMeasureHandler() {
         throw new Error(formatMeasureHttpError(res, text));
       }
       const data = await res.json();
-      console.log("[PointsX] Full model output:", data);
+      console.log("[FitMeasure AI] Full model output:", data);
       const measurements = orderMeasurementsManual(data.measurements ?? []);
       if (!measurements.length) {
         captureState.lastMockResponse = null;
@@ -669,8 +669,13 @@ export function attachMeasureHandler() {
         const patternDetailsEl = document.getElementById("pattern-details");
         if (patternDetailsEl) patternDetailsEl.hidden = true;
         resultsSection.hidden = false;
+        const apiWarn =
+          Array.isArray(data.warnings) && data.warnings.length
+            ? " " + data.warnings.join(" ")
+            : "";
         setStatus(
-          "Сервер повернув порожній список мірок. Спробуйте інші знімки або перевірте позу й освітлення.",
+          "Сервер повернув порожній список мірок. Спробуйте інші знімки або перевірте позу й освітлення." +
+            apiWarn,
           true
         );
         return;

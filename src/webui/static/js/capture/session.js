@@ -16,6 +16,11 @@ import {
 } from "./speech.js";
 import { setStatus, setPoseStatus, setPoseStatusVisual, updateUiStep } from "./ui.js";
 import { clearThumbSlotPhoto, syncThumbSlotToImage } from "./thumbLayout.js";
+import {
+  cameraErrorMessage,
+  cameraUnavailableReason,
+  requestCameraStream,
+} from "./camera.js";
 
 /** Camera off: idle art inside preview; camera on: show live feed. */
 function syncPreviewIdleState(cameraLive) {
@@ -617,15 +622,22 @@ export async function startCamera() {
   captureState.suspendPoseLoopAfterComplete = false;
   stopCamera();
   setStatus("");
+  const cameraBlocked = cameraUnavailableReason();
+  if (cameraBlocked) {
+    setStatus(cameraBlocked, true);
+    syncPreviewIdleState(false);
+    return;
+  }
+
   await loadPoseLandmarker();
   if (captureState.poseLoadError) {
     setStatus("MediaPipe не завантажився: " + (captureState.poseLoadError.message || String(captureState.poseLoadError)), true);
   }
   try {
-    captureState.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
+    captureState.stream = await requestCameraStream();
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "true");
+    video.muted = true;
     video.srcObject = captureState.stream;
     await video.play();
     void primeVoiceAfterUserGesture();
@@ -638,7 +650,7 @@ export async function startCamera() {
     btnCaptureTimer.disabled = true;
     syncPreviewIdleState(true);
   } catch (e) {
-    setStatus("Не вдалося отримати доступ до камери: " + (e && e.message ? e.message : String(e)), true);
+    setStatus("Не вдалося отримати доступ до камери: " + cameraErrorMessage(e), true);
     syncPreviewIdleState(false);
   }
 }
