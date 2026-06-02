@@ -324,18 +324,36 @@ def archive_measurement_local(
 
 
 def local_model_path(name: str) -> "Path | None":
-    """Look up a model file inside LOCAL_DATA_DIR/models/<name>.
+    """Look up a model file inside the bucket / LOCAL_DATA_DIR.
 
-    Returns the Path if the file exists and is non-empty, else None.
-    Used by the boot path to prefer a bucket-mounted weight over an
-    HF Hub or S3 download.
+    Checks (in order) — first non-empty hit wins:
+      <LOCAL_DATA_DIR>/models/<name>     ← preferred layout
+      <LOCAL_DATA_DIR>/<name>            ← bucket-root layout (HF dashboard
+                                            uploads land here unless you
+                                            create a folder explicitly)
+    Returns None when nothing matches; a WARN line is emitted either way
+    so the operator can tell from the Logs tab what was checked.
     """
     base = _local_data_dir()
     if base is None:
+        logger.warning(
+            "local_model_path(%s): LOCAL_DATA_DIR is unset / unwritable — "
+            "bucket lookup skipped.",
+            name,
+        )
         return None
-    candidate = base / "models" / name
-    if candidate.is_file() and candidate.stat().st_size > 0:
-        return candidate
+    candidates = [base / "models" / name, base / name]
+    for candidate in candidates:
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            logger.warning(
+                "local_model_path FOUND — name=%s → %s (size=%d bytes)",
+                name, candidate, candidate.stat().st_size,
+            )
+            return candidate
+    logger.warning(
+        "local_model_path MISS — name=%s tried=%s",
+        name, [str(c) for c in candidates],
+    )
     return None
 
 
