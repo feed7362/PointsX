@@ -554,11 +554,53 @@ function checkProfilePose(lm) {
   return { ok: true };
 }
 
+import { t } from "./i18n.js";
+
+function translatePoseReason(reason) {
+  if (!reason) return reason;
+  if (reason.startsWith("Не видно ")) {
+    const partsStr = reason.substring(9).replace("…", "").trim();
+    const parts = partsStr.split(", ").map(p => t(`part-${getPartKey(p)}`));
+    return t("pose-cannot-see", { parts: parts.join(", ") + (reason.endsWith("…") ? "..." : "") });
+  }
+  if (reason.startsWith("Поза кадром ")) {
+    const partsStr = reason.substring(12).replace("…", "").replace(".", "").trim();
+    const parts = partsStr.split(", ").map(p => t(`part-${getPartKey(p)}`));
+    return t("pose-out-of-frame", { parts: parts.join(", ") + (reason.endsWith("…") ? "..." : "") });
+  }
+  return t(reason);
+}
+
+function getPartKey(partName) {
+  const map = {
+    "голову": "head",
+    "ліве плече": "left-shoulder",
+    "праве плече": "right-shoulder",
+    "лівий лікоть": "left-elbow",
+    "правий лікоть": "right-elbow",
+    "ліву кисть": "left-wrist",
+    "праву кисть": "right-wrist",
+    "таз зліва": "left-hip",
+    "таз справа": "right-hip",
+    "ліве коліно": "left-knee",
+    "праве коліно": "right-knee",
+    "ліву щиколотку": "left-ankle",
+    "праву щиколотку": "right-ankle"
+  };
+  return map[partName] || partName;
+}
+
 /** Run full-body check then front or profile rules on mirrored landmarks. */
 export function checkPoseForStep(viewStep, landmarks, worldLandmarks) {
   const lm = flipLandmarks(landmarks);
   const fullBody = checkFullBodyVisible(lm, viewStep);
-  if (!fullBody.ok) return fullBody;
+  if (!fullBody.ok) {
+    return { ok: false, reason: translatePoseReason(fullBody.reason) };
+  }
   const rawWorld = worldLandmarks && worldLandmarks.length ? worldLandmarks : null;
-  return viewStep === 1 ? checkFrontPose(lm, rawWorld) : checkProfilePose(lm);
+  const res = viewStep === 1 ? checkFrontPose(lm, rawWorld) : checkProfilePose(lm);
+  if (!res.ok) {
+    return { ok: false, reason: translatePoseReason(res.reason) };
+  }
+  return res;
 }

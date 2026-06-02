@@ -10,16 +10,22 @@
 
 <body>
   <header class="header">
-    <h1>FitMeasure AI</h1>
-    <p class="sub">
+    <div class="header-top">
+      <h1>FitMeasure AI</h1>
+      <div class="lang-toggle" role="group" aria-label="Language / Мова">
+        <button type="button" class="lang-btn active" data-lang="uk">UA</button>
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
+      </div>
+    </div>
+    <p class="sub" data-i18n="header-sub">
       Дві фотографії, зріст, стать → результат з сервера, розміри за сітками. Поза перевіряється в браузері.
     </p>
   </header>
 
   <main class="layout">
     <section class="card references" aria-labelledby="ref-heading" id="section-references">
-      <h2 id="ref-heading">Приклади правильної пози</h2>
-      <p class="ref-intro">
+      <h2 id="ref-heading" data-i18n="ref-heading">Приклади правильної пози</h2>
+      <p class="ref-intro" data-i18n="ref-intro" data-i18n-html="true">
         <strong>Анфас:</strong> ноги приблизно на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від
         корпусу.
         <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло,
@@ -28,40 +34,40 @@
       </p>
       <div class="ref-grid">
         <figure class="ref-figure">
-          <figcaption>Анфас</figcaption>
+          <figcaption data-i18n="front">Анфас</figcaption>
           <div class="ref-svg-wrap" aria-hidden="true">
             <canvas id="ref-canvas-front" class="ref-canvas" width="300" height="480"></canvas>
           </div>
         </figure>
         <figure class="ref-figure">
-          <figcaption>Профіль</figcaption>
+          <figcaption data-i18n="profile">Профіль</figcaption>
           <div class="ref-svg-wrap" aria-hidden="true">
             <canvas id="ref-canvas-profile" class="ref-canvas" width="300" height="480"></canvas>
           </div>
         </figure>
       </div>
-      <button type="button" class="btn primary wide" id="btn-to-capture">Продовжити до зйомки</button>
+      <button type="button" class="btn primary wide" id="btn-to-capture" data-i18n="btn-to-capture">Продовжити до зйомки</button>
     </section>
 
     <section class="card" aria-labelledby="params-heading" id="section-params">
-      <h2 id="params-heading">Параметри</h2>
+      <h2 id="params-heading" data-i18n="params-heading">Параметри</h2>
       <div class="field">
-        <label for="height">Зріст (см)</label>
+        <label for="height" data-i18n="label-height">Зріст (см)</label>
         <input id="height" name="height" type="number" min="100" max="250" value="175" required />
       </div>
       <div class="field">
-        <label for="sex">Стать</label>
+        <label for="sex" data-i18n="label-sex">Стать</label>
         <select id="sex" name="sex" required>
-          <option value="male">Чоловік</option>
-          <option value="female">Жінка</option>
-          <option value="other">Інше</option>
+          <option value="male" data-i18n="sex-male">Чоловік</option>
+          <option value="female" data-i18n="sex-female">Жінка</option>
+          <option value="other" data-i18n="sex-other">Інше</option>
         </select>
       </div>
 
     </section>
 
     <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
-      <h2 id="capture-heading">Зйомка</h2>
+      <h2 id="capture-heading" data-i18n="capture-heading">Зйомка</h2>
       <p id="step-label" class="step-label">Крок 1 з 2: анфас</p>
       <div class="preview-wrap mirror preview-wrap--idle" id="preview-wrap">
         <video id="video" playsinline autoplay muted></video>
@@ -75,46 +81,46 @@
               <path
                 d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            <p class="preview-idle-title">Камера вимкнена</p>
-            <p class="preview-idle-hint">
+            <p class="preview-idle-title" data-i18n="preview-idle-title">Камера вимкнена</p>
+            <p class="preview-idle-hint" data-i18n="preview-idle-hint">
               Натисніть «Увімкнути камеру», щоб побачити превʼю й ескіз пози для заміру. Або завантажте фото.
             </p>
           </div>
         </div>
       </div>
       <div class="actions capture-live-actions">
-        <button type="button" id="btn-start" class="btn primary">Увімкнути камеру</button>
-        <button type="button" id="btn-capture" class="btn" disabled>Зробити фото</button>
-        <button type="button" id="btn-capture-timer" class="btn" disabled>Фото через 10 с</button>
-        <button type="button" id="btn-stop" class="btn ghost" disabled>Зупинити камеру</button>
+        <button type="button" id="btn-start" class="btn primary" data-i18n="btn-start">Увімкнути камеру</button>
+        <button type="button" id="btn-capture" class="btn" disabled data-i18n="btn-capture" style="display: none;">Зробити фото</button>
+        <button type="button" id="btn-capture-timer" class="btn" disabled data-i18n="btn-capture-timer" style="display: none;">Фото через 10 с</button>
+        <button type="button" id="btn-stop" class="btn ghost" disabled data-i18n="btn-stop">Зупинити камеру</button>
       </div>
       <p id="pose-status" class="pose-status" role="status" aria-live="polite"></p>
       <p id="status" class="status" role="status"></p>
       <div class="upload-row" id="upload-row">
-        <p class="upload-intro">
-          Або завантажте готові фото (JPEG, PNG, WebP; до 5&nbsp;МБ)
+        <p class="upload-intro" data-i18n="upload-intro">
+          Або завантажте готові фото (JPEG, PNG, WebP; до 5 МБ)
         </p>
         <div class="upload-actions">
           <label class="btn upload-file-label">
-            Завантажити анфас
+            <span data-i18n="upload-front-label">Завантажити анфас</span>
             <input type="file" id="upload-front" class="upload-file-input"
               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
           </label>
           <label class="btn upload-file-label">
-            Завантажити профіль
+            <span data-i18n="upload-side-label">Завантажити профіль</span>
             <input type="file" id="upload-side" class="upload-file-input"
               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
           </label>
         </div>
         <label class="upload-debug">
           <input type="checkbox" id="debug-upload-skip-pose" />
-          <span>Не перевіряти позу при завантаженні файлу</span>
+          <span data-i18n="upload-debug-span">Не перевіряти позу при завантаженні файлу</span>
         </label>
       </div>
       <div class="thumbs-wrap" id="thumbs-wrap">
         <div class="thumbs" id="thumbs-inner">
           <figure class="thumb-figure">
-            <figcaption>Анфас</figcaption>
+            <figcaption data-i18n="front">Анфас</figcaption>
             <div class="thumb-slot">
               <canvas id="thumb-placeholder-front" class="thumb-placeholder" width="1" height="1"
                 aria-hidden="true"></canvas>
@@ -122,7 +128,7 @@
             </div>
           </figure>
           <figure class="thumb-figure">
-            <figcaption>Профіль</figcaption>
+            <figcaption data-i18n="profile">Профіль</figcaption>
             <div class="thumb-slot">
               <canvas id="thumb-placeholder-side" class="thumb-placeholder" width="1" height="1"
                 aria-hidden="true"></canvas>
@@ -131,12 +137,12 @@
           </figure>
         </div>
         <div class="retake-actions" id="retake-actions" hidden>
-          <button type="button" id="btn-retake-front" class="btn">Перезняти анфас</button>
-          <button type="button" id="btn-retake-side" class="btn">Перезняти профіль</button>
+          <button type="button" id="btn-retake-front" class="btn" data-i18n="btn-retake-front">Перезняти анфас</button>
+          <button type="button" id="btn-retake-side" class="btn" data-i18n="btn-retake-side">Перезняти профіль</button>
         </div>
       </div>
-      <button type="button" id="btn-measure" class="btn primary wide" disabled>Розрахувати мірки</button>
-      <button type="button" id="btn-measure-test" class="btn wide">Тест результатів без фото</button>
+      <button type="button" id="btn-measure" class="btn primary wide" disabled data-i18n="btn-measure">Розрахувати мірки</button>
+      <button type="button" id="btn-measure-test" class="btn wide" data-i18n="btn-measure-test">Тест результатів без фото</button>
       <div id="measure-loading" class="measure-loading" hidden>
         <div class="measure-loading-spinner-wrap">
           <div class="measure-loading-spinner"></div>
@@ -150,43 +156,43 @@
     </section>
 
     <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
-      <h2 id="results-heading">Результат</h2>
+      <h2 id="results-heading" data-i18n="results-heading">Результат</h2>
 
       <div class="model-viz" id="model-viz" hidden>
-        <h3 class="tailoring-sub">Візуалізація моделей</h3>
-        <p class="model-viz-hint">YOLO pose та сегментація по кожному знімку (як бачить сервер).</p>
+        <h3 class="tailoring-sub" data-i18n="model-viz-heading">Візуалізація моделей</h3>
+        <p class="model-viz-hint" data-i18n="model-viz-hint">YOLO pose та сегментація по кожному знімку (як бачить сервер).</p>
         <div class="model-viz-grid" id="model-viz-grid" role="group" aria-label="Поза та силует"></div>
       </div>
 
       <div class="tailoring-intro" id="tailoring-intro" hidden></div>
 
       <div class="garment-strip-wrap" id="garment-strip-wrap" hidden>
-        <p class="tailoring-hint" id="garment-strip-label">Тип одягу</p>
+        <p class="tailoring-hint" id="garment-strip-label" data-i18n="garment-strip-label">Тип одягу</p>
         <div class="garment-strip" id="garment-strip" role="radiogroup" aria-labelledby="garment-strip-label"></div>
       </div>
 
       <div class="tailoring-panels" id="tailoring-panels" hidden>
         <div class="tailoring-col">
-          <h3 class="tailoring-sub">Мірки для обраного виробу</h3>
+          <h3 class="tailoring-sub" data-i18n="tailoring-measures-sub">Мірки для обраного виробу</h3>
           <table class="measures measures-compact" id="tailoring-measures-table">
             <thead>
               <tr>
-                <th>Показник</th>
-                <th>см</th>
+                <th data-i18n="table-th-measurement">Показник</th>
+                <th data-i18n="table-th-cm">см</th>
               </tr>
             </thead>
             <tbody id="tailoring-measures-body"></tbody>
           </table>
         </div>
         <div class="tailoring-col">
-          <h3 class="tailoring-sub">Розмірні сітки (довідково)</h3>
+          <h3 class="tailoring-sub" data-i18n="size-grids-sub">Розмірні сітки (довідково)</h3>
           <div class="size-tabs" role="tablist" aria-label="Регіональні сітки">
             <button type="button" class="size-tab" role="tab" id="tab-ua" aria-selected="true" aria-controls="panel-ua"
-              tabindex="0">Україна (орієнт.)</button>
+              tabindex="0" data-i18n="tab-ua">Україна (орієнт.)</button>
             <button type="button" class="size-tab" role="tab" id="tab-eu" aria-selected="false" aria-controls="panel-eu"
-              tabindex="-1">Європа (орієнт.)</button>
+              tabindex="-1" data-i18n="tab-eu">Європа (орієнт.)</button>
             <button type="button" class="size-tab" role="tab" id="tab-us" aria-selected="false" aria-controls="panel-us"
-              tabindex="-1">США (орієнт.)</button>
+              tabindex="-1" data-i18n="tab-us">США (орієнт.)</button>
           </div>
           <div id="panel-ua" class="size-panel" role="tabpanel" aria-labelledby="tab-ua"></div>
           <div id="panel-eu" class="size-panel" role="tabpanel" aria-labelledby="tab-eu" hidden></div>
@@ -195,47 +201,47 @@
       </div>
 
       <details class="pattern-details" id="pattern-details" hidden>
-        <summary>Індивідуальні мірки для пошиття</summary>
+        <summary data-i18n="pattern-summary">Індивідуальні мірки для пошиття</summary>
         <div class="pattern-grid">
           <div class="pattern-col">
-            <h4>Базові розміри (тіло + припуски на вільність)</h4>
+            <h4 data-i18n="pattern-raw-heading">Базові розміри (тіло + припуски на вільність)</h4>
             <table class="measures measures-compact">
               <thead>
                 <tr>
-                  <th>Параметр</th>
-                  <th>см</th>
+                  <th data-i18n="table-th-measurement">Параметр</th>
+                  <th data-i18n="table-th-cm">см</th>
                 </tr>
               </thead>
               <tbody id="pattern-raw-body"></tbody>
             </table>
           </div>
           <div class="pattern-col">
-            <h4>З припусками на шви</h4>
+            <h4 data-i18n="pattern-seam-heading">З припусками на шви</h4>
             <table class="measures measures-compact">
               <thead>
                 <tr>
-                  <th>Параметр</th>
-                  <th>см</th>
+                  <th data-i18n="table-th-measurement">Параметр</th>
+                  <th data-i18n="table-th-cm">см</th>
                 </tr>
               </thead>
               <tbody id="pattern-seam-body"></tbody>
             </table>
           </div>
         </div>
-        <p class="pattern-hint">Ці величини використовуються для індивідуального пошиття. Всі значення приблизні.</p>
+        <p class="pattern-hint" data-i18n="pattern-hint">Ці величини використовуються для індивідуального пошиття. Всі значення приблизні.</p>
       </details>
 
-      <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden>
+      <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden data-i18n="tailoring-disclaimer">
         Розміри на вкладках — орієнтовні
       </p>
 
       <details class="all-measures-details" id="all-measures-details">
-        <summary>Усі мірки (повна таблиця)</summary>
+        <summary data-i18n="all-measures-summary">Усі мірки (повна таблиця)</summary>
         <table class="measures" id="results-table">
           <thead>
             <tr>
-              <th>Показник</th>
-              <th>Значення (см)</th>
+              <th data-i18n="table-th-measurement">Показник</th>
+              <th data-i18n="table-th-val-cm">Значення (см)</th>
             </tr>
           </thead>
           <tbody id="results-body"></tbody>

@@ -2,6 +2,7 @@
  * MediaPipe pose runtime, camera, capture timers, and frame-to-blob pipeline.
  */
 
+import { t } from "./i18n.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { checkPoseForStep } from "./poseGate.js";
@@ -122,18 +123,18 @@ export function checkCaptureReadiness() {
   const { video } = getCaptureDom();
   const track = captureState.stream && captureState.stream.getVideoTracks()[0];
   if (!track) {
-    return { ok: false, reason: "Камера не активна. Увімкніть камеру." };
+    return { ok: false, reason: t("sess-camera-inactive") };
   }
   const s = track.getSettings ? track.getSettings() : {};
   const vw = s.width || video.videoWidth;
   const vh = s.height || video.videoHeight;
   if (!vw || !vh) {
-    return { ok: false, reason: "Не вдалося прочитати розмір відео. Зачекайте або перезапустіть камеру." };
+    return { ok: false, reason: t("sess-video-size-failed") };
   }
   if (vw < MIN_VIDEO_DIMENSION || vh < MIN_VIDEO_DIMENSION) {
     return {
       ok: false,
-      reason: `Занадто низька роздільна здатність (${vw}×${vh}). Потрібно щонайменше ${MIN_VIDEO_DIMENSION}px по кожній стороні.`,
+      reason: t("sess-low-resolution", { vw, vh, min: MIN_VIDEO_DIMENSION }),
     };
   }
   return { ok: true };
@@ -232,7 +233,7 @@ export function resetAutoCaptureUi() {
 /** Reset the timed capture button label to the default caption. */
 export function resetTimerButtonLabel() {
   const { btnCaptureTimer } = getCaptureDom();
-  btnCaptureTimer.textContent = `Фото через ${CAPTURE_TIMER_SECONDS} с`;
+  btnCaptureTimer.textContent = t("sess-photo-timer-btn", { sec: CAPTURE_TIMER_SECONDS });
 }
 
 /** Stop the N-second manual timer if running; optionally clear status text. */
@@ -255,19 +256,19 @@ export function clearCaptureTimer(setNeutralStatus = false) {
 function gatePoseOnBitmap(viewStep, bitmap) {
   const marker = captureState.poseLandmarkerImage;
   if (!marker) {
-    return { ok: false, reason: "Модель пози ще не готова. Зачекайте або оновіть сторінку." };
+    return { ok: false, reason: t("sess-pose-model-not-ready") };
   }
   const result = marker.detect(bitmap);
   const lm = result.landmarks && result.landmarks[0];
   const worldLm = result.worldLandmarks && result.worldLandmarks[0];
   if (!lm) {
-    return { ok: false, reason: "На фото не видно людину" };
+    return { ok: false, reason: t("sess-no-person") };
   }
   const gate = checkPoseForStep(viewStep, lm, worldLm);
   if (!gate.ok) {
     return {
       ok: false,
-      reason: gate.reason || "Поза не відповідає вимогам",
+      reason: gate.reason || t("sess-pose-invalid"),
       landmarks: lm,
       world: worldLm,
       gate,
@@ -303,7 +304,7 @@ function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
       captureState.step = 2;
       captureState.suspendPoseLoopAfterComplete = true;
       stopCamera();
-      setStatus("Анфас завантажено. Обидва знімки готові — натисніть «Розрахувати мірки».");
+      setStatus(t("sess-front-ready-both"));
     } else {
       captureState.step = 2;
       captureState.guideSmoothDelta.dx = 0;
@@ -311,7 +312,7 @@ function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
       captureState.guideSmoothDelta.fitHeight = null;
       captureState.guideSmoothDelta.fitTop = null;
       captureState.guideSmoothDelta.fitLeft = null;
-      setStatus("Анфас завантажено. Додайте профіль (завантаження або камера).");
+      setStatus(t("sess-front-ready-need-side"));
     }
   } else {
     revokeThumbUrl(thumbSide);
@@ -319,18 +320,16 @@ function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
     thumbSide.src = url;
     thumbSide.hidden = false;
     syncThumbSlotToImage(thumbSide);
-    const flipHint = mirrored ? " Фото віддзеркалено автоматично." : "";
+    const flipHint = mirrored ? t("sess-mirrored-auto") : "";
     if (captureState.frontBlob) {
       captureState.step = 2;
       captureState.suspendPoseLoopAfterComplete = true;
       stopCamera();
-      setStatus(
-        `Профіль завантажено.${flipHint} Обидва знімки готові — натисніть «Розрахувати мірки».`
-      );
+      setStatus(t("sess-side-ready-both", { flipHint }));
     } else {
       captureState.step = 1;
       captureState.suspendPoseLoopAfterComplete = false;
-      setStatus(`Профіль завантажено.${flipHint} Додайте анфас (завантаження або камера).`);
+      setStatus(t("sess-side-ready-need-front", { flipHint }));
     }
   }
   updateUiStep();
@@ -344,11 +343,11 @@ function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
 export async function applyUploadedImage(which, file) {
   if (!file) return;
   if (!UPLOAD_MIME.has(file.type)) {
-    setStatus("Оберіть зображення JPEG, PNG або WebP.", true);
+    setStatus(t("sess-image-format-invalid"), true);
     return;
   }
   if (file.size > UPLOAD_MAX_BYTES) {
-    setStatus("Файл завеликий (максимум 5 МБ).", true);
+    setStatus(t("sess-file-too-large"), true);
     return;
   }
 
@@ -357,7 +356,7 @@ export async function applyUploadedImage(which, file) {
     try {
       bmp = await createImageBitmap(file);
     } catch {
-      setStatus("Не вдалося прочитати зображення.", true);
+      setStatus(t("sess-read-image-failed"), true);
       return;
     }
     try {
@@ -367,10 +366,10 @@ export async function applyUploadedImage(which, file) {
       const storageBlob = await imageBitmapToBlob(squared, file.type);
       squared.close();
       if (!storageBlob) {
-        setStatus("Не вдалося привести зображення до квадрата.", true);
+        setStatus(t("sess-crop-square-failed"), true);
         return;
       }
-      commitUploadedImage(which, file, storageBlob, "Файл прийнято без перевірки пози");
+      commitUploadedImage(which, file, storageBlob, t("sess-file-accepted-no-check"));
     } finally {
       if (bmp) bmp.close();
     }
@@ -381,11 +380,8 @@ export async function applyUploadedImage(which, file) {
   try {
     await loadPoseLandmarkerImage();
     if (captureState.poseImageLoadError) {
-      setStatus("Не вдалося завантажити MediaPipe. Перевірте мережу та оновіть сторінку.", true);
-      setPoseStatus(
-        "Не вдалося завантажити MediaPipe. Перевірте мережу та оновіть сторінку.",
-        "bad"
-      );
+      setStatus(t("sess-mediapipe-failed"), true);
+      setPoseStatus(t("sess-mediapipe-failed"), "bad");
       return;
     }
 
@@ -393,7 +389,7 @@ export async function applyUploadedImage(which, file) {
     try {
       bitmap = await createImageBitmap(file);
     } catch {
-      setStatus("Не вдалося прочитати зображення.", true);
+      setStatus(t("sess-read-image-failed"), true);
       return;
     }
 
@@ -433,8 +429,8 @@ export async function applyUploadedImage(which, file) {
       }
 
       if (!poseChk.ok) {
-        setStatus(poseChk.reason || "Поза не відповідає вимогам.", true);
-        setPoseStatus(poseChk.reason || "Поза не відповідає вимогам.", "bad");
+        setStatus(poseChk.reason || t("sess-pose-invalid"), true);
+        setPoseStatus(poseChk.reason || t("sess-pose-invalid"), "bad");
         return;
       }
 
@@ -449,12 +445,12 @@ export async function applyUploadedImage(which, file) {
       const storageBlob = await imageBitmapToBlob(squared, file.type);
       squared.close();
       if (!storageBlob) {
-        setStatus("Не вдалося привести зображення до квадрата.", true);
+        setStatus(t("sess-crop-square-failed"), true);
         setPoseStatus("", "bad");
         return;
       }
 
-      commitUploadedImage(which, file, storageBlob, "Поза на фото підходить", {
+      commitUploadedImage(which, file, storageBlob, t("sess-pose-valid-photo"), {
         mirrored: which === "side" && mirroredSide,
       });
     } finally {
@@ -487,7 +483,7 @@ export function startAutoPoseCountdown() {
   let n = 3;
   const stepTick = () => {
     showCountdownOverlay(n);
-    setPoseStatusVisual(`Знімок через… ${n}`, "ok");
+    setPoseStatusVisual(t("sess-taking-photo-in", { n }), "ok");
     speakCountdownDigit(n);
   };
   stepTick();
@@ -501,7 +497,7 @@ export function startAutoPoseCountdown() {
       return;
     }
     showCountdownOverlay(n);
-    setPoseStatusVisual(`Знімок через… ${n}`, "ok");
+    setPoseStatusVisual(t("sess-taking-photo-in", { n }), "ok");
     speakCountdownDigit(n);
   }, 1000);
 }
@@ -527,7 +523,7 @@ export function runPoseIfNeeded() {
     resetAutoCaptureUi();
     captureState.lastPoseGate = {
       ok: false,
-      reason: "Не вдалося завантажити MediaPipe. Перевірте мережу та оновіть сторінку.",
+      reason: t("sess-mediapipe-failed"),
     };
     setPoseStatus(captureState.lastPoseGate.reason, "bad");
     btnCapture.disabled = true;
@@ -537,7 +533,7 @@ export function runPoseIfNeeded() {
 
   if (!captureState.poseLandmarker || !captureState.stream || !video.videoWidth) {
     resetAutoCaptureUi();
-    captureState.lastPoseGate = { ok: false, reason: "Очікування моделі пози…" };
+    captureState.lastPoseGate = { ok: false, reason: t("sess-waiting-pose-model") };
     setPoseStatus(captureState.lastPoseGate.reason, "bad");
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = false;
@@ -550,7 +546,7 @@ export function runPoseIfNeeded() {
   if (!lm) {
     captureState.lastRawLandmarks = null;
     resetAutoCaptureUi();
-    captureState.lastPoseGate = { ok: false, reason: "Людину не видно" };
+    captureState.lastPoseGate = { ok: false, reason: t("sess-person-not-seen") };
     setPoseStatus(captureState.lastPoseGate.reason, "bad");
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = false;
@@ -566,7 +562,7 @@ export function runPoseIfNeeded() {
   if (captureState.autoPoseCountdownIntervalId) {
     if (!gate.ok) {
       resetAutoCaptureUi();
-      setPoseStatus(gate.reason || "Утримайте позу для зйомки", "bad");
+      setPoseStatus(gate.reason || t("sess-hold-pose"), "bad");
       btnCapture.disabled = true;
       btnCaptureTimer.disabled = false;
       return;
@@ -577,7 +573,7 @@ export function runPoseIfNeeded() {
   }
 
   if (gate.ok) {
-    setPoseStatus("Поза підходить", "ok");
+    setPoseStatus(t("sess-pose-ok"), "ok");
     btnCapture.disabled = Boolean(captureState.captureTimerIntervalId || captureState.awaitingCaptureBlob);
     btnCaptureTimer.disabled = false;
     if (
@@ -596,7 +592,7 @@ export function runPoseIfNeeded() {
     }
   } else {
     resetAutoCaptureUi();
-    setPoseStatus(gate.reason || "Виправте позу.", "bad");
+    setPoseStatus(gate.reason || t("sess-adjust-pose"), "bad");
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = false;
   }
@@ -631,10 +627,29 @@ export async function startCamera() {
 
   await loadPoseLandmarker();
   if (captureState.poseLoadError) {
-    setStatus("MediaPipe не завантажився: " + (captureState.poseLoadError.message || String(captureState.poseLoadError)), true);
+    setStatus(t("sess-mediapipe-load-failed-msg", { msg: captureState.poseLoadError.message || String(captureState.poseLoadError) }), true);
   }
   try {
     captureState.stream = await requestCameraStream();
+    let mirrored = true;
+    try {
+      const track = captureState.stream.getVideoTracks()[0];
+      if (track) {
+        const settings = track.getSettings ? track.getSettings() : {};
+        const facingMode = settings.facingMode || "";
+        const label = (track.label || "").toLowerCase();
+        if (facingMode === "environment" || label.includes("back") || label.includes("rear") || label.includes("environment")) {
+          mirrored = false;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to inspect video track settings for mirroring:", e);
+    }
+    captureState.isMirrored = mirrored;
+    const previewWrap = document.getElementById("preview-wrap");
+    if (previewWrap) {
+      previewWrap.classList.toggle("mirror", mirrored);
+    }
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "true");
     video.muted = true;
@@ -644,13 +659,13 @@ export async function startCamera() {
     cancelAnimationFrame(captureState.raf);
     loop();
     btnStop.disabled = false;
-    btnStart.textContent = "Перезапустити камеру";
-    captureState.lastPoseGate = { ok: false, reason: "Аналіз пози…" };
+    btnStart.textContent = t("sess-restart-camera-btn");
+    captureState.lastPoseGate = { ok: false, reason: t("sess-analyzing-pose") };
     btnCapture.disabled = true;
     btnCaptureTimer.disabled = true;
     syncPreviewIdleState(true);
   } catch (e) {
-    setStatus("Не вдалося отримати доступ до камери: " + cameraErrorMessage(e), true);
+    setStatus(t("sess-camera-access-failed", { msg: cameraErrorMessage(e) }), true);
     syncPreviewIdleState(false);
   }
 }
@@ -689,16 +704,16 @@ export function captureFrameToBlob(callback) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) {
-    setStatus("Відео ще не готове.", true);
+    setStatus(t("sess-video-not-ready"), true);
     return;
   }
   const chk = checkCaptureReadiness();
   if (!chk.ok) {
-    setStatus(chk.reason || "Кадр не підходить.", true);
+    setStatus(chk.reason || t("sess-frame-invalid"), true);
     return;
   }
   if (!captureState.lastPoseGate.ok) {
-    setStatus(captureState.lastPoseGate.reason || "Поза не відповідає вимогам.", true);
+    setStatus(captureState.lastPoseGate.reason || t("sess-pose-invalid"), true);
     return;
   }
   let captureDebugLm = null;
@@ -709,12 +724,12 @@ export function captureFrameToBlob(callback) {
     const snapLm = snap.landmarks && snap.landmarks[0];
     const snapWorld = snap.worldLandmarks && snap.worldLandmarks[0];
     if (!snapLm) {
-      setStatus("На кадрі не видно людину — повторіть знімок.", true);
+      setStatus(t("sess-pose-invalid-snap"), true);
       return;
     }
     const snapGate = checkPoseForStep(captureState.step, snapLm, snapWorld);
     if (!snapGate.ok) {
-      setStatus(snapGate.reason || "Поза на мить знімка не відповідає вимогам.", true);
+      setStatus(snapGate.reason || t("sess-pose-invalid-snap-requirements"), true);
       return;
     }
     captureDebugLm = snapLm;
@@ -736,11 +751,13 @@ export function captureFrameToBlob(callback) {
   const cctx = captureCanvas.getContext("2d");
   if (!cctx) {
     captureState.awaitingCaptureBlob = false;
-    setStatus("Не вдалося отримати контекст.", true);
+    setStatus(t("sess-canvas-context-failed"), true);
     return;
   }
-  cctx.translate(tw, 0);
-  cctx.scale(-1, 1);
+  if (captureState.isMirrored) {
+    cctx.translate(tw, 0);
+    cctx.scale(-1, 1);
+  }
   cctx.drawImage(video, 0, 0, tw, th);
 
   void (async () => {
@@ -757,7 +774,7 @@ export function captureFrameToBlob(callback) {
       const cctxSq = captureCanvas.getContext("2d");
       if (!cctxSq) {
         captureState.awaitingCaptureBlob = false;
-        setStatus("Не вдалося отримати контекст.", true);
+        setStatus(t("sess-canvas-context-failed"), true);
         return;
       }
       cctxSq.drawImage(sq, 0, 0);
@@ -767,7 +784,7 @@ export function captureFrameToBlob(callback) {
         (blob) => {
           captureState.awaitingCaptureBlob = false;
           if (!blob) {
-            setStatus("Не вдалося створити знімок.", true);
+            setStatus(t("sess-take-photo-failed"), true);
             return;
           }
           if (captureDebugLm && captureDebugGate) {
@@ -781,7 +798,7 @@ export function captureFrameToBlob(callback) {
     } catch (e) {
       captureState.awaitingCaptureBlob = false;
       console.error(e);
-      setStatus("Не вдалося привести знімок до квадрата.", true);
+      setStatus(t("sess-crop-square-failed"), true);
     } finally {
       if (bmp) bmp.close();
       if (sq) sq.close();
@@ -806,14 +823,14 @@ export function onCaptureReady(blob) {
       captureState.suspendPoseLoopAfterComplete = true;
       stopCamera();
       updateUiStep();
-      setStatus("Анфас оновлено. Можна «Розрахувати мірки» або перезняти кадр.");
+      setStatus(t("sess-front-updated-calculate"));
     } else {
       captureState.step = 2;
       updateUiStep();
       void startCamera().then(() => {
         syncOverlaySize();
       });
-      setStatus("Увімкніть камеру знову для знімка в профіль.");
+      setStatus(t("sess-turn-on-camera-side"));
     }
   } else {
     revokeThumbUrl(thumbSide);
@@ -824,7 +841,7 @@ export function onCaptureReady(blob) {
     captureState.suspendPoseLoopAfterComplete = true;
     stopCamera();
     updateUiStep();
-    setStatus("Обидва знімки готові. Натисніть «Розрахувати мірки».");
+    setStatus(t("sess-both-ready-calculate"));
   }
 }
 
@@ -832,13 +849,13 @@ export function onCaptureReady(blob) {
 export function startCaptureTimer() {
   const { btnCapture, btnCaptureTimer } = getCaptureDom();
   if (!captureState.stream) {
-    setStatus("Увімкніть камеру перед запуском таймера.", true);
+    setStatus(t("sess-turn-on-camera-timer"), true);
     return;
   }
   if (captureState.captureTimerIntervalId) {
     clearCaptureTimer(true);
     resetAutoCaptureUi();
-    setStatus("Таймер скасовано.");
+    setStatus(t("sess-timer-cancelled"));
     btnCapture.disabled = !captureState.lastPoseGate.ok;
     btnCaptureTimer.disabled = !captureState.lastPoseGate.ok;
     return;
@@ -848,8 +865,8 @@ export function startCaptureTimer() {
   captureState.captureTimerRemaining = CAPTURE_TIMER_SECONDS;
   btnCapture.disabled = true;
   btnCaptureTimer.disabled = false;
-  btnCaptureTimer.textContent = `Скасувати (${captureState.captureTimerRemaining} с)`;
-  setStatus(`Автозйомка через ${captureState.captureTimerRemaining} с… Станьте в правильну позу.`);
+  btnCaptureTimer.textContent = t("sess-cancel-timer-btn", { sec: captureState.captureTimerRemaining });
+  setStatus(t("sess-timer-countdown-pose", { sec: captureState.captureTimerRemaining }));
   captureState.captureTimerIntervalId = window.setInterval(() => {
     if (!captureState.stream) {
       clearCaptureTimer();
@@ -860,12 +877,12 @@ export function startCaptureTimer() {
     captureState.captureTimerRemaining -= 1;
     if (captureState.captureTimerRemaining <= 0) {
       clearCaptureTimer();
-      setStatus("Знімаю фото…");
+      setStatus(t("sess-taking-photo"));
       captureFrameToBlob(onCaptureReady);
       return;
     }
-    btnCaptureTimer.textContent = `Скасувати (${captureState.captureTimerRemaining} с)`;
-    setStatus(`Автозйомка через ${captureState.captureTimerRemaining} с…`);
+    btnCaptureTimer.textContent = t("sess-cancel-timer-btn", { sec: captureState.captureTimerRemaining });
+    setStatus(t("sess-timer-countdown", { sec: captureState.captureTimerRemaining }));
   }, 1000);
 }
 
@@ -880,7 +897,7 @@ export function retakeFrontPhoto() {
   captureState.step = 1;
   resetAutoCaptureUi();
   updateUiStep();
-  setStatus("Перезйомка анфасу: увімкніть камеру та встаньте в позу.");
+  setStatus(t("sess-retake-front-status"));
   void startCamera();
 }
 
@@ -895,6 +912,6 @@ export function retakeSidePhoto() {
   captureState.step = captureState.frontBlob ? 2 : 1;
   resetAutoCaptureUi();
   updateUiStep();
-  setStatus("Перезйомка профілю: увімкніть камеру та встаньте в позу.");
+  setStatus(t("sess-retake-side-status"));
   void startCamera();
 }

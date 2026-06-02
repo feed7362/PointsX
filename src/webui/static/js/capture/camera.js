@@ -1,26 +1,20 @@
-/**
- * getUserMedia helpers: secure-context checks, mobile constraint fallbacks, UA hints.
- */
+import { t } from "./i18n.js";
 
-/** @returns {string | null} Ukrainian message when camera API cannot be used. */
+/** @returns {string | null} Ukrainian/English message when camera API cannot be used. */
 export function cameraUnavailableReason() {
   if (!navigator.mediaDevices?.getUserMedia) {
     if (!window.isSecureContext) {
       const host = window.location.hostname || "";
       const port = window.location.port ? `:${window.location.port}` : "";
-      return (
-        "Камера в браузері потребує захищеного з'єднання (HTTPS) або localhost. " +
-        `Зараз відкрито: ${window.location.protocol}//${host}${port}. ` +
-        "На телефоні в локальній мережі запустіть сервер з HTTPS (див. RUN-WEBUI.md) " +
-        "або завантажте фото з галереї замість камери."
-      );
+      const url = `${window.location.protocol}//${host}${port}`;
+      return t("camera-https-warning", { url });
     }
-    return "Цей браузер не підтримує доступ до камери. Спробуйте Chrome або Safari або завантажте фото.";
+    return t("camera-browser-unsupported");
   }
   return null;
 }
 
-/** Map DOMException / Error to a short Ukrainian hint. */
+/** Map DOMException / Error to a short hint. */
 export function cameraErrorMessage(err) {
   const name = err?.name || "";
   const msg = err?.message ? String(err.message) : String(err);
@@ -28,21 +22,18 @@ export function cameraErrorMessage(err) {
     return cameraUnavailableReason() || msg;
   }
   if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-    return (
-      "Доступ до камери заборонено. Дозвольте камеру для цього сайту в налаштуваннях браузера " +
-      "(іконка замка / «Дозволи сайту») і натисніть «Увімкнути камеру» знову."
-    );
+    return t("camera-permission-denied");
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-    return "Камеру не знайдено на цьому пристрої.";
+    return t("camera-not-found");
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
-    return "Камера зайнята іншим застосунком або недоступна. Закрийте інші програми з камерою.";
+    return t("camera-busy");
   }
   if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
-    return "Камера не підтримує обрані параметри. Спробуйте ще раз — застосунок спробує простіший режим.";
+    return t("camera-params-unsupported");
   }
-  return msg || "Невідома помилка камери.";
+  return msg || t("camera-unknown-error");
 }
 
 const CONSTRAINT_ATTEMPTS = [

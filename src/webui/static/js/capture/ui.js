@@ -7,6 +7,8 @@ import { getCaptureDom } from "./dom.js";
 import { speakPoseHint } from "./speech.js";
 import { resyncVisibleCaptureThumbs } from "./thumbLayout.js";
 
+import { t } from "./i18n.js";
+
 export function setStatus(msg, isError) {
   const { statusEl } = getCaptureDom();
   statusEl.textContent = msg || "";
@@ -48,13 +50,11 @@ export function updateCaptureReviewUi() {
 export function updateUiStep() {
   const { stepLabel, btnMeasure } = getCaptureDom();
   if (captureState.frontBlob && captureState.sideBlob && captureState.suspendPoseLoopAfterComplete) {
-    stepLabel.textContent =
-      "Обидва знімки в превʼю";
+    stepLabel.textContent = t("both-photos-preview");
   } else if (captureState.step === 1) {
-    stepLabel.textContent = "Крок 1 з 2: анфас — пахви відкриті, ноги приблизно на ширині плечей";
+    stepLabel.textContent = t("step-1-label");
   } else {
-    stepLabel.textContent =
-      "Крок 2 з 2: профіль — боком до камери, руки вперед на ~45° ";
+    stepLabel.textContent = t("step-2-label");
   }
   btnMeasure.disabled = !(captureState.frontBlob && captureState.sideBlob);
   updateCaptureReviewUi();

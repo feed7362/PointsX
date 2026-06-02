@@ -5,11 +5,10 @@
 
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
+import { t } from "./i18n.js";
 
 const POSE_VOICE_MIN_INTERVAL_MS = 1800;
 const POSE_VOICE_REPEAT_MS = 9000;
-
-const COUNTDOWN_DIGIT_UK = { 3: "три", 2: "два", 1: "один" };
 
 /** Bumped on cancel to drop stale async /api/tts completions. */
 let speakGeneration = 0;
@@ -95,7 +94,7 @@ export function primeVoiceAfterUserGesture() {
 
   // Warm up the server TTS function with a short text so the cold start happens now,
   // not during the first real spoken message. Result lands in audioBlobCache automatically.
-  void fetchTtsMp3Blob("готово").catch(() => {
+  void fetchTtsMp3Blob(t("countdown-ready")).catch(() => {
     /* warmup failure is silent — fallback voice will be used if needed */
   });
 }
@@ -179,16 +178,25 @@ export function ensureUkVoiceList() {
 
 function speakWithBrowserUtterance(text, { rate = 0.9, pitch = 1.04, volume = 0.92 } = {}) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  ensureUkVoiceList();
+  const isEn = !/[\u0400-\u04FF]/.test(text);
+  if (!isEn) {
+    ensureUkVoiceList();
+  }
   try {
-    if (captureState.cachedUkVoice === undefined) captureState.cachedUkVoice = pickPleasantUkVoice();
-    window.speechSynthesis.getVoices();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "uk-UA";
-    if (captureState.cachedUkVoice) {
-      u.voice = captureState.cachedUkVoice;
-      if (captureState.cachedUkVoice.lang && /^uk/i.test(captureState.cachedUkVoice.lang))
-        u.lang = captureState.cachedUkVoice.lang;
+    if (isEn) {
+      u.lang = "en-US";
+      const voices = window.speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang && /^en\b/i.test(v.lang.trim()));
+      if (enVoice) u.voice = enVoice;
+    } else {
+      u.lang = "uk-UA";
+      if (captureState.cachedUkVoice === undefined) captureState.cachedUkVoice = pickPleasantUkVoice();
+      if (captureState.cachedUkVoice) {
+        u.voice = captureState.cachedUkVoice;
+        if (captureState.cachedUkVoice.lang && /^uk/i.test(captureState.cachedUkVoice.lang))
+          u.lang = captureState.cachedUkVoice.lang;
+      }
     }
     u.rate = rate;
     u.pitch = pitch;
@@ -231,7 +239,10 @@ export function speakImmediateUk(text) {
 /** Speak the Ukrainian word for countdown digit 3/2/1. */
 export function speakCountdownDigit(n) {
   cancelSpeechSynthesis();
-  const w = COUNTDOWN_DIGIT_UK[n];
+  let w = "";
+  if (n === 3) w = t("countdown-three");
+  else if (n === 2) w = t("countdown-two");
+  else if (n === 1) w = t("countdown-one");
   if (w) speakImmediateUk(w);
 }
 

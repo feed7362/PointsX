@@ -3,6 +3,7 @@
  */
 export const captureState = {
   stream: null,
+  isMirrored: true,
   step: 1,
   /** @type {Blob | null} */
   frontBlob: null,

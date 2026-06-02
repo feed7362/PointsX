@@ -16,6 +16,7 @@ import * as overlay from "./capture/overlay.js";
 import * as ui from "./capture/ui.js";
 import * as tailoring from "./capture/tailoring.js";
 import { resyncVisibleCaptureThumbs } from "./capture/thumbLayout.js";
+import { initI18n, setLang, t } from "./capture/i18n.js";
 
 /** Render top reference canvases using the same drawing code as live overlay. */
 function renderReferenceGuides() {
@@ -95,6 +96,8 @@ function renderThumbPlaceholders() {
   }
 }
 
+initI18n();
+
 applyReloadGuideQueryParam();
 loadGuideGeometry();
 renderReferenceGuides();
@@ -169,9 +172,28 @@ function initCaptureApp() {
   tailoring.ensureSizeTabsWired();
   tailoring.attachMeasureHandler();
 
+  dom.langBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setLang(btn.dataset.lang);
+    });
+  });
+
+  window.addEventListener("langchanged", () => {
+    renderReferenceGuides();
+    renderThumbPlaceholders();
+    ui.updateUiStep();
+    tailoring.renderGarmentStrip();
+    tailoring.refreshTailoringView();
+    if (captureState.poseLandmarker) {
+      ui.setPoseStatusVisual(t("pose-model-ready"), "ok");
+    } else if (captureState.poseLoadError) {
+      ui.setPoseStatusVisual(t("pose-model-failed"), "bad");
+    }
+  });
+
   void session.loadPoseLandmarker().then(() => {
-    if (captureState.poseLandmarker) ui.setPoseStatus("Модель пози готова. Увімкніть камеру.", "ok");
-    else if (captureState.poseLoadError) ui.setPoseStatus("Модель пози не завантажена (офлайн?).", "bad");
+    if (captureState.poseLandmarker) ui.setPoseStatus(t("pose-model-ready"), "ok");
+    else if (captureState.poseLoadError) ui.setPoseStatus(t("pose-model-failed"), "bad");
   });
 
   const thumbsWrap = document.getElementById("thumbs-wrap");

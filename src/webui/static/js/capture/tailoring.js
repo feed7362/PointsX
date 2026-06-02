@@ -14,6 +14,7 @@ import { sizeAndPatternHandler, validateEnvelope } from "../patternEngine.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { setStatus, updateUiStep } from "./ui.js";
+import { t, translateGarment, translateBackendError } from "./i18n.js";
 
 // ---------------------------------------------------------------------------
 // Catalog loading
@@ -22,7 +23,7 @@ import { setStatus, updateUiStep } from "./ui.js";
 export async function loadTailoringCatalog() {
   if (captureState.tailoringCatalog) return captureState.tailoringCatalog;
   const res = await fetch("/static/data/tailoring_config.json?v=3");
-  if (!res.ok) throw new Error("Не вдалося завантажити tailoring_config.json");
+  if (!res.ok) throw new Error(t("failed-load-config"));
   captureState.tailoringCatalog = await res.json();
   return captureState.tailoringCatalog;
 }
@@ -31,10 +32,10 @@ export async function loadTailoringCatalog() {
 // Utility
 // ---------------------------------------------------------------------------
 
-export function sexLabelUk(sex) {
-  if (sex === "male")   return "чоловік";
-  if (sex === "female") return "жінка";
-  return "інше";
+export function sexLabel(sex) {
+  if (sex === "male")   return t("sex-male-label");
+  if (sex === "female") return t("sex-female-label");
+  return t("sex-other-label");
 }
 
 export function escapeHtml(s) {
@@ -119,17 +120,17 @@ const PIPELINE_VIZ_ROWS = [
   {
     view: "front",
     items: [
-      ["viz_front_pose_png_b64", "Анфас — поза"],
-      ["viz_front_seg_png_b64", "Анфас — силует"],
-      ["viz_front_measures_png_b64", "Анфас — лінії зняття мірок"],
+      ["viz_front_pose_png_b64", "viz-front-pose"],
+      ["viz_front_seg_png_b64", "viz-front-seg"],
+      ["viz_front_measures_png_b64", "viz-front-measures"],
     ],
   },
   {
     view: "side",
     items: [
-      ["viz_side_pose_png_b64", "Профіль — поза"],
-      ["viz_side_seg_png_b64", "Профіль — силует"],
-      ["viz_side_measures_png_b64", "Профіль — лінії зняття мірок"],
+      ["viz_side_pose_png_b64", "viz-side-pose"],
+      ["viz_side_seg_png_b64", "viz-side-seg"],
+      ["viz_side_measures_png_b64", "viz-side-measures"],
     ],
   },
 ];
@@ -156,10 +157,10 @@ function renderPipelineModelViz(derived) {
       const fig = document.createElement("figure");
       fig.className = "model-viz-item";
       const cap = document.createElement("figcaption");
-      cap.textContent = caption;
+      cap.textContent = t(caption);
       const img = document.createElement("img");
       img.src = "data:image/png;base64," + b64;
-      img.alt = caption;
+      img.alt = t(caption);
       fig.append(cap, img);
       rowEl.appendChild(fig);
     }
@@ -206,14 +207,18 @@ function garmentIconUrl(garmentId) {
 // Verdict badge helpers
 // ---------------------------------------------------------------------------
 
-const VERDICT_LABEL = {
-  unanimous:      "Однозначно",
-  unanimous_edge: "Однозначно (крайній розмір)",
-  majority:       "Більшість 2/3",
-  majority_edge:  "Більшість (крайній розмір)",
-  no_consensus:   "Неоднозначно",
-  insufficient:   "Недостатньо даних",
-};
+function getVerdictLabel(verdict) {
+  const keys = {
+    unanimous:      "verdict-unanimous",
+    unanimous_edge: "verdict-unanimous-edge",
+    majority:       "verdict-majority",
+    majority_edge:  "verdict-majority-edge",
+    no_consensus:   "verdict-no-consensus",
+    insufficient:   "verdict-insufficient",
+  };
+  const key = keys[verdict];
+  return key ? t(key) : verdict;
+}
 
 const VERDICT_CLASS = {
   unanimous:      "verdict--unanimous",
@@ -247,7 +252,7 @@ function renderConsensusBlock(container, block, regionLabel) {
     primary.textContent = block.rangeCode ?? "—";
     const indication = document.createElement("span");
     indication.className = "size-indication";
-    indication.textContent = `орієнт. ${block.code}`;
+    indication.textContent = t("approx-verdict", { code: block.code });
     primary.appendChild(indication);
   } else if (block.verdict === "insufficient") {
     primary.textContent = block.provisional?.code ?? "—";
@@ -259,14 +264,14 @@ function renderConsensusBlock(container, block, regionLabel) {
   // Verdict badge
   const badge = document.createElement("span");
   badge.className = `verdict-badge ${VERDICT_CLASS[block.verdict] ?? ""}`;
-  badge.textContent = VERDICT_LABEL[block.verdict] ?? block.verdict;
+  badge.textContent = getVerdictLabel(block.verdict);
   sec.appendChild(badge);
 
   // Between-sizes note
   if (block.between) {
     const bw = document.createElement("p");
     bw.className = "size-between";
-    bw.textContent = `На межі розмірів: ${block.between[0]} / ${block.between[1]}`;
+    bw.textContent = t("borderline-size", { size1: block.between[0], size2: block.between[1] });
     sec.appendChild(bw);
   }
 
@@ -288,12 +293,14 @@ function renderConsensusBlock(container, block, regionLabel) {
 
       const label = document.createElement("span");
       label.className = "vote-label";
-      label.textContent = escapeHtml(v.label || v.mid);
+      // Try to translate measurement ID v.mid, fallback to v.label or v.mid
+      const labelText = t(v.mid) !== v.mid ? t(v.mid) : (v.label || v.mid);
+      label.textContent = escapeHtml(labelText);
 
       const result = document.createElement("span");
       result.className = "vote-result";
       if (isMissing) {
-        result.textContent = v.missing === "grid" ? "немає таблиці" : "немає мірки";
+        result.textContent = v.missing === "grid" ? t("no-table") : t("no-measurement");
       } else {
         result.textContent = v.code ?? "—";
         if (isLowConf) result.textContent += " ⚠";
@@ -384,12 +391,14 @@ function renderPatternBlock(pattern, rawBody, seamBody) {
   for (const key of order) {
     if (raw[key] == null) continue;
     const tr1 = document.createElement("tr");
-    tr1.innerHTML = `<td>${escapeHtml(PATTERN_LABELS_UK[key] ?? key)}</td><td>${raw[key]}</td>`;
+    const label = t(key) !== key ? t(key) : (PATTERN_LABELS_UK[key] ?? key);
+    tr1.innerHTML = `<td>${escapeHtml(label)}</td><td>${raw[key]}</td>`;
     rawBody.appendChild(tr1);
 
     if (seam[key] != null) {
       const tr2 = document.createElement("tr");
-      tr2.innerHTML = `<td>${escapeHtml(PATTERN_LABELS_UK[key] ?? key)}</td><td>${seam[key]}</td>`;
+      const labelSeam = t(key) !== key ? t(key) : (PATTERN_LABELS_UK[key] ?? key);
+      tr2.innerHTML = `<td>${escapeHtml(labelSeam)}</td><td>${seam[key]}</td>`;
       seamBody.appendChild(tr2);
     }
   }
@@ -443,8 +452,9 @@ export function refreshTailoringView() {
   for (const row of orderMeasurementsManual(garmentRows)) {
     if (!row) continue;
     const tr = document.createElement("tr");
+    const label = t(row.id) !== row.id ? t(row.id) : (row.label_uk ?? row.id);
     tr.innerHTML =
-      "<td>" + escapeHtml(row.label_uk ?? row.id) +
+      "<td>" + escapeHtml(label) +
       "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
     tailoringMeasuresBody.appendChild(tr);
   }
@@ -468,7 +478,7 @@ export function refreshTailoringView() {
   } catch (err) {
     console.error("[tailoring] sizing failed:", err);
     [panelUa, panelEu, panelUs].forEach((p) => {
-      if (p) p.innerHTML = `<p class="size-warn">Помилка: ${escapeHtml(err?.message ?? String(err))}</p>`;
+      if (p) p.innerHTML = `<p class="size-warn">${escapeHtml(t("sizing-failed", { msg: err?.message ?? String(err) }))}</p>`;
     });
     if (patternDetails) patternDetails.hidden = true;
   }
@@ -532,7 +542,8 @@ export function renderGarmentStrip() {
     btn.dataset.garmentId = g.id;
     btn.setAttribute("role", "radio");
     btn.setAttribute("aria-checked", g.id === captureState.selectedGarmentId ? "true" : "false");
-    btn.setAttribute("aria-label", g.label_uk);
+    const label = translateGarment(g.id, g.label_uk);
+    btn.setAttribute("aria-label", label);
 
     const img = document.createElement("img");
     img.className = "garment-icon";
@@ -542,7 +553,7 @@ export function renderGarmentStrip() {
     btn.appendChild(img);
 
     const cap = document.createElement("span");
-    cap.textContent = g.label_uk;
+    cap.textContent = label;
     btn.appendChild(cap);
 
     btn.addEventListener("click", () => {
@@ -613,19 +624,19 @@ export function attachMeasureHandler() {
   async function runMeasureRequest(mode = "capture") {
     const useTestImages = mode === "test";
     if (!useTestImages && (!captureState.frontBlob || !captureState.sideBlob)) {
-      setStatus("Потрібні обидва знімки — анфас і профіль.", true);
+      setStatus(t("err-need-both-photos"), true);
       return;
     }
     if (!resultsSection || !resultsBody) {
-      setStatus("Помилка: немає контейнера результатів у розмітці.", true);
+      setStatus(t("err-missing-results-container"), true);
       return;
     }
     const heightCmNum = Number(String(heightInput.value).replace(",", "."));
     if (!Number.isFinite(heightCmNum) || heightCmNum < 100 || heightCmNum > 250) {
-      setStatus("Вкажіть зріст від 100 до 250 см.", true);
+      setStatus(t("err-height-range"), true);
       return;
     }
-    setStatus(useTestImages ? "Тестовий розрахунок…" : "Обчислення…");
+    setStatus(useTestImages ? t("status-test-calc") : t("status-calculating"));
     resultsSection.hidden = true;
     const modelVizEl = document.getElementById("model-viz");
     if (modelVizEl) modelVizEl.hidden = true;
@@ -639,21 +650,21 @@ export function attachMeasureHandler() {
       measureLoading.hidden = false;
       measureLoading.scrollIntoView({ behavior: "smooth", block: "center" });
       if (measureLoadingTitle) {
-        measureLoadingTitle.textContent = useTestImages ? "Тестовий розрахунок..." : "Обчислення мірок...";
+        measureLoadingTitle.textContent = useTestImages ? t("loading-test-title") : t("loading-measure-title");
       }
       if (measureLoadingStep) {
-        measureLoadingStep.textContent = useTestImages ? "Генерація демо-даних..." : "Підготовка даних...";
+        measureLoadingStep.textContent = useTestImages ? t("loading-test-step") : t("loading-measure-step");
       }
     }
 
     let progressTimer = null;
     if (!useTestImages && measureLoadingStep) {
       const steps = [
-        { time: 1000, text: "Надсилання знімків на сервер..." },
-        { time: 3500, text: "Локалізація ключових точок (YOLO Pose)..." },
-        { time: 6500, text: "Сегментація силуету тіла..." },
-        { time: 9500, text: "Розрахунок обʼємів та антропометрії..." },
-        { time: 13000, text: "Завершення обчислень..." }
+        { time:  1000, text: t("step-send-photos") },
+        { time:  7000, text: t("step-yolo-pose") },
+        { time: 14000, text: t("step-yolo-seg") },
+        { time: 21000, text: t("step-calc-anthropometry") },
+        { time: 28000, text: t("step-finish") }
       ];
       let currentStep = 0;
       const updateStep = () => {
@@ -689,7 +700,7 @@ export function attachMeasureHandler() {
       const res = await fetch(measureUrl, { method: "POST", body: fd });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(formatMeasureHttpError(res, text));
+        throw new Error(translateBackendError(formatMeasureHttpError(res, text)));
       }
       const data = await res.json();
       console.log("[FitMeasure AI] Full model output:", data);
@@ -710,11 +721,7 @@ export function attachMeasureHandler() {
           Array.isArray(data.warnings) && data.warnings.length
             ? " " + data.warnings.join(" ")
             : "";
-        setStatus(
-          "Сервер повернув порожній список мірок. Спробуйте інші знімки або перевірте позу й освітлення." +
-            apiWarn,
-          true
-        );
+        setStatus(t("err-empty-measurements") + apiWarn, true);
         return;
       }
 
@@ -726,8 +733,9 @@ export function attachMeasureHandler() {
       resultsBody.innerHTML = "";
       for (const row of measurements) {
         const tr = document.createElement("tr");
+        const label = t(row.id) !== row.id ? t(row.id) : (row.label_uk ?? row.id);
         tr.innerHTML =
-          "<td>" + escapeHtml(row.label_uk ?? row.id) +
+          "<td>" + escapeHtml(label) +
           "</td><td>" + escapeHtml(String(row.value_cm)) + "</td>";
         resultsBody.appendChild(tr);
       }
@@ -740,7 +748,7 @@ export function attachMeasureHandler() {
         captureState.selectedGarmentId = captureState.tailoringCatalog.garments[0]?.id || "shirt";
 
         if (tailoringIntro) {
-          tailoringIntro.textContent = `Зріст: ${heightCm} см. Стать: ${sexLabelUk(sex)}. Оберіть тип одягу для орієнтовних розмірів (Україна / Європа / США).`;
+          tailoringIntro.textContent = t("sizing-report-intro", { height: heightCm, sex: sexLabel(sex) });
           tailoringIntro.hidden = false;
         }
         if (garmentStripWrap)   garmentStripWrap.hidden   = false;
@@ -751,7 +759,7 @@ export function attachMeasureHandler() {
         refreshTailoringView();
       } catch (cfgErr) {
         if (tailoringIntro) {
-          tailoringIntro.textContent = "Пошив і сітки: " + (cfgErr?.message ?? String(cfgErr));
+          tailoringIntro.textContent = t("sizing-pattern-error", { msg: cfgErr?.message ?? String(cfgErr) });
           tailoringIntro.hidden = false;
         }
         if (garmentStripWrap)   garmentStripWrap.hidden   = true;
@@ -760,11 +768,11 @@ export function attachMeasureHandler() {
       }
 
       resultsSection.hidden = false;
-      setStatus("Готово.");
+      setStatus(t("status-done"));
     } catch (e) {
       const mv = document.getElementById("model-viz");
       if (mv) mv.hidden = true;
-      setStatus("Помилка запиту: " + (e?.message ?? String(e)), true);
+      setStatus(t("err-request-failed", { msg: e?.message ?? String(e) }), true);
     } finally {
       if (progressTimer) clearTimeout(progressTimer);
       if (measureLoading) measureLoading.hidden = true;

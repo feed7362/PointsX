@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,9 @@ _TTS_CACHE: OrderedDict[str, bytes] = OrderedDict()
 _TTS_CACHE_MAX = 64
 
 
-def tts_voice() -> str:
+def tts_voice(text: str = "") -> str:
+    if text and not re.search(r"[\u0400-\u04FF]", text):
+        return "en-US-AvaNeural"
     return os.environ.get("POINTSX_TTS_VOICE", _DEFAULT_VOICE).strip() or _DEFAULT_VOICE
 
 
@@ -35,7 +38,7 @@ async def synthesize_uk_speech_mp3(text: str) -> bytes:
 
     import edge_tts
 
-    voice = tts_voice()
+    voice = tts_voice(stripped)
     key = f"{voice}\n{stripped}"
     if key in _TTS_CACHE:
         _TTS_CACHE.move_to_end(key)

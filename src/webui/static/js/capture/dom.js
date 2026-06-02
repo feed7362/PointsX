@@ -55,6 +55,7 @@ function buildDom() {
     patternDetails: /** @type {HTMLDetailsElement | null} */ (document.getElementById("pattern-details")),
     patternRawBody: /** @type {HTMLElement | null} */ (document.getElementById("pattern-raw-body")),
     patternSeamBody: /** @type {HTMLElement | null} */ (document.getElementById("pattern-seam-body")),
+    langBtns: document.querySelectorAll(".lang-btn"),
   };
 }
 
