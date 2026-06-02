@@ -38,7 +38,7 @@ from typing import Any, Literal
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -646,6 +646,7 @@ async def index() -> Any:
 @app.post("/api/measure", response_model=MeasurementEnvelope)
 async def measure(
     request: Request,
+    background_tasks: BackgroundTasks,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
     pose_backend: Literal["custom", "coco"] = Form("coco"),
@@ -692,11 +693,16 @@ async def measure(
     def _archive(envelope_obj, *, outcome: str) -> None:
         """Persist photos + envelope to whichever store(s) are configured.
 
-        Order of preference:
-          1. Local filesystem (LOCAL_DATA_DIR — HF Storage Bucket mount)
-          2. S3-compatible bucket (ELK_*/S3_*/R2_*/... env vars)
+        Order of operations (latency-aware):
+          1. Local filesystem (LOCAL_DATA_DIR) — runs INLINE, ~50 ms.
+             Cheap, useful to have the files on disk before the response
+             returns in case anything inspects them right away.
+          2. S3-compatible bucket (ELK_*/S3_*/R2_*/...) — scheduled as a
+             FastAPI BackgroundTask. Runs AFTER the HTTP response is sent
+             so the network round-trip to the bucket doesn't sit on the
+             critical path. Failures are still logged.
 
-        Both can be enabled simultaneously; the response is never blocked.
+        Either path is independent; both can be enabled simultaneously.
         """
         import sys
         try:
@@ -719,11 +725,29 @@ async def measure(
 
             local_ok = storage.archive_measurement_local(**args)
             s3_enabled = storage.is_enabled()
-            s3_ok = storage.archive_measurement(**args) if s3_enabled else False
+            s3_scheduled = False
+            if s3_enabled:
+                def _bg_s3_upload(_args=args, _outcome=outcome, _rid=request_id):
+                    import sys as _sys
+                    try:
+                        ok = storage.archive_measurement(**_args)
+                        print(
+                            f"[archive hook bg] outcome={_outcome} request_id={_rid} s3_ok={ok}",
+                            file=_sys.stderr,
+                            flush=True,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        print(
+                            f"[archive hook bg] raised: {type(exc).__name__}: {exc}",
+                            file=_sys.stderr,
+                            flush=True,
+                        )
+                background_tasks.add_task(_bg_s3_upload)
+                s3_scheduled = True
 
             print(
                 f"[archive hook] outcome={outcome} request_id={request_id} "
-                f"local={local_ok} s3_enabled={s3_enabled} s3_ok={s3_ok}",
+                f"local={local_ok} s3_scheduled={s3_scheduled}",
                 file=sys.stderr,
                 flush=True,
             )
