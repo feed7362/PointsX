@@ -548,6 +548,14 @@ async def index() -> FileResponse:
     return FileResponse(index_path)
 
 
+@app.get("/dataset.html")
+async def dataset() -> FileResponse:
+    dataset_path = STATIC_DIR / "dataset.html"
+    if not dataset_path.is_file():
+        raise HTTPException(status_code=500, detail="Missing dataset page")
+    return FileResponse(dataset_path)
+
+
 async def _proxy_measure_to_hf(
     height_cm: float,
     sex: str,

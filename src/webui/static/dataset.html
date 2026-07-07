@@ -4,37 +4,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FitMeasure AI — мірки</title>
-  <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
+  <title>FitMeasure AI — збір датасету</title>
+  <link rel="stylesheet" href="/static/css/styles.css?v=dataset2" />
 </head>
 
-<body>
+<body data-page-title="dataset-title">
   <header class="header">
+    <div style="margin-bottom: 1rem;">
+      <a href="/" style="color: var(--accent); text-decoration: none; font-size: 0.9rem;">
+        <span data-i18n="dataset-btn-home">← Повернутись на головну</span>
+      </a>
+    </div>
     <div class="header-top">
-      <h1>FitMeasure AI</h1>
+      <h1 data-i18n="dataset-header-title">Долучитись до збору датасету</h1>
       <div class="lang-toggle" role="group" aria-label="Language / Мова">
         <button type="button" class="lang-btn active" data-lang="uk">UA</button>
         <button type="button" class="lang-btn" data-lang="en">EN</button>
       </div>
     </div>
-    <p class="sub" data-i18n="header-sub">
-      Дві фотографії, зріст, стать → результат з сервера, розміри за сітками. Поза перевіряється в браузері.
+    <p class="sub" data-i18n="dataset-header-sub">
+      Допоможіть покращити точність нейромережі, надавши свої фото та мірки
     </p>
-    <div class="header-dataset-cta">
-      <a href="/dataset.html" class="btn btn-dataset-link" data-i18n="btn-dataset-cta">
-        Долучитись до збору датасету
-      </a>
-    </div>
   </header>
 
   <main class="layout">
+    <!-- Guidelines & Consent -->
+    <section class="card dataset-guidelines" aria-labelledby="guidelines-heading">
+      <h2 id="guidelines-heading" data-i18n="dataset-guidelines-heading">Гайдлайн і згоди</h2>
+      
+      <div class="dataset-guideline-text">
+        <p data-i18n="dataset-guidelines-purpose" data-i18n-html="true">
+          <strong>Мета збору:</strong> Фотографії та мірки збираються виключно для навчання нейромережевого класифікатора 
+          визначення розмірів одягу. Ваші фото будуть зашифровані перед завантаженням і зберігатимуться в захищеному вигляді.
+        </p>
+        <p data-i18n="dataset-guidelines-privacy" data-i18n-html="true">
+          <strong>Конфіденційність:</strong> Всі фотографії шифруються на вашому пристрої перед відправкою (end-to-end encryption). 
+          Ми зберігаємо зашифровані файли, які можна розшифрувати тільки офлайн-ключем. Мірки зберігаються як анонімні дані без прив'язки до особистості.
+        </p>
+      </div>
+
+      <div class="dataset-consent-group">
+        <label class="dataset-consent-item">
+          <input type="checkbox" id="consent-18plus" required />
+          <span data-i18n="dataset-consent-18plus">Мені є 18 років або більше</span>
+        </label>
+
+        <label class="dataset-consent-item">
+          <input type="checkbox" id="consent-terms" required />
+          <span data-i18n="dataset-consent-terms">
+            Я погоджуюсь з умовами збору даних і розумію, що мої зашифровані фото та мірки будуть використані для навчання нейромережі
+          </span>
+        </label>
+
+        <div class="field">
+          <label for="dob" data-i18n="dataset-label-dob">Дата народження</label>
+          <div class="date-field">
+            <input
+              type="text"
+              id="dob"
+              name="dob"
+              inputmode="numeric"
+              autocomplete="bday"
+              required
+              maxlength="10"
+              placeholder="ДД.ММ.РРРР"
+            />
+            <input type="date" id="dob-picker" class="date-field__native" tabindex="-1" aria-hidden="true" />
+            <button type="button" id="dob-calendar" class="date-field__btn" aria-label="Відкрити календар">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reference poses (same as index.html) -->
     <section class="card references" aria-labelledby="ref-heading" id="section-references">
       <h2 id="ref-heading" data-i18n="ref-heading">Приклади правильної пози</h2>
       <p class="ref-intro" data-i18n="ref-intro" data-i18n-html="true">
-        <strong>Анфас:</strong> ноги приблизно на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від
-        корпусу.
-        <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло,
-        руки злегка відведені на ~15–20° від корпусу.
+        <strong>Анфас:</strong> ноги приблизно на ширині плечей, пахви відкриті, руки злегка відведені на ~15–20° від корпусу.
+        <br><strong>Профіль:</strong> стоїте боком, голова вздовж тіла, дивіться в той самий бік, куди звернене тіло, руки злегка відведені на ~15–20° від корпусу.
         <br>Відстань до камери ~2&nbsp;м, повний зріст у кадрі.
       </p>
       <div class="ref-grid">
@@ -54,6 +107,7 @@
       <button type="button" class="btn primary wide" id="btn-to-capture" data-i18n="btn-to-capture">Продовжити до зйомки</button>
     </section>
 
+    <!-- Parameters (height + sex) -->
     <section class="card" aria-labelledby="params-heading" id="section-params">
       <h2 id="params-heading" data-i18n="params-heading">Параметри</h2>
       <div class="field">
@@ -68,9 +122,9 @@
           <option value="other" data-i18n="sex-other">Інше</option>
         </select>
       </div>
-
     </section>
 
+    <!-- Capture (replicate IDs from index.html for capture modules) -->
     <section class="card capture" aria-labelledby="capture-heading" id="section-capture">
       <h2 id="capture-heading" data-i18n="capture-heading">Зйомка</h2>
       <p id="step-label" class="step-label">Крок 1 з 2: анфас</p>
@@ -146,117 +200,49 @@
           <button type="button" id="btn-retake-side" class="btn" data-i18n="btn-retake-side">Перезняти профіль</button>
         </div>
       </div>
-      <button type="button" id="btn-measure" class="btn primary wide" disabled data-i18n="btn-measure">Розрахувати мірки</button>
-      <button type="button" id="btn-measure-test" class="btn wide" data-i18n="btn-measure-test">Тест результатів без фото</button>
-      <div id="measure-loading" class="measure-loading" hidden>
-        <div class="measure-loading-spinner-wrap">
-          <div class="measure-loading-spinner"></div>
-          <div class="measure-loading-glow"></div>
-        </div>
-        <div class="measure-loading-content">
-          <p id="measure-loading-title" class="measure-loading-title">Запуск нейромереж...</p>
-          <p id="measure-loading-step" class="measure-loading-step">Підготовка даних для надсилання</p>
-        </div>
-      </div>
+      <!-- Hidden measure button to satisfy ui.updateUiStep() expectations -->
+      <button type="button" id="btn-measure" class="btn primary wide" disabled hidden>Hidden measure button</button>
     </section>
 
-    <section class="card results" aria-labelledby="results-heading" hidden id="results-section">
-      <h2 id="results-heading" data-i18n="results-heading">Результат</h2>
-
-      <div class="model-viz" id="model-viz" hidden>
-        <h3 class="tailoring-sub" data-i18n="model-viz-heading">Візуалізація моделей</h3>
-        <p class="model-viz-hint" data-i18n="model-viz-hint">YOLO pose та сегментація по кожному знімку (як бачить сервер).</p>
-        <div class="model-viz-grid" id="model-viz-grid" role="group" aria-label="Поза та силует"></div>
-      </div>
-
-      <div class="tailoring-intro" id="tailoring-intro" hidden></div>
-
-      <div class="garment-strip-wrap" id="garment-strip-wrap" hidden>
-        <p class="tailoring-hint" id="garment-strip-label" data-i18n="garment-strip-label">Тип одягу</p>
-        <div class="garment-strip" id="garment-strip" role="radiogroup" aria-labelledby="garment-strip-label"></div>
-      </div>
-
-      <div class="tailoring-panels" id="tailoring-panels" hidden>
-        <div class="tailoring-col">
-          <h3 class="tailoring-sub" data-i18n="tailoring-measures-sub">Мірки для обраного виробу</h3>
-          <table class="measures measures-compact" id="tailoring-measures-table">
-            <thead>
-              <tr>
-                <th data-i18n="table-th-measurement">Показник</th>
-                <th data-i18n="table-th-cm">см</th>
-              </tr>
-            </thead>
-            <tbody id="tailoring-measures-body"></tbody>
-          </table>
-        </div>
-        <div class="tailoring-col">
-          <h3 class="tailoring-sub" data-i18n="size-grids-sub">Розмірні сітки (довідково)</h3>
-          <div class="size-tabs" role="tablist" aria-label="Регіональні сітки">
-            <button type="button" class="size-tab" role="tab" id="tab-ua" aria-selected="true" aria-controls="panel-ua"
-              tabindex="0" data-i18n="tab-ua">Україна (орієнт.)</button>
-            <button type="button" class="size-tab" role="tab" id="tab-eu" aria-selected="false" aria-controls="panel-eu"
-              tabindex="-1" data-i18n="tab-eu">Європа (орієнт.)</button>
-            <button type="button" class="size-tab" role="tab" id="tab-us" aria-selected="false" aria-controls="panel-us"
-              tabindex="-1" data-i18n="tab-us">США (орієнт.)</button>
-          </div>
-          <div id="panel-ua" class="size-panel" role="tabpanel" aria-labelledby="tab-ua"></div>
-          <div id="panel-eu" class="size-panel" role="tabpanel" aria-labelledby="tab-eu" hidden></div>
-          <div id="panel-us" class="size-panel" role="tabpanel" aria-labelledby="tab-us" hidden></div>
-        </div>
-      </div>
-
-      <details class="pattern-details" id="pattern-details" hidden>
-        <summary data-i18n="pattern-summary">Індивідуальні мірки для пошиття</summary>
-        <div class="pattern-grid">
-          <div class="pattern-col">
-            <h4 data-i18n="pattern-raw-heading">Базові розміри (тіло + припуски на вільність)</h4>
-            <table class="measures measures-compact">
-              <thead>
-                <tr>
-                  <th data-i18n="table-th-measurement">Параметр</th>
-                  <th data-i18n="table-th-cm">см</th>
-                </tr>
-              </thead>
-              <tbody id="pattern-raw-body"></tbody>
-            </table>
-          </div>
-          <div class="pattern-col">
-            <h4 data-i18n="pattern-seam-heading">З припусками на шви</h4>
-            <table class="measures measures-compact">
-              <thead>
-                <tr>
-                  <th data-i18n="table-th-measurement">Параметр</th>
-                  <th data-i18n="table-th-cm">см</th>
-                </tr>
-              </thead>
-              <tbody id="pattern-seam-body"></tbody>
-            </table>
-          </div>
-        </div>
-        <p class="pattern-hint" data-i18n="pattern-hint">Ці величини використовуються для індивідуального пошиття. Всі значення приблизні.</p>
-      </details>
-
-      <p class="tailoring-disclaimer" id="tailoring-disclaimer" hidden data-i18n="tailoring-disclaimer">
-        Розміри на вкладках — орієнтовні
+    <!-- Manual measurements -->
+    <section class="card dataset-measurements" aria-labelledby="measurements-heading" id="section-measurements">
+      <h2 id="measurements-heading" data-i18n="dataset-measurements-heading">Ваші мірки</h2>
+      <p class="dataset-measurements-intro" data-i18n="dataset-measurements-intro">
+        Введіть реальні мірки вашого тіла в сантиметрах. Ви можете редагувати кожне значення. Якщо якісь мірки виглядають 
+        нетиповими, поля будуть позначені жовтим — перевірте їх і натисніть «Надіслати дані» ще раз.
       </p>
+      <div id="measurements-container"></div>
 
-      <details class="all-measures-details" id="all-measures-details">
-        <summary data-i18n="all-measures-summary">Усі мірки (повна таблиця)</summary>
-        <table class="measures" id="results-table">
-          <thead>
-            <tr>
-              <th data-i18n="table-th-measurement">Показник</th>
-              <th data-i18n="table-th-val-cm">Значення (см)</th>
-            </tr>
-          </thead>
-          <tbody id="results-body"></tbody>
-        </table>
-      </details>
+      <div class="dataset-submit-footer" aria-labelledby="submit-heading">
+        <h2 id="submit-heading" class="sr-only">Відправка даних</h2>
+        <p id="dataset-status" class="status" role="status"></p>
+        <button type="button" id="btn-dataset-submit" class="btn primary wide" data-i18n="dataset-btn-submit">
+          Надіслати дані
+        </button>
+        <div id="dataset-loading" class="measure-loading" hidden>
+          <div class="measure-loading-spinner-wrap">
+            <div class="measure-loading-spinner"></div>
+            <div class="measure-loading-glow"></div>
+          </div>
+          <div class="measure-loading-content">
+            <p id="dataset-loading-title" class="measure-loading-title">Відправка даних...</p>
+            <p id="dataset-loading-step" class="measure-loading-step"></p>
+          </div>
+        </div>
+        <div id="dataset-success" class="dataset-success" hidden>
+          <h3 data-i18n="dataset-success-heading">Дякуємо!</h3>
+          <p data-i18n="dataset-success-message">
+            Ваші дані успішно надіслані і допоможуть покращити точність системи. Ваші фото зашифровані та захищені.
+          </p>
+          <p id="dataset-success-id" class="dataset-success-id"></p>
+          <a href="/" class="btn wide" data-i18n="dataset-btn-home">← Повернутись на головну</a>
+        </div>
+      </div>
     </section>
   </main>
 
   <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
-  <script type="module" src="/static/js/app.js?v=camera-https1"></script>
+  <script type="module" src="/static/js/dataset/app.js?v=dataset7"></script>
 </body>
 
 </html>

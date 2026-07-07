@@ -21,3 +21,6 @@ yolo12l-person-seg-extended.pt
 uv.lock
 .vercel
 .env*
+dataset_private_key.txt
+/dataset_manual
+dataset.zip

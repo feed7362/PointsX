@@ -28,6 +28,10 @@
       "dest": "/src/webui/static/frame-editor.html"
     },
     {
+      "src": "/dataset.html",
+      "dest": "/src/webui/static/dataset.html"
+    },
+    {
       "src": "/",
       "dest": "/src/webui/static/index.html"
     }

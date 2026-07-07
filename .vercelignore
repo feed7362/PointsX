@@ -1,33 +1,42 @@
-# Development tools and local-only files
+# Development tools
 .venv
-.venv_vercel_test
 .pytest_cache
 .dev-certs
 .git
 .cursor
 .claude
 
-# Large data/training artifacts
-dataset
-notebooks
-image
-screen
-tests
-deploy
-old_weights
+# Local operator tools (not deployed)
+/dataset-viewer
 
-# Model weights (too large for Vercel; loaded via env var paths at runtime)
+# Large data (exclude root folders only, not JS subdirectories)
+/dataset
+/dataset_manual
+/notebooks
+/image
+/screen
+/tests
+/deploy
+/old_weights
+.DS_Store
+*.zip
+
+# Model weights
 models
 
-# Python build artifacts
+# Python build artifacts  
 **/__pycache__
 **/*.pyc
 **/*.pyo
 
-# Lock files (installCommand uses requirements.txt directly)
+# Lock files
 pyproject.toml
 uv.lock
 
 # Documentation
 START.md
 RUN-WEBUI.md
+DATASET_COLLECTION.md
+
+# Scripts (operator tools only)
+scripts

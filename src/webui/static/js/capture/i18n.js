@@ -10,6 +10,10 @@ const translations = {
     uk: "Дві фотографії, зріст, стать → результат з сервера, розміри за сітками. Поза перевіряється в браузері.",
     en: "Two photos, height, sex → server result, size grids. Pose is checked in browser."
   },
+  "btn-dataset-cta": {
+    uk: "Долучитись до збору датасету",
+    en: "Join Dataset Collection"
+  },
   "ref-heading": {
     uk: "Приклади правильної пози",
     en: "Proper Pose Examples"
@@ -894,6 +898,196 @@ const translations = {
   "sess-retake-side-status": {
     uk: "Перезйомка профілю: увімкніть камеру та встаньте в позу.",
     en: "Retaking profile: turn on camera and stand in pose."
+  },
+
+  // Dataset collection page
+  "dataset-title": {
+    uk: "FitMeasure AI — збір датасету",
+    en: "FitMeasure AI — dataset collection"
+  },
+  "dataset-header-title": {
+    uk: "Долучитись до збору датасету",
+    en: "Join Dataset Collection"
+  },
+  "dataset-header-sub": {
+    uk: "Допоможіть покращити точність нейромережі, надавши свої фото та мірки",
+    en: "Help improve neural network accuracy by providing your photos and measurements"
+  },
+  "dataset-guidelines-heading": {
+    uk: "Гайдлайн і згоди",
+    en: "Guidelines & Consent"
+  },
+  "dataset-guidelines-purpose": {
+    uk: "<strong>Мета збору:</strong> Фотографії та мірки збираються виключно для навчання нейромережевого класифікатора визначення розмірів одягу. Ваші фото будуть зашифровані перед завантаженням і зберігатимуться в захищеному вигляді.",
+    en: "<strong>Collection purpose:</strong> Photos and measurements are collected exclusively for training a neural network classifier for clothing size determination. Your photos will be encrypted before upload and stored securely."
+  },
+  "dataset-guidelines-privacy": {
+    uk: "<strong>Конфіденційність:</strong> Всі фотографії шифруються на вашому пристрої перед відправкою (end-to-end encryption). Ми зберігаємо зашифровані файли, які можна розшифрувати тільки офлайн-ключем. Мірки зберігаються як анонімні дані без прив'язки до особистості.",
+    en: "<strong>Privacy:</strong> All photos are encrypted on your device before sending (end-to-end encryption). We store encrypted files that can only be decrypted with an offline key. Measurements are stored as anonymous data without personal identification."
+  },
+  "dataset-consent-18plus": {
+    uk: "Мені є 18 років або більше",
+    en: "I am 18 years old or older"
+  },
+  "dataset-consent-terms": {
+    uk: "Я погоджуюсь з умовами збору даних і розумію, що мої зашифровані фото та мірки будуть використані для навчання нейромережі",
+    en: "I agree to the data collection terms and understand that my encrypted photos and measurements will be used for neural network training"
+  },
+  "dataset-label-dob": {
+    uk: "Дата народження",
+    en: "Date of birth"
+  },
+  "dataset-dob-placeholder": {
+    uk: "ДД.ММ.РРРР",
+    en: "DD.MM.YYYY"
+  },
+  "dataset-dob-calendar": {
+    uk: "Відкрити календар",
+    en: "Open calendar"
+  },
+  "dataset-measurements-heading": {
+    uk: "Ваші мірки",
+    en: "Your Measurements"
+  },
+  "dataset-measurements-intro": {
+    uk: "Введіть реальні мірки вашого тіла в сантиметрах. Ви можете редагувати кожне значення. Якщо якісь мірки виглядають нетиповими, поля будуть позначені жовтим — перевірте їх і натисніть «Надіслати дані» ще раз.",
+    en: "Enter your real body measurements in centimeters. You can edit each value. If any measurements look atypical, fields will be marked yellow — double-check them and click \"Submit Data\" again."
+  },
+  "dataset-measure-placeholder": {
+    uk: "Введіть значення",
+    en: "Enter value"
+  },
+  "dataset-measure-height": {
+    uk: "Зріст",
+    en: "Height"
+  },
+  "dataset-measure-neck-base-height": {
+    uk: "Висота точки основи шиї (від підлоги)",
+    en: "Neck base height (from floor)"
+  },
+  "dataset-measure-neck-circumference": {
+    uk: "Обхват шиї",
+    en: "Neck circumference"
+  },
+  "dataset-measure-chest-circumference": {
+    uk: "Обхват грудей (ОГ)",
+    en: "Chest circumference"
+  },
+  "dataset-measure-waist-circumference": {
+    uk: "Обхват талії (ОТ)",
+    en: "Waist circumference"
+  },
+  "dataset-measure-hip-circumference": {
+    uk: "Обхват стегон (ОС)",
+    en: "Hip circumference"
+  },
+  "dataset-measure-arm-circumference": {
+    uk: "Обхват плеча / руки (в біцепсі)",
+    en: "Upper arm circumference (bicep)"
+  },
+  "dataset-measure-thigh-circumference": {
+    uk: "Обхват одного стегна (вгорі ноги)",
+    en: "Thigh circumference (upper leg)"
+  },
+  "dataset-measure-shoulder-width": {
+    uk: "Ширина плечей",
+    en: "Shoulder width"
+  },
+  "dataset-measure-back-width": {
+    uk: "Ширина спини (ШС)",
+    en: "Back width"
+  },
+  "dataset-measure-chest-width": {
+    uk: "Ширина грудей (ШГ)",
+    en: "Chest width"
+  },
+  "dataset-measure-front-length-to-waist": {
+    uk: "Довжина переду до талії (ДПТ)",
+    en: "Front length to waist"
+  },
+  "dataset-measure-back-length-to-waist": {
+    uk: "Довжина спини до талії (ДСТ)",
+    en: "Back length to waist"
+  },
+  "dataset-measure-sleeve-length": {
+    uk: "Довжина рукава (ДР)",
+    en: "Sleeve length"
+  },
+  "dataset-measure-outer-seam": {
+    uk: "Зовнішній шов",
+    en: "Outer seam"
+  },
+  "dataset-measure-inner-seam": {
+    uk: "Внутрішній шов",
+    en: "Inner seam"
+  },
+  "dataset-btn-submit": {
+    uk: "Надіслати дані",
+    en: "Submit Data"
+  },
+  "dataset-submitting": {
+    uk: "Відправка даних...",
+    en: "Submitting data..."
+  },
+  "dataset-encrypting": {
+    uk: "Шифрування фотографій...",
+    en: "Encrypting photos..."
+  },
+  "dataset-uploading": {
+    uk: "Завантаження до сховища...",
+    en: "Uploading to storage..."
+  },
+  "dataset-finalizing": {
+    uk: "Завершення...",
+    en: "Finalizing..."
+  },
+  "dataset-success-heading": {
+    uk: "Дякуємо!",
+    en: "Thank you!"
+  },
+  "dataset-success-message": {
+    uk: "Ваші дані успішно надіслані і допоможуть покращити точність системи. Ваші фото зашифровані та захищені.",
+    en: "Your data has been successfully submitted and will help improve system accuracy. Your photos are encrypted and protected."
+  },
+  "dataset-success-id": {
+    uk: "ID запису: {id}",
+    en: "Submission ID: {id}"
+  },
+  "dataset-btn-home": {
+    uk: "← Повернутись на головну",
+    en: "← Back to home"
+  },
+  "dataset-err-need-consent": {
+    uk: "Ви повинні підтвердити всі згоди та бути віком 18+ для відправки даних",
+    en: "You must confirm all consents and be 18+ to submit data"
+  },
+  "dataset-err-need-photos": {
+    uk: "Необхідно зробити або завантажити обидва фото (анфас та профіль)",
+    en: "Both photos are required (front and profile)"
+  },
+  "dataset-err-need-measurements": {
+    uk: "Будь ласка, заповніть всі 16 мірок",
+    en: "Please fill in all 16 measurements"
+  },
+  "dataset-err-measurement-non-positive": {
+    uk: "Мірка не може бути нулем або від'ємним числом. Перевірте позначені поля.",
+    en: "A measurement cannot be zero or negative. Check the marked fields."
+  },
+  "dataset-err-age-check": {
+    uk: "Згідно з вказаною датою народження, вам менше 18 років",
+    en: "According to the provided date of birth, you are under 18"
+  },
+  "dataset-err-dob-invalid": {
+    uk: "Введіть дату народження у форматі ДД.ММ.РРРР",
+    en: "Enter date of birth as DD.MM.YYYY"
+  },
+  "dataset-warn-outliers": {
+    uk: "Деякі мірки виглядають нетиповими (позначено жовтим). Перевірте позначені поля та натисніть «Надіслати дані» ще раз для підтвердження.",
+    en: "Some measurements look atypical (marked yellow). Check the marked fields and click \"Submit Data\" again to confirm."
+  },
+  "dataset-err-submission": {
+    uk: "Помилка відправки: {error}",
+    en: "Submission error: {error}"
   }
 };
 
@@ -989,8 +1183,9 @@ export function translateBackendError(errText) {
 export function translatePage() {
   document.documentElement.lang = currentLang;
   
-  // Set title
-  document.title = t("title");
+  // Set title (dataset page uses data-page-title on <body>)
+  const pageTitleKey = document.body?.dataset?.pageTitle;
+  document.title = t(pageTitleKey || "title");
   
   // Translate static elements with data-i18n
   const elements = document.querySelectorAll("[data-i18n]");
