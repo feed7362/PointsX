@@ -1,53 +1,77 @@
 """Pipelines under test by the BodyM eval orchestrator (`bodym.py`).
 
-A pipeline is a pure transform: it takes the base-ellipse `raw` prediction dict
-(computed once per subject by the shared silhouette adapter) + the subject's sex
-+ the train-fitted per-(sex, measurement) scales, and returns a corrected dict.
+A pipeline is a pure transform: it takes the per-subject `raw` output of the
+shared silhouette adapter + the subject's sex + the train-fitted `params`, and
+returns {measurement id -> cm or None}.
 
-The expensive silhouette work (calibrate → arm-clip → rows → widths → ellipse)
-runs ONCE per subject; pipelines are cheap post-transforms replayed over it —
-mirroring the backend `pointsx-eval`, which runs pose+seg once and replays combos.
+`raw[m]` is a tuple `(circ, front_w_cm, side_w_cm)` or None:
+  - `circ`     = the base two-widths→Ramanujan ellipse circumference (pipeline A).
+  - `front_w`  = clipped front breadth in cm at that measurement's row.
+  - `side_w`   = side depth in cm at the same anatomical fraction.
+Post-transform pipelines (A/B/C) use `circ`; the geometric-model pipeline (D)
+uses the widths directly, because it REPLACES the ellipse formula.
 
-Add a pipeline to `PIPELINES` and the orchestrator scores it automatically; no
-change needed in `bodym.py`. The first entry (A) is the frozen baseline every
-other pipeline is scored against — never edit it.
+`params` (fit once on train, constant across subjects):
+  - `params["scales"]` = {sex: {mid: multiplicative median(gt/circ) scale}}
+  - `params["girth"]`  = {sex: {mid: [c0, c1, c2, c3]}}  learned width→girth coefs
+
+The expensive silhouette work runs ONCE per subject; pipelines are cheap replays.
+Add a pipeline to `PIPELINES` → the orchestrator scores it automatically. The
+first entry (A) is the frozen baseline every other pipeline is scored against.
 """
 from __future__ import annotations
 
 from collections.abc import Callable
 
-# A pipeline: (raw, sex, scales) -> corrected. `raw`/output map measurement id
-# -> cm or None; `scales` is {sex: {mid: multiplicative_scale}}.
-PipelineFn = Callable[[dict[str, float | None], str, dict[str, dict[str, float]]], dict[str, float | None]]
+PipelineFn = Callable[[dict, str, dict], dict]
 
 
-def raw_ellipse(raw, sex, scales):
-    """A — the base two-widths→Ramanujan ellipse. Frozen baseline (identity)."""
-    return dict(raw)
+def _circ(v):
+    return v[0] if v is not None else None
 
 
-def corrected(raw, sex, scales):
-    """B — apply the fitted per-sex median(gt/pred) scale to EVERY circumference."""
-    s = scales.get(sex, {})
-    return {m: (v * s.get(m, 1.0) if v is not None else None) for m, v in raw.items()}
+def raw_ellipse(raw, sex, params):
+    """A — base two-widths→Ramanujan ellipse. Frozen baseline (identity on circ)."""
+    return {m: _circ(v) for m, v in raw.items()}
 
 
-def gated_corrected(raw, sex, scales, tau: float = 0.05):
-    """C — B, but skip cells the fit deems already-good.
+def corrected(raw, sex, params):
+    """B — A × per-(sex, measurement) median(gt/pred) scale on EVERY circumference."""
+    s = params["scales"].get(sex, {})
+    return {m: (v[0] * s.get(m, 1.0) if v is not None else None) for m, v in raw.items()}
 
-    If the fitted scale sits within `tau` of 1.0 (≈no systematic bias to remove),
-    leave the raw value untouched — correcting an already-unbiased measurement can
-    only add error (see testA chest/thigh under B). Same spirit as the backend
-    `--fit-offsets` dropping sub-0.25% scales, at a coarser, honest threshold.
-    """
-    s = scales.get(sex, {})
+
+def gated_corrected(raw, sex, params, tau: float = 0.05):
+    """C — B, but skip cells whose fitted scale is within `tau` of 1.0 (already-good)."""
+    s = params["scales"].get(sex, {})
     out: dict[str, float | None] = {}
     for m, v in raw.items():
         if v is None:
             out[m] = None
             continue
         sc = s.get(m, 1.0)
-        out[m] = v * sc if abs(sc - 1.0) >= tau else v
+        out[m] = v[0] * sc if abs(sc - 1.0) >= tau else v[0]
+    return out
+
+
+def learned_girth(raw, sex, params):
+    """D — replace the ellipse formula with a learned nonlinear width→girth map.
+
+    circ = c0 + c1·front + c2·side + c3·(front·side)  — bilinear least-squares fit
+    per (sex, measurement) on the train split. The cross term makes it nonlinear;
+    it subsumes B's constant scale AND captures how the cross-section shape drifts
+    from a true ellipse with size. Cheaper than a neural net, richer than the
+    fixed Ramanujan ellipse. Falls back to the ellipse circ if no coefs fit.
+    """
+    coefs = params["girth"].get(sex, {})
+    out: dict[str, float | None] = {}
+    for m, v in raw.items():
+        if v is None:
+            out[m] = None
+            continue
+        circ, fw, sw = v
+        c = coefs.get(m)
+        out[m] = float(c[0] + c[1] * fw + c[2] * sw + c[3] * fw * sw) if c else circ
     return out
 
 
@@ -56,4 +80,5 @@ PIPELINES: list[tuple[str, PipelineFn]] = [
     ("A_raw", raw_ellipse),
     ("B_corrected", corrected),
     ("C_gated5%", gated_corrected),
+    ("D_learned_girth", learned_girth),
 ]

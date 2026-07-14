@@ -109,16 +109,27 @@ run the heavy stage once, replay combos.)
   Gates on fitted-scale magnitude, so it can't separate an already-good cell from a
   biased one when their scales coincide — a blunt but honest guard, same spirit as
   the backend dropping sub-0.25% scales.
+- **D — `learned_girth`.** **Replaces the ellipse formula** with a learned nonlinear
+  width→girth map: `circ = c0 + c1·front + c2·side + c3·(front·side)`, a bilinear
+  least-squares fit per `(sex, measurement)` on `train`. The cross term makes it
+  nonlinear; it subsumes B's constant scale *and* captures how the real
+  cross-section drifts from an ellipse with size. **Cheaper than a neural net,
+  richer than the fixed Ramanujan ellipse** — the "improve the geometric model"
+  middle ground (superellipse/Lamé is the same idea; the learned map is more
+  flexible). Unlike A/B/C it consumes the raw front/side *widths*, not the ellipse
+  output — which is why the adapter now surfaces `(circ, front_w, side_w)` per row.
 
 The orchestrator prints, per measurement, each experimental pipeline's MAE + Δ-vs-A
 with a ✓/✗ — **are we going the right direction?**
 
-These BodyM-fit scales are for the *ceiling benchmark only* — they scale UP
-(silhouette under-reads), the opposite sign to the app's `_SEX_CIRCUMFERENCE_SCALES_PCT`
-(which scale DOWN). They do not transfer to the app (see the comparison table below).
+B/C scales are for the *ceiling benchmark only* — they scale UP (silhouette
+under-reads), the opposite sign to the app's `_SEX_CIRCUMFERENCE_SCALES_PCT` (which
+scale DOWN); they do not transfer to the app. D's learned coefs are likewise
+fit to the *silhouette* front-end, not the app's keypoint widths — a separate fit
+would be needed for production. All BodyM numbers stay a perfect-mask ceiling.
 
-Next pipeline slot: the `CircumferenceRegressor` (train on BodyM `train`) drops in
-as a fourth registry entry with no orchestrator change.
+Next pipeline slot: the `CircumferenceRegressor` (full MLP on the whole contour,
+train on BodyM `train`) drops in as a fifth registry entry, no orchestrator change.
 
 ## Built + results (2026-07-13, `bodym.py`, full splits)
 
@@ -127,39 +138,43 @@ Runs end-to-end: fetch (unsigned S3, mask cache) → adapter → real
 Coverage = all measured subjects, one photo each: **testA n=87** (controlled),
 **testB n=400** (in-the-wild).
 
-Scales fit on 300 train subjects (converge — n=60 ≈ n=300). MAE in cm, Δ vs A.
+Params fit on 300 train subjects (scales converge — n=60 ≈ n=300). MAE in cm.
 
-**testA (controlled) — overall A 6.4 → B 5.8 → C 5.8:**
+**testA (controlled) — overall A 6.4 · B 5.8 · C 5.8 · D 3.7:**
 
-| measure | A | B | Δ | C | Δ |
-|---|---|---|---|---|---|
-| chest | 7.8 | 8.9 | −1.1 ✗ | 8.7 | −1.0 ✗ |
-| waist | 5.9 | 3.6 | **+2.3 ✓** | 3.6 | **+2.3 ✓** |
-| hip | 5.4 | 3.6 | **+1.8 ✓** | 4.0 | +1.4 ✓ |
-| thigh | 6.7 | 7.0 | −0.3 ✗ | 7.0 | −0.3 ✗ |
+| measure | A raw | B scale | C gated | **D learned girth** |
+|---|---|---|---|---|
+| chest | 7.8 | 8.9 ✗ | 8.7 ✗ | **4.6 ✓** |
+| waist | 5.9 | 3.6 ✓ | 3.6 ✓ | **4.0 ✓** |
+| hip | 5.4 | 3.6 ✓ | 4.0 ✓ | **2.8 ✓** |
+| thigh | 6.7 | 7.0 ✗ | 7.0 ✗ | **3.5 ✓** |
 
-**testB (in-the-wild) — overall A 9.4 → B 6.3 → C 6.8:**
+**testB (in-the-wild) — overall A 9.4 · B 6.3 · C 6.8 · D 4.6:**
 
-| measure | A | B | Δ | C | Δ |
-|---|---|---|---|---|---|
-| chest | 10.2 | 8.4 | **+1.8 ✓** | 9.4 | +0.7 ✓ |
-| waist | 9.7 | 4.9 | **+4.8 ✓** | 4.9 | **+4.8 ✓** |
-| hip | 7.9 | 5.8 | **+2.1 ✓** | 7.0 | +0.8 ✓ |
-| thigh | 10.1 | 6.0 | **+4.1 ✓** | 6.0 | **+4.1 ✓** |
+| measure | A raw | B scale | C gated | **D learned girth** |
+|---|---|---|---|---|
+| chest | 10.2 | 8.4 ✓ | 9.4 ✓ | **5.8 ✓** |
+| waist | 9.7 | 4.9 ✓ | 4.9 ✓ | **4.6 ✓** |
+| hip | 7.9 | 5.8 ✓ | 7.0 ✓ | **4.3 ✓** |
+| thigh | 10.1 | 6.0 ✓ | 6.0 ✓ | **3.7 ✓** |
 
-**Verdict — B is the right direction; C is a no-op-or-worse *on this dataset*.**
-The per-sex scale cuts error proportional to the raw bias — testB overall −34%
-(9.4→6.3), all four ✓. C (gated) is *supposed* to protect already-good cells, but
-**BodyM has none**: the silhouette under-reads uniformly, so every cell has real
-bias to remove, and the gate only skips beneficial corrections at borderline scales
-(hip-female sits at the 5% threshold → skipped → C hip regresses). The testA
-chest/thigh overshoot that motivated C is a **train→test transfer artifact**, not an
-already-good cell, and a scale-magnitude gate can't target it. **C is the mechanism
-that pays off for the *app*** (heterogeneous per-measure biases, some near-zero) —
-the eval just proved it's inert when bias is uniform. A real, useful negative result.
+**Verdict — D (learned girth) wins decisively; the ellipse was the floor, not the ceiling.**
+The learned nonlinear width→girth map cuts error **40–50% vs the ellipse (A)** and
+beats *every* measurement on *both* splits — including chest and thigh, which the
+scale corrections (B/C) made *worse*. It subsumes B's scaling and additionally
+corrects the cross-section shape, at 4 coefficients per cell (no neural net). At
+~4–5 cm it approaches the ~2–3 cm the literature reports for a full-contour MLP
+regressor — the only remaining step up, at much higher cost.
 
-**BMI>30 is the worst bucket everywhere (13–14 cm)** — the ellipse cross-section
-model breaks down on obese bodies (real section diverges most from an ellipse).
+Notes on B/C (kept as instructive baselines): B (uniform per-sex scale) helps
+proportional to the raw bias but overshoots already-unbiased cells (testA
+chest/thigh ✗). C (gated) is a no-op-or-worse *here* because BodyM's underestimate
+is uniform (no already-good cells to protect) — it's the mechanism that would pay
+off for the *app*'s heterogeneous biases, not for this ceiling.
+
+**BMI>30 is the worst bucket everywhere (13–14 cm raw)** — the ellipse cross-section
+breaks down on obese bodies; D's shape term absorbs part of this, but it's the
+hardest regime.
 
 **Two findings the eval surfaced:**
 1. **Systematic underestimate — on testB the bias IS the error.** Every

@@ -173,7 +173,9 @@ def predict(front: np.ndarray, side: np.ndarray, height_cm: float) -> dict[str, 
     thigh_i = int(0.66 * f_len)
 
     rows = {"chest": chest_i, "waist": waist_i, "hip": hip_i, "thigh": thigh_i}
-    out: dict[str, float | None] = {}
+    # out[m] = (ellipse_circ_cm, front_w_cm, side_w_cm) | None — widths surfaced so
+    # pipeline D can replace the ellipse formula with a learned width→girth map.
+    out: dict[str, tuple[float, float, float] | None] = {}
     for name, fi in rows.items():
         frac = fi / f_len
         y_side = sy0 + int(frac * s_len)
@@ -186,7 +188,8 @@ def predict(front: np.ndarray, side: np.ndarray, height_cm: float) -> dict[str, 
         if not fw or not sd:
             out[name] = None
             continue
-        out[name] = ramanujan_ellipse_circumference(fw * f_scale, sd * s_scale)
+        fw_cm, sw_cm = fw * f_scale, sd * s_scale
+        out[name] = (ramanujan_ellipse_circumference(fw_cm, sw_cm), fw_cm, sw_cm)
     return out
 
 
@@ -206,35 +209,55 @@ def subject_pred(s3, split, sid, hwg, photo) -> dict[str, float | None]:
     return predict(front, side, float(hwg[sid]["height_cm"]))
 
 
-# ── pipeline B: fit per-(sex, measurement) median-of-ratios scale ───────────
-# Same L1-optimal closed form the backend's pointsx-eval --fit-offsets uses
-# (scale = median(gt/pred)); "pulp but lighter" — no linear program. Fit on the
-# TRAIN split, applied to the eval split — a real generalization test, never
-# fit-on-test. This is a SEPARATE pipeline: the raw ellipse (baseline) is frozen.
-def fit_scales(s3, n_fit: int) -> dict[str, dict[str, float]]:
+# ── fit train-derived params: B/C scales + D girth coefs (ONE train pass) ───
+# scales: L1-optimal median(gt/circ) — the closed form pointsx-eval --fit-offsets
+#   uses ("pulp but lighter", no LP), for pipelines B/C.
+# girth:  bilinear least-squares circ = c0 + c1·fw + c2·sw + c3·fw·sw per
+#   (sex, measure) — the learned width→girth map for pipeline D.
+# Both fit on TRAIN, applied to the eval split — a real generalization test.
+def fit_params(s3, n_fit: int) -> dict[str, dict]:
     meas, hwg, photo = load_split(s3, "train")
-    subjects = [s for s in meas if s in photo and s in hwg][:n_fit] if n_fit else \
-        [s for s in meas if s in photo and s in hwg]
+    subjects = [s for s in meas if s in photo and s in hwg]
+    if n_fit:
+        subjects = subjects[:n_fit]
     ratios: dict[str, dict[str, list]] = {}
-    print(f"[fit] scales on train n={len(subjects)} (median gt/pred per sex×measure)")
+    rows: dict[str, dict[str, list]] = {}  # sex -> m -> [(fw, sw, gt)]
+    print(f"[fit] params on train n={len(subjects)} (scales + learned girth per sex×measure)")
     for i, sid in enumerate(subjects, 1):
         sex = hwg[sid]["gender"]
         pred = subject_pred(s3, "train", sid, hwg, photo)
         for m in CIRCUMFERENCES:
-            p = pred.get(m)
-            if p and p > 0:
-                ratios.setdefault(sex, {mm: [] for mm in CIRCUMFERENCES})[m].append(
-                    float(meas[sid][m]) / p)
+            v = pred.get(m)
+            if v is None:
+                continue
+            circ, fw, sw = v
+            gt = float(meas[sid][m])
+            if circ > 0:
+                ratios.setdefault(sex, {mm: [] for mm in CIRCUMFERENCES})[m].append(gt / circ)
+            rows.setdefault(sex, {mm: [] for mm in CIRCUMFERENCES})[m].append((fw, sw, gt))
         if i % 200 == 0:
             print(f"  … fit {i}/{len(subjects)}")
+
     scales = {sex: {m: float(np.median(v)) for m, v in d.items() if v}
               for sex, d in ratios.items()}
-    print("\n=== fitted scales (value *= scale;  %% = (scale-1)*100) ===")
+    girth: dict[str, dict[str, list]] = {}
+    for sex, d in rows.items():
+        for m, pts in d.items():
+            if len(pts) < 4:  # need >= #coefs for a stable bilinear fit
+                continue
+            fw = np.array([p[0] for p in pts]); sw = np.array([p[1] for p in pts])
+            gt = np.array([p[2] for p in pts])
+            A = np.column_stack([np.ones_like(fw), fw, sw, fw * sw])
+            coef, *_ = np.linalg.lstsq(A, gt, rcond=None)
+            girth.setdefault(sex, {})[m] = coef.tolist()
+
+    print("\n=== fitted scales (value *= scale;  % = (scale-1)*100) ===")
     print(f"{'sex':8} " + " ".join(f"{m.split('_')[0]:>8}" for m in CIRCUMFERENCES))
     for sex in sorted(scales):
-        cells = [f"{scales[sex].get(m, 1.0):8.3f}" for m in CIRCUMFERENCES]
-        print(f"{sex:8} " + " ".join(cells))
-    return scales
+        print(f"{sex:8} " + " ".join(f"{scales[sex].get(m, 1.0):8.3f}" for m in CIRCUMFERENCES))
+    print(f"[fit] learned girth coefs for sexes={sorted(girth)} "
+          f"(bilinear circ=c0+c1·fw+c2·sw+c3·fw·sw)")
+    return {"scales": scales, "girth": girth}
 
 
 # ── metrics ─────────────────────────────────────────────────────────────────
@@ -260,7 +283,8 @@ def main() -> int:
 
     s3 = _client()
     split = args.split
-    scales = fit_scales(s3, args.fit_n)  # pipeline B correction, fit on TRAIN
+    params = fit_params(s3, args.fit_n)  # B/C scales + D girth, fit on TRAIN
+    scales = params["scales"]
 
     meas, hwg, photo = load_split(s3, split)
     subjects = [s for s in meas if s in photo and s in hwg]
@@ -285,19 +309,19 @@ def main() -> int:
             bmi_band = "BMI<25" if bmi < 25 else ("BMI25-30" if bmi < 30 else "BMI>30")
         except (ValueError, ZeroDivisionError):
             bmi_band = "BMI?"
-        raw = subject_pred(s3, split, sid, hwg, photo)  # base ellipse, computed ONCE
+        raw = subject_pred(s3, split, sid, hwg, photo)  # base ellipse + widths, ONCE
         gts = {m: float(meas[sid][m]) for m in CIRCUMFERENCES}
         for name, fn in PIPELINES:
-            pred = fn(raw, sex, scales)
+            pred = fn(raw, sex, params)
             for m in CIRCUMFERENCES:
                 p = pred.get(m)
                 if p is None:
                     continue
                 err[name][m].append(p - gts[m])
-        for m in CIRCUMFERENCES:  # buckets on base error
+        for m in CIRCUMFERENCES:  # buckets on base (A) error; raw[m]=(circ, fw, sw)
             if raw.get(m) is not None:
-                bucket(f"sex={sex}", m, raw[m] - gts[m])
-                bucket(bmi_band, m, raw[m] - gts[m])
+                bucket(f"sex={sex}", m, raw[m][0] - gts[m])
+                bucket(bmi_band, m, raw[m][0] - gts[m])
         if i % 100 == 0:
             print(f"  … {i}/{len(subjects)}")
 
@@ -345,7 +369,7 @@ def main() -> int:
     run_dir.mkdir()
     (run_dir / "metrics.json").write_text(json.dumps({
         "split": split, "subjects": len(subjects), "fit_n": args.fit_n,
-        "scales": scales,
+        "scales": scales, "girth": params["girth"],
         "pipelines": {n: metrics[n] for n in names},
         "overall": overall,
         "buckets": {k: {m: _stats(v[m]) for m in CIRCUMFERENCES if v[m]}
