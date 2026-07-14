@@ -21,6 +21,14 @@ yolo12l-person-seg-extended.pt
 uv.lock
 .vercel
 .env*
+data/
+bucket-dump/
+supabase-dump/
 dataset_private_key.txt
+/keys/
 /dataset_manual
 dataset.zip
+
+# eval artifacts (regenerable): cached BodyM masks + run outputs
+eval/.cache/
+eval/reports/
