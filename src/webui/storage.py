@@ -71,14 +71,38 @@ def _read_prefixed(prefix: str) -> dict[str, str | None]:
     # Most providers use the same suffix names as AWS:
     #   <PREFIX>ENDPOINT, <PREFIX>ACCESS_KEY_ID, <PREFIX>SECRET_ACCESS_KEY,
     #   <PREFIX>BUCKET, <PREFIX>REGION, <PREFIX>PREFIX, <PREFIX>FORCE_PATH_STYLE
+    def _clean(name: str) -> str | None:
+        """Read an env var, stripping surrounding whitespace/newlines.
+
+        Secrets pasted into a dashboard textarea very often pick up a trailing
+        newline. botocore embeds the key id verbatim in the SigV4 Authorization
+        header, so a single "\n" produces:
+
+            An HTTP Client raised an unhandled exception:
+            Invalid header value b'AWS4-HMAC-SHA256 Credential=...\\n/2026...'
+
+        — which is opaque and looks nothing like a credential problem. Strip
+        here so a stray newline can never reach the signer.
+        """
+        raw = os.environ.get(f"{prefix}{name}")
+        if raw is None:
+            return None
+        cleaned = raw.strip()
+        if cleaned != raw:
+            logger.warning(
+                "Object-storage env %s%s had surrounding whitespace — stripped.",
+                prefix, name,
+            )
+        return cleaned or None
+
     return {
-        "endpoint": os.environ.get(f"{prefix}ENDPOINT"),
-        "access_key_id": os.environ.get(f"{prefix}ACCESS_KEY_ID"),
-        "secret_access_key": os.environ.get(f"{prefix}SECRET_ACCESS_KEY"),
-        "bucket": os.environ.get(f"{prefix}BUCKET"),
-        "region": os.environ.get(f"{prefix}REGION"),
-        "prefix": os.environ.get(f"{prefix}PREFIX"),
-        "force_path_style": os.environ.get(f"{prefix}FORCE_PATH_STYLE"),
+        "endpoint": _clean("ENDPOINT"),
+        "access_key_id": _clean("ACCESS_KEY_ID"),
+        "secret_access_key": _clean("SECRET_ACCESS_KEY"),
+        "bucket": _clean("BUCKET"),
+        "region": _clean("REGION"),
+        "prefix": _clean("PREFIX"),
+        "force_path_style": _clean("FORCE_PATH_STYLE"),
     }
 
 
@@ -118,6 +142,18 @@ def _load_config() -> S3Config | None:
         force_path_style = False
     else:
         force_path_style = "amazonaws.com" not in endpoint.lower()
+
+    # Supabase exposes its S3-compatible API at <project>.supabase.co/storage/v1/s3.
+    # Pointing at the bare project URL yields a signed request against the REST
+    # gateway, which fails in confusing ways. Auto-correct rather than fail.
+    low = endpoint.lower()
+    if "supabase.co" in low and "/storage/v1/s3" not in low:
+        endpoint = endpoint.rstrip("/") + "/storage/v1/s3"
+        logger.warning(
+            "Object-storage endpoint looked like a bare Supabase project URL — "
+            "using %s (the S3-compatible path).", endpoint,
+        )
+
     return S3Config(
         endpoint=endpoint,
         access_key_id=values["access_key_id"],          # type: ignore[arg-type]
