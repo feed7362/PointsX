@@ -218,7 +218,7 @@ class BodyModels:
         image: np.ndarray,
         view: str,
         *,
-        pose_backend: PoseBackend = "custom",
+        pose_backend: PoseBackend = "coco",
     ) -> Keypoints | None:
         """Run pose estimation. Returns keypoints for the largest detected person."""
         yolo = self._pose_custom if pose_backend == "custom" else self._pose_coco

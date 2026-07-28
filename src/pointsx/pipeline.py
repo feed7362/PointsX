@@ -55,7 +55,7 @@ class MeasurementPipeline:
         side_image: str | Path | np.ndarray,
         height_cm: float,
         *,
-        pose_backend: PoseBackend = "custom",
+        pose_backend: PoseBackend = "coco",
     ) -> BodyMeasurements:
         """Run the full measurement pipeline.
 

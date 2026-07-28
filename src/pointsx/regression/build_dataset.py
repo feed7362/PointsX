@@ -93,7 +93,7 @@ def build_dataset(
     seg_model: Path,
     output: Path,
     *,
-    pose_backend: PoseBackend = "custom",
+    pose_backend: PoseBackend = "coco",
     img_size: int = 640,
     device: str = "auto",
     limit: int | None = None,

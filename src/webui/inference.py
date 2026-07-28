@@ -145,7 +145,7 @@ class WebuiPipeline:
         side_img: np.ndarray,
         height_cm: float,
         *,
-        pose_backend: PoseBackend = "custom",
+        pose_backend: PoseBackend = "coco",
         timings: "Timings | None" = None,
     ) -> InferenceResult:
         """Run the full pose+seg+regression pipeline on a pair of images.
@@ -208,7 +208,7 @@ class WebuiPipeline:
         front_img: np.ndarray,
         side_img: np.ndarray,
         *,
-        pose_backend: PoseBackend = "custom",
+        pose_backend: PoseBackend = "coco",
     ) -> InferenceResult:
         """Run pose+seg only (no calibration/measurements), for debug visualizations."""
         front_kp, side_kp, front_mask, side_mask = self._predict_pose_and_masks(

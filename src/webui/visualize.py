@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import fields as dataclass_fields
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -11,8 +12,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 from pointsx.keypoints import KP, SKELETON, interpolate_y, is_valid
 from pointsx.schemas import BodyMeasurements, Keypoints, SilhouetteMask
+from pointsx.silhouette import front_thigh_y_level, hip_search_y_range
 
-from webui.inference import InferenceResult
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from webui.inference import InferenceResult
 
 __all__ = ["pipeline_visualizations_b64"]
 
@@ -21,19 +26,16 @@ _MIN_POINT_CONF = 0.18
 _SEG_COLOR = (64, 180, 255)  # BGR
 _SEG_ALPHA = 0.38
 _FONT_CANDIDATES = (
-    # macOS Supplemental / System fonts (with Cyrillic support)
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    # MacOS Supplemental & Standard Fonts
     "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Helvetica.ttc",
     "/System/Library/Fonts/Helvetica.ttc",
-    # Linux common paths (Ubuntu, Debian, Fedora, Arch)
+    # Linux Standard DejaVu & Liberation Fonts
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-    "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
-    "/usr/share/fonts/TTF/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-    # Windows
+    # Windows Standard Arial Font
     "C:\\Windows\\Fonts\\arial.ttf",
 )
 _FONT_CACHE: dict[int, ImageFont.ImageFont] = {}
@@ -43,22 +45,18 @@ def _get_font(size: int) -> ImageFont.ImageFont:
     cached = _FONT_CACHE.get(size)
     if cached is not None:
         return cached
-    for path in _FONT_CANDIDATES:
+
+    # Try bundled font first to ensure consistent Cyrillic support across all deployment platforms
+    bundled_path = Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"
+    paths = [str(bundled_path)] + list(_FONT_CANDIDATES)
+
+    for path in paths:
         try:
             font = ImageFont.truetype(path, size=size)
             _FONT_CACHE[size] = font
             return font
         except Exception:
             continue
-    try:
-        import matplotlib.font_manager as fm
-        path = fm.findfont("DejaVu Sans")
-        if path:
-            font = ImageFont.truetype(path, size=size)
-            _FONT_CACHE[size] = font
-            return font
-    except Exception:
-        pass
     font = ImageFont.load_default()
     _FONT_CACHE[size] = font
     return font
@@ -352,13 +350,16 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
                 cv2.line(out, arm_path[i - 1], arm_path[i], arm_color, 2, cv2.LINE_AA)
             lx, ly = arm_path[-1]
             put_label_smart("довжина руки", lx + 6, ly, arm_color)
+        elif is_valid(conf, KP.LEFT_SHOULDER, KP.LEFT_WRIST):
+            # Fallback matches measurement fallback in extraction.
+            a, b = p(KP.LEFT_SHOULDER), p(KP.LEFT_WRIST)
+            cv2.line(out, a, b, arm_color, 2, cv2.LINE_AA)
+            put_label_smart("довжина руки", b[0] + 6, b[1], arm_color)
 
-    # leg_outer: side VERTICAL line from 25% above pelvis to bottom segmentation
-    # end. Drawn straight (single x) so it visually matches the measured value
-    # (which is the vertical span — measurements.py uses abs(y_end - y_start)).
+    # leg_outer: side straight line from 25% above pelvis to bottom segmentation end.
     if view == "side" and is_valid(conf, KP.PELVIS, KP.THORAX):
         sm = mask.mask
-        h_s, _w_s = sm.shape
+        h_s, w_s = sm.shape
         pelvis_y = float(pts[int(KP.PELVIS), 1])
         thorax_y = float(pts[int(KP.THORAX), 1])
         y_start = int(np.clip(int(round(pelvis_y + 0.25 * (thorax_y - pelvis_y))), 0, h_s - 1))
@@ -367,10 +368,8 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
         ys_fg = np.where(sm.any(axis=1))[0]
         if len(cols_start) >= 2 and len(ys_fg) > 0:
             y_end = int(ys_fg[-1])
-            # Same x for top and bottom = vertical line. Pick the silhouette
-            # extreme at the WAIST row that's farther from the torso x (= the
-            # back of the body, which is what the outer seam follows).
-            x_line = int(cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1])
+            x_line = cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1]
+            x_line = int(np.clip(int(x_line), 0, w_s - 1))
             cv2.line(out, (x_line, y_start), (x_line, y_end), (255, 80, 80), 2, cv2.LINE_AA)
             put_label_smart("нога зовнішня", x_line + 6, y_end, (255, 80, 80))
 
@@ -430,21 +429,8 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             else pelvis_x
         )
         x_split = int(np.clip(x_split, 0, w - 1))
-        y_bottom = h - 1
-        if is_valid(conf, KP.LEFT_ANKLE) or is_valid(conf, KP.RIGHT_ANKLE):
-            ankle_ys = []
-            if is_valid(conf, KP.LEFT_ANKLE):
-                ankle_ys.append(float(pts[int(KP.LEFT_ANKLE), 1]))
-            if is_valid(conf, KP.RIGHT_ANKLE):
-                ankle_ys.append(float(pts[int(KP.RIGHT_ANKLE), 1]))
-            if ankle_ys:
-                y_bottom = int(round(np.mean(ankle_ys)))
-        y_bottom = int(np.clip(y_bottom, pelvis_y + 1, h - 1))
-        y_thigh = pelvis_y
-        for y in range(pelvis_y, y_bottom + 1):
-            if not fm[y, pelvis_x]:
-                y_thigh = y
-                break
+        y_thigh_raw = front_thigh_y_level(kp, fm)
+        y_thigh = int(round(y_thigh_raw)) if y_thigh_raw is not None else pelvis_y
         if is_valid(conf, KP.RIGHT_KNEE):
             xr = int(round(float(pts[int(KP.RIGHT_KNEE), 0])))
             cols = np.where(fm[int(y_thigh)])[0]
@@ -510,24 +496,14 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
             put_label_smart("талія", x1 + 6, yi - 2, width_color)
 
-    if is_valid(conf, KP.PELVIS):
-        y_p = float(pts[int(KP.PELVIS), 1])
-        if view == "front":
-            knees = []
-            if is_valid(conf, KP.LEFT_KNEE):
-                knees.append(float(pts[int(KP.LEFT_KNEE), 1]))
-            if is_valid(conf, KP.RIGHT_KNEE):
-                knees.append(float(pts[int(KP.RIGHT_KNEE), 1]))
-            y_k = float(np.mean(knees)) if knees else None
-        else:
-            y_k = float(pts[int(KP.RIGHT_KNEE), 1]) if is_valid(conf, KP.RIGHT_KNEE) else None
-        if y_k is not None:
-            y_start = y_p + 0.05 * (y_k - y_p)
-            hip = _extreme_span_between_y(mask.mask, y_start, y_k, "max")
-            if hip is not None:
-                x0, x1, yi = hip
-                cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
-                put_label_smart("стегна", x1 + 6, yi - 2, width_color)
+    hip_range = hip_search_y_range(kp)
+    if hip_range is not None:
+        y_start, y_end = hip_range
+        hip = _extreme_span_between_y(mask.mask, y_start, y_end, "max")
+        if hip is not None:
+            x0, x1, yi = hip
+            cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
+            put_label_smart("стегна", x1 + 6, yi - 2, width_color)
 
     return out
 
