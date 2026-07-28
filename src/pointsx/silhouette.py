@@ -109,6 +109,42 @@ def front_thigh_y_level(kp: Keypoints, mask: np.ndarray) -> float | None:
     return float(y_thigh)
 
 
+# Fraction of the hip->knee span at which the thigh is measured (upper thigh,
+# just below the gluteal fold). Chosen empirically: on the 11-subject app corpus
+# with tape GT, 0.10 maximised correlation with true thigh circumference (+0.72,
+# vs -0.37 for the previous crotch-anchored extraction). 0.15-0.30 score +0.68
+# to +0.70, so the optimum is broad and not overfitted to one level.
+THIGH_HIP_KNEE_FRACTION = 0.10
+
+
+def _widest_segment_at_y(
+    mask: np.ndarray, y: float, margin: int = 2
+) -> tuple[float, float, float] | None:
+    """Widest contiguous foreground run near row `y`.
+
+    Returns (x_start, x_end, width_px) of the widest segment, averaged over the
+    rows in [y-margin, y+margin] by picking the row whose widest segment is
+    median-sized (robust to a single ragged mask row). Returns None if no row has
+    a usable run.
+    """
+    h, w = mask.shape
+    y_int = int(round(y))
+    candidates: list[tuple[float, float, float]] = []
+    for row in range(max(0, y_int - margin), min(h - 1, y_int + margin) + 1):
+        cols = np.where(mask[row])[0]
+        if len(cols) < 2:
+            continue
+        segments = [s for s in _find_segments(cols) if len(s) >= 2]
+        if not segments:
+            continue
+        best = max(segments, key=lambda s: s[-1] - s[0])
+        candidates.append((float(best[0]), float(best[-1]), float(best[-1] - best[0])))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c[2])
+    return candidates[len(candidates) // 2]
+
+
 def measure_width_at_y(mask: np.ndarray, y: float, margin: int = 3) -> float | None:
     """Measure horizontal width of the silhouette at a given y-coordinate.
 
@@ -592,6 +628,13 @@ def extract_all_widths(
             y_ref = float(s_pts[KP.RIGHT_ANKLE, 1])
         else:
             y_ref = y_pelvis_s
+        # NOTE: deliberately NOT THIGH_HIP_KNEE_FRACTION. The side view is anchored
+        # to the PELVIS keypoint, so 0.10 lands on the buttocks and reads a depth of
+        # 23-38 cm — anatomically impossible for a thigh. It scored a marginally
+        # better corrected MAE (4.7 vs 5.7) only because buttock depth correlates
+        # with thigh size, while the RAW ellipse error doubled (13 -> 27 cm), i.e.
+        # the constant was hiding mismatched inputs. 0.5 keeps the slice on the
+        # thigh itself.
         y_thigh_s = y_pelvis_s + 0.5 * (y_ref - y_pelvis_s)
         side_w = _side_torso_width(s_mask, y_thigh_s)
         for key in ["thigh_right", "thigh_left"]:
