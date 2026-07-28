@@ -13,6 +13,7 @@ Configuration (environment variables, all optional):
                               set to an empty string to force the Ramanujan ellipse
                               fallback instead.
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
+    POINTSX_DATASET_DIR       path to save captured image pairs (default: dataset)
     POINTSX_TTS_VOICE         Ukrainian neural voice for ``/api/tts`` (default: uk-UA-PolinaNeural)
     POINTSX_TTS_DISABLE       ``1``/``true`` to disable server TTS (browser speech fallback only)
 
@@ -52,7 +53,9 @@ _IS_VERCEL_PROXY_MODE = bool(os.environ.get("POINTSX_VERCEL")) and _INFERENCE_EN
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-DATASET_DIR = Path(__file__).resolve().parents[2] / "dataset"
+# Dataset directory can be overridden via POINTSX_DATASET_DIR environment variable
+_DATASET_DIR_DEFAULT = Path(__file__).resolve().parents[2] / "dataset"
+DATASET_DIR = Path(os.environ.get("POINTSX_DATASET_DIR", str(_DATASET_DIR_DEFAULT)))
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DISALLOWED_CONTENT_PREFIXES = ("text/", "video/", "audio/")

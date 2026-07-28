@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from pointsx.keypoints import KP, SKELETON, interpolate_y, is_valid
 from pointsx.schemas import BodyMeasurements, Keypoints, SilhouetteMask
+from pointsx.silhouette import front_thigh_y_level, hip_search_y_range
 
 from typing import TYPE_CHECKING
 
@@ -428,21 +429,8 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             else pelvis_x
         )
         x_split = int(np.clip(x_split, 0, w - 1))
-        y_bottom = h - 1
-        if is_valid(conf, KP.LEFT_ANKLE) or is_valid(conf, KP.RIGHT_ANKLE):
-            ankle_ys = []
-            if is_valid(conf, KP.LEFT_ANKLE):
-                ankle_ys.append(float(pts[int(KP.LEFT_ANKLE), 1]))
-            if is_valid(conf, KP.RIGHT_ANKLE):
-                ankle_ys.append(float(pts[int(KP.RIGHT_ANKLE), 1]))
-            if ankle_ys:
-                y_bottom = int(round(np.mean(ankle_ys)))
-        y_bottom = int(np.clip(y_bottom, pelvis_y + 1, h - 1))
-        y_thigh = pelvis_y
-        for y in range(pelvis_y, y_bottom + 1):
-            if not fm[y, pelvis_x]:
-                y_thigh = y
-                break
+        y_thigh_raw = front_thigh_y_level(kp, fm)
+        y_thigh = int(round(y_thigh_raw)) if y_thigh_raw is not None else pelvis_y
         if is_valid(conf, KP.RIGHT_KNEE):
             xr = int(round(float(pts[int(KP.RIGHT_KNEE), 0])))
             cols = np.where(fm[int(y_thigh)])[0]
@@ -508,24 +496,14 @@ def _draw_measure_lines(bgr: np.ndarray, kp: Keypoints, mask: SilhouetteMask, vi
             cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
             put_label_smart("талія", x1 + 6, yi - 2, width_color)
 
-    if is_valid(conf, KP.PELVIS):
-        y_p = float(pts[int(KP.PELVIS), 1])
-        if view == "front":
-            knees = []
-            if is_valid(conf, KP.LEFT_KNEE):
-                knees.append(float(pts[int(KP.LEFT_KNEE), 1]))
-            if is_valid(conf, KP.RIGHT_KNEE):
-                knees.append(float(pts[int(KP.RIGHT_KNEE), 1]))
-            y_k = float(np.mean(knees)) if knees else None
-        else:
-            y_k = float(pts[int(KP.RIGHT_KNEE), 1]) if is_valid(conf, KP.RIGHT_KNEE) else None
-        if y_k is not None:
-            y_start = y_p + 0.05 * (y_k - y_p)
-            hip = _extreme_span_between_y(mask.mask, y_start, y_k, "max")
-            if hip is not None:
-                x0, x1, yi = hip
-                cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
-                put_label_smart("стегна", x1 + 6, yi - 2, width_color)
+    hip_range = hip_search_y_range(kp)
+    if hip_range is not None:
+        y_start, y_end = hip_range
+        hip = _extreme_span_between_y(mask.mask, y_start, y_end, "max")
+        if hip is not None:
+            x0, x1, yi = hip
+            cv2.line(out, (x0, yi), (x1, yi), width_color, 2, cv2.LINE_AA)
+            put_label_smart("стегна", x1 + 6, yi - 2, width_color)
 
     return out
 
