@@ -100,27 +100,68 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed
 # dict back here when you have new ground-truth subjects. Defaults are seeded
 # from a small (n=3) eval set, so expect them to update.
+# Refitted 2026-07-20 on the app GT corpus (n=11 real subjects with tape
+# measurements), AFTER the thigh-width extraction fix — the previous values were
+# fitted on n=3 and against broken thigh widths, so they were stale twice over.
+# Method: median(gt / predicted), the L1-optimal multiplicative correction
+# (`pointsx-eval --fit-offsets`), rounded to 0.5 %.
+#
+# CHEST IS DELIBERATELY ABSENT = no correction applied. Its fitted bias is not
+# statistically significant (bootstrap 95 % CI spans zero: female -3.4 %
+# [-7.2, +0.5], male +3.9 % [-7.3, +6.6] — opposite signs, both small), and
+# correcting it measurably HURTS: leave-one-out MAE 6.6 cm corrected vs 5.4 cm
+# uncorrected. The same pattern holds on the independent BodyM benchmark, where
+# scaling chest also degraded it. Do not "complete" this table by adding chest.
+#
+# Leave-one-out MAE over the four circumferences: 6.50 cm with this table,
+# 6.81 cm correcting all four, 11.0 cm with no correction at all.
+#
+# CAVEAT: the male cells rest on n=3 subjects — treat them as provisional and
+# refit once the corpus has ~8+ male subjects.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
-    "female": {
-        "chest_circumference":  -9.0,   # %
-        "waist_circumference": -21.5,
+    "female": {  # n=8
+        "waist_circumference": -14.0,   # %
         "hip_circumference":    -5.0,
-        "thigh_circumference": -24.0,
+        "thigh_circumference": -17.0,
     },
-    "male": {
-        "chest_circumference":  -3.0,
-        "waist_circumference": -19.0,
-        "hip_circumference":   -11.0,
-        "thigh_circumference": -18.5,
+    "male": {  # n=3 — provisional
+        "waist_circumference": -14.0,
+        "hip_circumference":   -10.5,
+        "thigh_circumference": -23.5,
     },
     # "other" averages male and female so an unknown-sex subject is biased
     # toward neither extreme.
     "other": {
-        "chest_circumference":  -6.0,
-        "waist_circumference": -20.0,
+        "waist_circumference": -14.0,
         "hip_circumference":    -8.0,
-        "thigh_circumference": -16.0,
+        "thigh_circumference": -20.0,
     },
+}
+
+# Sex-INDEPENDENT bias corrections for the non-circumference measurements.
+# Fitted 2026-07-20 on the same n=11 app GT corpus, median(gt / predicted).
+#
+# Why these were the biggest remaining errors: the per-sex table above only ever
+# covered the four circumferences, so lengths and heights carried their full
+# systematic bias uncorrected. They were the WORST measurements in the pipeline
+# (inner seam MAE 10.7 cm with bias +10.7 — i.e. essentially pure offset, no
+# scatter), simply because nothing corrected them.
+#
+# Sex-INDEPENDENT on purpose: splitting these by sex measured WORSE in
+# leave-one-out (5.45 vs 5.39 cm overall) — 8 female / 3 male is too thin to
+# support per-sex length fits, so the split fits noise.
+#
+# Only measurements passing BOTH gates are listed: (a) the bootstrap 95 % CI on
+# the fitted ratio excludes 1.0, and (b) leave-one-out MAE improves by >0.2 cm.
+# Deliberately EXCLUDED by those gates:
+#   chest_width_front     +8.9 % but CI [-1.0, +25.0] spans zero, LOOCV -0.3
+#   back_length_to_waist  +6.8 % but CI [-0.7, +13.6] spans zero, LOOCV +0.7
+#
+# Leave-one-out overall MAE: 6.18 cm before -> 5.23 cm with this table.
+_LENGTH_SCALES_PCT: dict[str, float] = {
+    "leg_length_inner_seam":  -9.5,   # %   MAE 10.7 -> 6.8
+    "leg_length_outer_seam":  -2.5,   #     MAE  8.7 -> 7.7
+    "neck_base_height":       +4.0,   #     MAE  6.3 -> 2.8
 }
 
 # Backwards-compat alias retained as an empty dict — older code paths that
@@ -419,6 +460,9 @@ def body_to_envelope(
         # Apply per-sex multiplicative bias correction (whitelisted IDs only).
         if mid in _SEX_SCALE_TARGET_IDS and mid in sex_scales_pct:
             value = max(0.0, float(value) * (1.0 + float(sex_scales_pct[mid]) / 100.0))
+        # Sex-INDEPENDENT correction for the non-circumference measurements.
+        elif apply_sex_offsets and mid in _LENGTH_SCALES_PCT:
+            value = max(0.0, float(value) * (1.0 + _LENGTH_SCALES_PCT[mid] / 100.0))
 
         # Sanity-range gate: never drop. Tag with `out_of_range` so callers and
         # the UI can mark it visually, but the value is still surfaced. Pydantic

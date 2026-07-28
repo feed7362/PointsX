@@ -37,7 +37,11 @@ from pointsx.synthetic.body_generator import (
     NumpyEncoder,
 )
 from pointsx.synthetic.landmarks import POINTSX16_FLIP_IDX
-from pointsx.synthetic.measurements_gt import compute_measurements, sanity_check
+from pointsx.synthetic.measurements_gt import (
+    compute_measurements,
+    has_core_measurements,
+    sanity_check,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +129,14 @@ def run_smplx_phase(
 
         # Compute measurements
         meas = compute_measurements(vertices, joints, faces, sample.sex)
+        # Drop bodies whose garment-critical circumferences couldn't be measured
+        # — a body with faked/missing core GT poisons training. No constants.
+        if not has_core_measurements(meas):
+            logger.warning("Body %d: core measurements not measurable — skipping", sample.body_id)
+            continue
         warnings = sanity_check(meas)
         if warnings:
-            logger.debug("Body %d warnings: %s", sample.body_id, "; ".join(warnings))
+            logger.debug("Body %d unmeasured fields: %s", sample.body_id, "; ".join(warnings))
 
         # Save landmarks JSON (includes measurements)
         lm_path = landmarks_dir / f"body_{sample.body_id:05d}.json"

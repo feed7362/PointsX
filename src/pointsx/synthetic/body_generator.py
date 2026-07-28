@@ -28,14 +28,20 @@ class NumpyEncoder(json.JSONEncoder):
 
 logger = logging.getLogger(__name__)
 
-# ── Height calibration constants (empirical from SMPL-X neutral model) ──────
-# β[0] is the primary height principal component
-# Linear mapping: height_cm ≈ MEAN_HEIGHT + β[0] * HEIGHT_STD
-MEAN_HEIGHT_M = {"male": 1.77, "female": 1.64}
-HEIGHT_STD_M = {"male": 0.065, "female": 0.060}
+# ── Anthropometric sampling priors ─────────────────────────────────────────
+# Target stature (cm): realistic adult population per sex (approx NHANES/ANSUR),
+# sampled as a truncated normal — NOT uniform 150–200, which over-weights the
+# extremes and forces β[0] out of its plausible range.
+HEIGHT_MEAN_CM = {"male": 176.0, "female": 163.0}
+HEIGHT_STD_CM = {"male": 7.0, "female": 6.5}
+HEIGHT_CLIP_CM = (147.0, 200.0)
 
-# BMI class → β[1] approximate range (weight PC)
-# Negative β[1] = thinner, positive = heavier
+# Shape betas β[2:] are sampled from the model's own N(0,1) shape prior (clipped)
+# — the correct prior by construction, replacing the ad-hoc ×0.8 under-dispersion.
+SHAPE_BETA_CLIP = 2.5
+
+# BMI class → β[1] range (the dominant corpulence axis). Stratified sampling
+# keeps the obese/thin TAILS covered (BMI>30 is the worst real-eval bucket).
 BMI_BETA1_RANGE = {
     "very_thin": (-3.0, -1.5),
     "thin": (-1.5, -0.5),
@@ -64,16 +70,18 @@ class BodySample:
     landmarks_path: str = ""
 
 
-def _height_to_beta0(target_height_m: float, sex: str) -> float:
-    """Convert desired height to SMPL-X β[0] parameter."""
-    return (target_height_m - MEAN_HEIGHT_M[sex]) / HEIGHT_STD_M[sex]
-
-
-def _sample_bmi_beta1() -> tuple[str, float]:
+def _sample_bmi_beta1(rng: np.random.Generator) -> tuple[str, float]:
     """Sample a BMI class and corresponding β[1] value."""
-    bmi_class = np.random.choice(BMI_CLASSES, p=BMI_WEIGHTS)
+    bmi_class = rng.choice(BMI_CLASSES, p=BMI_WEIGHTS)
     lo, hi = BMI_BETA1_RANGE[bmi_class]
-    return bmi_class, float(np.random.uniform(lo, hi))
+    return bmi_class, float(rng.uniform(lo, hi))
+
+
+def _sample_target_height_cm(sex: str, rng: np.random.Generator) -> float:
+    """Truncated-normal adult stature for the sex."""
+    lo, hi = HEIGHT_CLIP_CM
+    h = rng.normal(HEIGHT_MEAN_CM[sex], HEIGHT_STD_CM[sex])
+    return float(np.clip(h, lo, hi))
 
 
 # ── Pose definitions ──────────────────────────────────────────────────────
@@ -138,6 +146,7 @@ def generate_body_samples(
     """Generate N unique body configurations (shape + 3 poses each)."""
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
+    np.random.seed(seed)  # pose generators use the legacy global RNG — seed it too
 
     samples = []
     body_id = 1
@@ -148,19 +157,20 @@ def generate_body_samples(
     rng.shuffle(sexes)
 
     for sex in sexes:
-        # Sample height: 150–200 cm
-        target_height_cm = float(rng.uniform(150, 200))
-        target_height_m = target_height_cm / 100.0
+        # Realistic stature per sex (truncated normal), not uniform 150–200.
+        target_height_cm = _sample_target_height_cm(sex, rng)
 
-        # Build β parameters
-        bmi_class, beta1 = _sample_bmi_beta1()
-        beta0 = _height_to_beta0(target_height_m, sex)
+        # Build β parameters. β[0] (the dominant stature axis) is left as a
+        # PLACEHOLDER 0 here and SOLVED at forward time to hit target_height_cm
+        # given the sampled shape — so height comes from a real shape parameter
+        # (correct allometry), never a mesh rescale.
+        bmi_class, beta1 = _sample_bmi_beta1(rng)
 
         betas = np.zeros(10)
-        betas[0] = beta0
-        betas[1] = beta1
-        # Proportions: short/long legs, wide/narrow shoulders, belly
-        betas[2:] = rng.standard_normal(8) * 0.8
+        betas[0] = 0.0  # solved in run_smplx_forward
+        betas[1] = beta1  # corpulence axis (BMI-stratified)
+        # Remaining proportions from the model's own N(0,1) shape prior (clipped).
+        betas[2:] = np.clip(rng.standard_normal(8), -SHAPE_BETA_CLIP, SHAPE_BETA_CLIP)
 
         # Global orient: minimal random jitter (person facing camera)
         global_orient = rng.standard_normal(3) * 0.05
@@ -216,51 +226,87 @@ def _get_smplx_model(sex: str, model_dir: Path) -> object:
     return _SMPLX_MODEL_CACHE[sex]
 
 
+def _forward(model, betas_vec: np.ndarray, body_pose, global_orient, expression):
+    """One SMPL-X forward pass → (vertices, joints) numpy."""
+    betas_t = torch.from_numpy(np.ascontiguousarray(betas_vec, dtype=np.float32)).unsqueeze(0)
+    with torch.no_grad():
+        out = model(
+            betas=betas_t,
+            body_pose=body_pose, global_orient=global_orient,
+            expression=expression, return_verts=True,
+        )
+    return out.vertices[0].numpy(), out.joints[0].numpy()
+
+
+def _height_m(vertices: np.ndarray) -> float:
+    return float(np.max(vertices[:, 1]) - np.min(vertices[:, 1]))
+
+
+# Measured dheight/dβ0 per sex (cached) — replaces the hand-guessed HEIGHT_STD.
+_BETA0_SLOPE_CACHE: dict[str, float] = {}
+
+
+def _beta0_height_slope(model, sex: str, body_pose, global_orient, expression) -> float:
+    """Empirically measured metres of stature per unit β[0], near neutral shape."""
+    if sex not in _BETA0_SLOPE_CACHE:
+        base = np.zeros(10)
+        lo = base.copy(); lo[0] = -2.0
+        hi = base.copy(); hi[0] = +2.0
+        h_lo = _height_m(_forward(model, lo, body_pose, global_orient, expression)[0])
+        h_hi = _height_m(_forward(model, hi, body_pose, global_orient, expression)[0])
+        _BETA0_SLOPE_CACHE[sex] = (h_hi - h_lo) / 4.0
+    return _BETA0_SLOPE_CACHE[sex]
+
+
 def run_smplx_forward(sample: BodySample, model_dir: Path) -> tuple[np.ndarray, np.ndarray, float]:
-    """Run SMPL-X forward pass for one body sample and enforce exact target height.
+    """Run SMPL-X forward pass, SOLVING β[0] to hit the target height.
+
+    β[0] (the dominant stature axis) is solved so the emergent height matches
+    `target_height_cm` GIVEN the sampled shape (β[1:]), using a measured
+    dheight/dβ0 slope. Height therefore comes from a genuine shape parameter, so
+    circumferences keep their natural (non-linear) allometry — unlike a uniform
+    mesh rescale, which forced every girth to scale linearly with height and
+    corrupted the height→girth relationship the model learns. The returned height
+    is the true emergent height (≈ target within ~1 cm); the GT measured from this
+    mesh is self-consistent with it.
 
     Returns:
-        vertices: (10475, 3) float32
+        vertices: (10475, 3) float32 — floor-aligned (min y = 0)
         joints:   (127, 3)  float32
-        height_m: actual height in meters (now guaranteed to match target)
+        height_m: emergent height in metres
+
+    Raises:
+        ValueError: degenerate forward pass — caller skips the body, no fake height.
     """
     model = _get_smplx_model(sample.sex, model_dir)
 
-    betas = torch.tensor([sample.betas], dtype=torch.float32)
     body_pose = torch.tensor([sample.body_pose], dtype=torch.float32)
     global_orient = torch.tensor([sample.global_orient], dtype=torch.float32)
     expression = torch.zeros(1, 10)
 
-    with torch.no_grad():
-        output = model(
-            betas=betas,
-            body_pose=body_pose,
-            global_orient=global_orient,
-            expression=expression,
-            return_verts=True,
-        )
+    betas = np.asarray(sample.betas, dtype=np.float64).copy()
 
-    vertices = output.vertices[0].numpy()  # (10475, 3)
-    joints = output.joints[0].numpy()  # (127, 3)
-    raw_height_m = float(np.max(vertices[:, 1]) - np.min(vertices[:, 1]))
+    # Solve β[0] for the target height given the sampled shape.
+    verts0, _ = _forward(model, betas, body_pose, global_orient, expression)  # β0=0 placeholder
+    h0 = _height_m(verts0)
+    slope = _beta0_height_slope(model, sample.sex, body_pose, global_orient, expression)
+    if abs(slope) < 1e-4:
+        raise ValueError(f"degenerate β0→height slope ({slope:.5f}) for {sample.sex}")
+    betas[0] = (sample.target_height_cm / 100.0 - h0) / slope
 
-    target_height_m = sample.target_height_cm / 100.0
+    vertices, joints = _forward(model, betas, body_pose, global_orient, expression)
+    sample.betas = betas.tolist()  # record the solved β[0]
 
-    if raw_height_m < 0.1:
-        raw_height_m = 1.7
+    height_m = float(np.max(vertices[:, 1]) - np.min(vertices[:, 1]))
+    if height_m < 0.1:
+        raise ValueError(f"degenerate SMPL-X forward pass (height={height_m:.3f} m)")
 
-    scale_factor = target_height_m / raw_height_m
-
-    vertices *= scale_factor
-    joints *= scale_factor
-
+    # Floor-align only (no scaling): feet at y=0.
     lowest_y = np.min(vertices[:, 1])
     vertices[:, 1] -= lowest_y
     joints[:, 1] -= lowest_y
 
-    final_height_m = target_height_m
-
-    return vertices, joints, final_height_m
+    return vertices, joints, height_m
 
 
 def save_body_obj(
