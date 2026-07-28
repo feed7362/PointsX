@@ -175,7 +175,10 @@ class _LazyClient:
                     region_name=cfg.region,
                     config=BotoConfig(
                         signature_version="s3v4",
-                        retries={"max_attempts": 2, "mode": "standard"},
+                        # 5 attempts / adaptive: ElasticLake intermittently returns
+                        # InternalError under load and 2 was not enough — production
+                        # logs show "reached max retries: 2".
+                        retries={"max_attempts": 5, "mode": "adaptive"},
                         request_checksum_calculation="when_required",
                         response_checksum_validation="when_required",
                         s3={"addressing_style": "path" if cfg.force_path_style else "virtual"},
@@ -368,6 +371,54 @@ def _extension_for(content_type: str) -> str:
     return "bin"
 
 
+# Error codes that are TRANSIENT on our provider but that boto3 will not retry
+# on its own. `SignatureDoesNotMatch` is nominally a 403 (auth) error, so botocore
+# treats it as permanent — but ElasticLake returns it intermittently with
+# "signing key not available", and an immediate retry with the same credentials
+# succeeds. Verified repeatedly against the live bucket.
+_RETRYABLE_S3_CODES = frozenset({
+    "SignatureDoesNotMatch",
+    "InternalError",
+    "ServiceUnavailable",
+    "SlowDown",
+    "RequestTimeout",
+    "RequestTimeTooSkewed",
+})
+_PUT_RETRIES = 4
+_PUT_BACKOFF_S = 0.5
+
+
+def _put_with_retry(client, **kwargs) -> None:
+    """put_object with backoff on provider-transient errors.
+
+    Runs inside a BackgroundTask, so sleeping here never delays the measurement
+    response. Re-raises the last error once attempts are exhausted.
+    """
+    import time
+
+    from botocore.exceptions import ClientError
+
+    for attempt in range(1, _PUT_RETRIES + 1):
+        try:
+            client.put_object(**kwargs)
+            if attempt > 1:
+                logger.warning(
+                    "Object-storage put succeeded on attempt %d — key=%s",
+                    attempt, kwargs.get("Key"),
+                )
+            return
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code not in _RETRYABLE_S3_CODES or attempt == _PUT_RETRIES:
+                raise
+            delay = _PUT_BACKOFF_S * (2 ** (attempt - 1))
+            logger.warning(
+                "Object-storage put attempt %d/%d failed (%s) — retrying in %.1fs",
+                attempt, _PUT_RETRIES, code, delay,
+            )
+            time.sleep(delay)
+
+
 def archive_measurement(
     request_id: str,
     *,
@@ -410,7 +461,8 @@ def archive_measurement(
             # (ElasticLake, certain MinIO configs) reject chunked-encoded
             # uploads where boto3 omits the header. Passing len(body)
             # bypasses chunked encoding for bytes payloads.
-            client.put_object(
+            _put_with_retry(
+                client,
                 Bucket=cfg.bucket,
                 Key=key,
                 Body=body,
