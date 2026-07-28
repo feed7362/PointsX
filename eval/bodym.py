@@ -47,6 +47,24 @@ CIRCUMFERENCES = ("chest", "waist", "hip", "thigh")
 TOL_LADDER = (1.0, 3.0, 5.0)
 WRONG_SIZE_CM = 5.0  # safety metric: off by more than this = silently wrong size
 
+# ── LEGAL GUARD — read before adding any pipeline ────────────────────────────
+# BodyM is licensed CC BY-NC (non-commercial). In THIS project it is used for
+# EVALUATION ONLY. Rules, enforced by convention here:
+#   • A (ellipse) is pure geometry — YOLO widths + a math formula, no data fit.
+#   • B/C/D derive *correction constants* (scales / girth coefs) from BodyM's
+#     GT via median/least-squares. These are a NON-COMMERCIAL RESEARCH BENCHMARK
+#     ONLY — they must NEVER ship in the product (the app over-reads, BodyM's
+#     silhouette under-reads: opposite sign, proven; they don't transfer anyway).
+#   • Do NOT train an ML MODEL (regressor/NN) on BodyM — that is forbidden here.
+#     A learned pipeline (E+) must fit on a LEGAL source (synthetic / app GT) and
+#     use BodyM only as held-out test. Synthetic is deferred: current synthetic
+#     data is fragile and needs reconsideration before it can be that source.
+_LICENSE = "CC BY-NC — evaluation only; fitted constants are benchmark-only, non-shippable"
+
+
+def _guard_banner() -> None:
+    print(f"[guard] BodyM {_LICENSE}")
+
 
 # ── S3 (public, unsigned) + tiny cache ──────────────────────────────────────
 def _client():
@@ -222,6 +240,7 @@ def fit_params(s3, n_fit: int) -> dict[str, dict]:
         subjects = subjects[:n_fit]
     ratios: dict[str, dict[str, list]] = {}
     rows: dict[str, dict[str, list]] = {}  # sex -> m -> [(fw, sw, gt)]
+    _guard_banner()  # fitting constants FROM BodyM → benchmark-only, non-shippable
     print(f"[fit] params on train n={len(subjects)} (scales + learned girth per sex×measure)")
     for i, sid in enumerate(subjects, 1):
         sex = hwg[sid]["gender"]

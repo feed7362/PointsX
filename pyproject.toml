@@ -26,6 +26,8 @@ dependencies = [
     "rich>=15.0.0",
     "python-multipart>=0.0.26",
     "edge-tts>=7.0.0",
+    "pynacl>=1.6.2",
+    "supabase>=2.31.0",
 ]
 
 [project.scripts]

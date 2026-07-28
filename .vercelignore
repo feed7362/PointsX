@@ -1,4 +1,4 @@
-# Development tools
+# Development tools and local-only files
 .venv
 .pytest_cache
 .dev-certs
@@ -6,8 +6,14 @@
 .cursor
 .claude
 
-# Local operator tools (not deployed)
-/dataset-viewer
+# Large data/training artifacts
+dataset
+notebooks
+image
+screen
+tests
+deploy
+old_weights
 
 # Large data (exclude root folders only, not JS subdirectories)
 /dataset

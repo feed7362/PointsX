@@ -18,6 +18,13 @@ uses the widths directly, because it REPLACES the ellipse formula.
 The expensive silhouette work runs ONCE per subject; pipelines are cheap replays.
 Add a pipeline to `PIPELINES` → the orchestrator scores it automatically. The
 first entry (A) is the frozen baseline every other pipeline is scored against.
+
+LEGAL GUARD (BodyM is CC BY-NC — evaluation only):
+  • A — pure geometry (YOLO widths + ellipse formula). No data fit. Fully clean.
+  • B/C/D — derive correction constants from BodyM GT (median / least-squares).
+    A NON-COMMERCIAL RESEARCH BENCHMARK ONLY; these constants must never ship.
+  • A trained ML MODEL (E+) may NOT be fit on BodyM. It must train on a legal
+    source (synthetic / app GT) and use BodyM only as held-out test.
 """
 from __future__ import annotations
 
