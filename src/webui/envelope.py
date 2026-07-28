@@ -120,6 +120,14 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # refit once the corpus has ~8+ male subjects.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
     "female": {  # n=8
+        # Chest RESTORED 2026-07-20 after a real-world report of ~10 cm
+        # over-measurement. It had been gated to zero because its bootstrap CI
+        # spans 1.0 — but "not significant" means UNCERTAIN, not "use zero": the
+        # fitted point estimate is still the best single guess, and dropping it
+        # measured worse (MAE 5.9 uncorrected vs 5.0 here; LOOCV 5.9 vs 5.6).
+        # Male chest is deliberately still absent: its fitted +3.9 % improves
+        # in-sample (4.6) but WORSENS leave-one-out (6.3) — n=3 overfitting.
+        "chest_circumference":  -4.5,
         "waist_circumference": -14.0,   # %
         "hip_circumference":    -5.0,
         "thigh_circumference": -17.0,
