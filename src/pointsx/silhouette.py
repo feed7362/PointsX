@@ -7,6 +7,107 @@ import numpy as np
 from pointsx.keypoints import KP, distance, interpolate_y, is_valid
 from pointsx.schemas import Keypoints, SilhouetteMask
 
+# Upper-leg fraction caps — keep hip/thigh lines out of the knee region.
+_HIP_SEARCH_MAX_FRAC = 0.20
+_THIGH_GAP_SCAN_MAX_FRAC = 0.35
+_THIGH_FALLBACK_FRAC = 0.25
+
+
+def _pelvis_and_knee_y(kp: Keypoints) -> tuple[float, float] | None:
+    """Return (y_pelvis, y_knee) when both are available from keypoints."""
+    pts, conf = kp.points, kp.confidence
+    if not is_valid(conf, KP.PELVIS):
+        return None
+    knee_ys: list[float] = []
+    if is_valid(conf, KP.LEFT_KNEE):
+        knee_ys.append(float(pts[KP.LEFT_KNEE, 1]))
+    if is_valid(conf, KP.RIGHT_KNEE):
+        knee_ys.append(float(pts[KP.RIGHT_KNEE, 1]))
+    if not knee_ys:
+        return None
+    y_pelvis = float(pts[KP.PELVIS, 1])
+    y_knee = float(np.mean(knee_ys))
+    if y_knee <= y_pelvis + 1.0:
+        return None
+    return y_pelvis, y_knee
+
+
+def hip_search_y_range(kp: Keypoints) -> tuple[float, float] | None:
+    """Anatomical y-range for hip-width search (pelvis .. upper thigh only).
+
+    Anchors on left/right hip keypoints when present; never searches below
+    ``_HIP_SEARCH_MAX_FRAC`` of the pelvis-to-knee span.
+    """
+    span = _pelvis_and_knee_y(kp)
+    if span is None:
+        return None
+    y_pelvis, y_knee = span
+    leg_span = y_knee - y_pelvis
+    y_hard_max = y_pelvis + _HIP_SEARCH_MAX_FRAC * leg_span
+
+    hip_ys: list[float] = []
+    pts, conf = kp.points, kp.confidence
+    if is_valid(conf, KP.LEFT_HIP):
+        hip_ys.append(float(pts[KP.LEFT_HIP, 1]))
+    if is_valid(conf, KP.RIGHT_HIP):
+        hip_ys.append(float(pts[KP.RIGHT_HIP, 1]))
+
+    if hip_ys:
+        y_hip = float(np.mean(hip_ys))
+        band = 0.06 * leg_span
+        y_start = max(y_pelvis + 0.02 * leg_span, y_hip - band)
+        y_end = min(y_hard_max, y_hip + band)
+    else:
+        y_start = y_pelvis + 0.05 * leg_span
+        y_end = y_pelvis + 0.16 * leg_span
+
+    if y_end <= y_start:
+        y_end = min(y_hard_max, y_start + 0.05 * leg_span)
+    return y_start, y_end
+
+
+def front_thigh_y_level(kp: Keypoints, mask: np.ndarray) -> float | None:
+    """Front-view thigh line y: leg-gap row, capped to upper thigh (not knee)."""
+    pts, conf = kp.points, kp.confidence
+    if not is_valid(conf, KP.PELVIS):
+        return None
+
+    pelvis_x = int(round(float(pts[KP.PELVIS, 0])))
+    pelvis_y = int(round(float(pts[KP.PELVIS, 1])))
+    h, w = mask.shape
+    pelvis_x = int(np.clip(pelvis_x, 0, w - 1))
+    pelvis_y = int(np.clip(pelvis_y, 0, h - 1))
+
+    span = _pelvis_and_knee_y(kp)
+    if span is not None:
+        y_pelvis_f, y_knee = span
+        y_scan_max = int(round(y_pelvis_f + _THIGH_GAP_SCAN_MAX_FRAC * (y_knee - y_pelvis_f)))
+    else:
+        y_scan_max = min(h - 1, pelvis_y + int(0.15 * h))
+    y_scan_max = int(np.clip(y_scan_max, pelvis_y + 1, h - 1))
+
+    y_thigh = pelvis_y
+    for y in range(pelvis_y, y_scan_max + 1):
+        if not mask[y, pelvis_x]:
+            y_thigh = y
+            break
+
+    if y_thigh == pelvis_y and span is not None:
+        y_pelvis_f, y_knee = span
+        hip_ys: list[float] = []
+        if is_valid(conf, KP.LEFT_HIP):
+            hip_ys.append(float(pts[KP.LEFT_HIP, 1]))
+        if is_valid(conf, KP.RIGHT_HIP):
+            hip_ys.append(float(pts[KP.RIGHT_HIP, 1]))
+        if hip_ys:
+            y_hip = float(np.mean(hip_ys))
+            y_thigh = int(round(y_hip + 0.12 * (y_knee - y_hip)))
+        else:
+            y_thigh = int(round(y_pelvis_f + _THIGH_FALLBACK_FRAC * (y_knee - y_pelvis_f)))
+        y_thigh = int(np.clip(y_thigh, pelvis_y + 1, y_scan_max))
+
+    return float(y_thigh)
+
 
 # Fraction of the hip->knee span at which the thigh is measured (upper thigh,
 # just below the gluteal fold). Chosen empirically: on the 11-subject app corpus
@@ -469,69 +570,55 @@ def extract_all_widths(
         existing_y = selected_y.get("waist", (None, None))
         selected_y["waist"] = (existing_y[0], waist_s_y)
 
-    # Hip: largest continuous line from pelvis to knee.
-    if is_valid(f_conf, KP.PELVIS):
-        y_pelvis = f_pts[KP.PELVIS, 1]
-        knee_ys = []
-        if is_valid(f_conf, KP.LEFT_KNEE):
-            knee_ys.append(float(f_pts[KP.LEFT_KNEE, 1]))
-        if is_valid(f_conf, KP.RIGHT_KNEE):
-            knee_ys.append(float(f_pts[KP.RIGHT_KNEE, 1]))
-        if knee_ys:
-            y_knee = float(np.mean(knee_ys))
-            y_start = y_pelvis + 0.05 * (y_knee - y_pelvis)
-            hip_f = _extreme_continuous_width_between_y(
-                f_mask, y_start, y_knee, prefer="max", x_band=f_band
-            )
-            widths["hip"] = (hip_f, None)
+    # Hip: largest continuous width in upper thigh (anchored on hip keypoints).
+    hip_range_f = hip_search_y_range(front_kp)
+    if hip_range_f is not None:
+        y_start, y_end = hip_range_f
+        hip_f = _extreme_continuous_width_between_y(
+            f_mask, y_start, y_end, prefer="max", x_band=f_band
+        )
+        widths["hip"] = (hip_f, None)
 
-    if is_valid(s_conf, KP.PELVIS, KP.RIGHT_KNEE):
-        y_pelvis = s_pts[KP.PELVIS, 1]
-        y_knee = s_pts[KP.RIGHT_KNEE, 1]
-        y_start = y_pelvis + 0.05 * (y_knee - y_pelvis)
+    hip_range_s = hip_search_y_range(side_kp)
+    if hip_range_s is not None:
+        y_start, y_end = hip_range_s
         hip_s = _extreme_continuous_width_between_y(
-            s_mask, y_start, y_knee, prefer="max", x_band=s_band
+            s_mask, y_start, y_end, prefer="max", x_band=s_band
         )
         existing = widths.get("hip", (None, None))
         widths["hip"] = (existing[0], hip_s)
 
-    # Thigh — anchored PROPORTIONALLY between hip and knee, not to the crotch.
-    #
-    # The previous version scanned down the centre column for the row where the
-    # legs separate ("crotch") and measured there. That row is a POSE artefact:
-    # how far down the legs stay in contact depends on stance width and clothing
-    # (measured 27 cm below the pelvis on a real subject). The resulting width was
-    # effectively half the hip width — near-constant at 18-21 cm across subjects
-    # whose taped thigh spanned 40-69 cm, i.e. it carried no signal (corr = -0.37
-    # against tape GT on the 11-subject app corpus).
-    #
-    # Anchoring at 10 % of the hip->knee span (the upper thigh, just below the
-    # gluteal fold — the standard anthropometric level) measures corr = +0.72 on
-    # the same corpus. At that height the thighs are still in contact for most
-    # subjects, so the widest contiguous segment spans BOTH legs and is halved.
-    hip_ys = [float(f_pts[k, 1]) for k in (KP.LEFT_HIP, KP.RIGHT_HIP) if is_valid(f_conf, k)]
-    knee_ys = [float(f_pts[k, 1]) for k in (KP.LEFT_KNEE, KP.RIGHT_KNEE) if is_valid(f_conf, k)]
-    if not hip_ys and is_valid(f_conf, KP.PELVIS):
-        hip_ys = [float(f_pts[KP.PELVIS, 1])]
-
-    if hip_ys and knee_ys:
-        hip_y = float(np.mean(hip_ys))
-        knee_y = float(np.mean(knee_ys))
-        y_thigh_f = hip_y + THIGH_HIP_KNEE_FRACTION * (knee_y - hip_y)
-        y_thigh_f = float(np.clip(y_thigh_f, 0, f_mask.shape[0] - 1))
-
-        seg = _widest_segment_at_y(f_mask, y_thigh_f, margin=2)
-        if seg is not None:
-            x0, x1, width_px = seg
-            # Body midline: the hips' midpoint (falls back to the segment centre).
-            hip_xs = [float(f_pts[k, 0]) for k in (KP.LEFT_HIP, KP.RIGHT_HIP)
-                      if is_valid(f_conf, k)]
-            mid_x = float(np.mean(hip_xs)) if hip_xs else (x0 + x1) / 2.0
-            # A segment straddling the midline is BOTH thighs in contact -> halve.
-            both_legs = x0 < mid_x < x1
-            front_w = width_px / 2.0 if both_legs else width_px
-            widths["thigh_right"] = (front_w, None)
-            widths["thigh_left"] = (front_w, None)
+    # Thigh:
+    # - front: at the level where center gap between legs begins; measure one-leg continuous segment
+    # - side: at 30% below pelvis (toward knee/ankle)
+    if is_valid(f_conf, KP.PELVIS):
+        pelvis_x = int(round(float(f_pts[KP.PELVIS, 0])))
+        pelvis_y = int(round(float(f_pts[KP.PELVIS, 1])))
+        pelvis_x = int(np.clip(pelvis_x, 0, f_mask.shape[1] - 1))
+        pelvis_y = int(np.clip(pelvis_y, 0, f_mask.shape[0] - 1))
+        thigh_split_x = (
+            int(round(float(f_pts[KP.UPPER_NECK, 0])))
+            if is_valid(f_conf, KP.UPPER_NECK)
+            else pelvis_x
+        )
+        thigh_split_x = int(np.clip(thigh_split_x, 0, f_mask.shape[1] - 1))
+        y_thigh_f_raw = front_thigh_y_level(front_kp, f_mask)
+        y_thigh_f = int(round(y_thigh_f_raw)) if y_thigh_f_raw is not None else pelvis_y
+        for side_name, kp_knee in [("right", KP.RIGHT_KNEE), ("left", KP.LEFT_KNEE)]:
+            if is_valid(f_conf, kp_knee):
+                x_hint = f_pts[kp_knee, 0]
+            elif side_name == "right" and is_valid(f_conf, KP.RIGHT_HIP):
+                x_hint = f_pts[KP.RIGHT_HIP, 0]
+            elif side_name == "left" and is_valid(f_conf, KP.LEFT_HIP):
+                x_hint = f_pts[KP.LEFT_HIP, 0]
+            else:
+                continue
+            if side_name == "right":
+                x_band = (0.0, thigh_split_x)
+            else:
+                x_band = (thigh_split_x, float(f_mask.shape[1] - 1))
+            front_w = measure_limb_width_at_y(f_mask, y_thigh_f, x_hint, x_band=x_band)
+            widths[f"thigh_{side_name}"] = (front_w, None)
 
     if is_valid(s_conf, KP.PELVIS):
         y_pelvis_s = float(s_pts[KP.PELVIS, 1])
