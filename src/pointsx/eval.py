@@ -52,7 +52,14 @@ logger = logging.getLogger(__name__)
 # the webui results table).
 CANONICAL_IDS = [mid for mid, _label, _src in CANONICAL_MEASUREMENTS]
 LABEL_BY_ID = {mid: label for mid, label, _src in CANONICAL_MEASUREMENTS}
-DISPLAY_IDS = list(DISPLAY_MEASUREMENT_IDS)
+# Scored measurements. Previously this was DISPLAY_MEASUREMENT_IDS (11 ids), so
+# anything in the envelope but not on the results screen was NEVER evaluated —
+# neck / bicep / back-width / front-length all had ground truth in the corpus and
+# no accuracy number attached. Neck was ~35 cm out and nobody could see it.
+#
+# Now: every canonical id, so the eval covers the whole envelope. Ids the corpus
+# has no GT for simply collect no observations and report as "—".
+DISPLAY_IDS = list(dict.fromkeys(list(DISPLAY_MEASUREMENT_IDS) + CANONICAL_IDS))
 
 
 @dataclass
