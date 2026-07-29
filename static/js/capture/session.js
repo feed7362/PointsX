@@ -36,7 +36,14 @@ export const STABLE_POSE_MS = 700;
 const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 const UPLOAD_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-const MP_PKG = "https://esm.sh/@mediapipe/tasks-vision@0.10.14";
+// MediaPipe module sources, tried in order. esm.sh alone was a single point of
+// failure: an outage or an ad-blocker filtering it silently disabled the live
+// pose guidance (and broke dataset upload via the same CDN). jsdelivr's /+esm
+// endpoint is separate infrastructure serving self-contained ES modules.
+const MP_PKGS = [
+  "https://esm.sh/@mediapipe/tasks-vision@0.10.14",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm",
+];
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
@@ -138,7 +145,19 @@ export function checkCaptureReadiness() {
 export async function loadPoseLandmarker() {
   if (captureState.poseLandmarker || captureState.poseLoadError) return;
   try {
-    const { FilesetResolver, PoseLandmarker } = await import(MP_PKG);
+    let mp = null;
+    const mpFailures = [];
+    for (const url of MP_PKGS) {
+      try {
+        mp = await import(/* @vite-ignore */ url);
+        break;
+      } catch (err) {
+        mpFailures.push(`${new URL(url).host}: ${err?.message ?? err}`);
+        console.warn(`[capture] MediaPipe failed from ${url}`, err);
+      }
+    }
+    if (!mp) throw new Error(`MediaPipe unavailable — ${mpFailures.join(" | ")}`);
+    const { FilesetResolver, PoseLandmarker } = mp;
     const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
     try {
       captureState.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
