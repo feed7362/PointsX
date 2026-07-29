@@ -128,12 +128,14 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
         # Male chest is deliberately still absent: its fitted +3.9 % improves
         # in-sample (4.6) but WORSENS leave-one-out (6.3) — n=3 overfitting.
         "chest_circumference":  -4.5,
-        "waist_circumference": -14.0,   # %
+        # Waist refitted 2026-07-29 for the new FRONT anchor (fixed 0.25 of the
+        # pelvis->neck span instead of the narrowest row). MAE 5.98 -> 4.45.
+        "waist_circumference": -17.5,   # %
         "hip_circumference":    -5.0,
         "thigh_circumference": -17.0,
     },
     "male": {  # n=3 — provisional
-        "waist_circumference": -14.0,
+        "waist_circumference": -15.5,
         "hip_circumference":   -10.5,
         "thigh_circumference": -23.5,
     },
