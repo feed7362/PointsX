@@ -30,6 +30,9 @@ dependencies = [
     # to R2 via its S3-compatible endpoint. Silently noop'd when the R2_*
     # env vars are missing, so this is safe to ship on any deployment.
     "boto3>=1.35.0",
+    # Sealed-box encryption for archived photos — same libsodium
+    # scheme as the dataset flow (encrypt-only: needs the public key).
+    "pynacl>=1.5.0",
     # Loads `.env` (gitignored) at webui startup so local dev doesn't need a
     # wrapper shell script. On HF Spaces / Docker the env is injected by the
     # platform and python-dotenv is a no-op.

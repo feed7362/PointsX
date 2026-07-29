@@ -243,6 +243,32 @@ _lazy = _LazyClient()
 # what the archive hit. Using REST removes the second credential entirely.
 
 
+# Same scheme as the dataset flow: libsodium sealed box (X25519), i.e.
+# crypto_box_seal. Encrypting needs ONLY the public key, so this container can
+# seal photos but can never open them — the private key stays offline. That
+# makes the archive E2E-encrypted at rest exactly like dataset submissions, and
+# as a side effect every object becomes application/octet-stream, which is what
+# the MIME-restricted dataset bucket accepts.
+ENC_ALGO = "libsodium-sealedbox-x25519"
+_DEFAULT_DATASET_PUBLIC_KEY = "HxB6+jdtcSdOHKc6e/YmIH4MlQUjlJtrkwGY7sF3WW8="
+
+
+def _dataset_public_key() -> str | None:
+    """Base64 X25519 public key used to seal archived photos."""
+    if (os.environ.get("POINTSX_ARCHIVE_ENCRYPT") or "").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    return (os.environ.get("DATASET_PUBLIC_KEY") or _DEFAULT_DATASET_PUBLIC_KEY).strip() or None
+
+
+def _seal(body: bytes, public_key_b64: str) -> bytes:
+    """Encrypt with a libsodium sealed box. Raises if PyNaCl is unavailable."""
+    import base64
+
+    from nacl.public import PublicKey, SealedBox
+
+    return SealedBox(PublicKey(base64.b64decode(public_key_b64))).encrypt(body)
+
+
 @dataclass(frozen=True)
 class _SupabaseConfig:
     url: str          # https://<ref>.supabase.co
@@ -598,25 +624,37 @@ def archive_measurement(
             if isinstance(envelope_json, str)
             else json.dumps(envelope_json, ensure_ascii=False)
         )
-        uploads = [
-            (f"measurements/{rid}/front.{_extension_for(front_content_type)}",
-             front_bytes, front_content_type or "image/jpeg"),
-            (f"measurements/{rid}/side.{_extension_for(side_content_type)}",
-             side_bytes, side_content_type or "image/jpeg"),
-            (f"measurements/{rid}/envelope.json",
-             json_body.encode("utf-8"), "application/json"),
-        ]
+        pub = _dataset_public_key()
         try:
-            for key, body, ctype in uploads:
-                _supabase_put(sb, key, body, ctype)
+            if pub:
+                # Sealed, so every object is an opaque blob: same encryption as
+                # dataset submissions, and octet-stream passes the bucket's MIME
+                # whitelist. Decrypt with scripts/decrypt_dataset.py.
+                uploads = [
+                    (f"measurements/{rid}/front.bin", _seal(front_bytes, pub)),
+                    (f"measurements/{rid}/side.bin", _seal(side_bytes, pub)),
+                    (f"measurements/{rid}/envelope.json.bin",
+                     _seal(json_body.encode("utf-8"), pub)),
+                ]
+                ctype = "application/octet-stream"
+            else:
+                uploads = [
+                    (f"measurements/{rid}/front.{_extension_for(front_content_type)}", front_bytes),
+                    (f"measurements/{rid}/side.{_extension_for(side_content_type)}", side_bytes),
+                    (f"measurements/{rid}/envelope.json", json_body.encode("utf-8")),
+                ]
+                ctype = ""
+            for key, body in uploads:
+                _supabase_put(sb, key, body, ctype or (
+                    "application/json" if key.endswith(".json") else "image/jpeg"))
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Supabase Storage archive FAILED for request_id=%s: %s", rid, exc,
             )
             return False
         logger.warning(
-            "Supabase Storage archive OK — request_id=%s bucket=%s prefix=%s",
-            rid, sb.bucket, sb.prefix or "(none)",
+            "Supabase Storage archive OK — request_id=%s bucket=%s prefix=%s encrypted=%s",
+            rid, sb.bucket, sb.prefix or "(none)", bool(pub),
         )
         return True
 
