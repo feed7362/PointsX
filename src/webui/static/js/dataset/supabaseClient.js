@@ -20,10 +20,44 @@ let sodium = null;
 /**
  * Initialize Supabase client (lazy)
  */
+/**
+ * Import the first specifier that loads.
+ *
+ * Both dependencies used to be pulled from esm.sh alone, so a CDN hiccup — or an
+ * ad-blocker / corporate proxy that filters esm.sh — broke dataset submission
+ * outright with "Failed to fetch dynamically imported module". Encryption is on
+ * the critical path here, so a single CDN is not an acceptable dependency.
+ *
+ * jsdelivr's /+esm endpoint serves self-contained ES modules, which makes it a
+ * genuine fallback rather than a mirror of the same infrastructure.
+ *
+ * @param {string[]} specifiers - URLs to try, in order
+ * @param {string} label - human name used in the final error
+ */
+async function importWithFallback(specifiers, label) {
+  const failures = [];
+  for (const url of specifiers) {
+    try {
+      return await import(/* @vite-ignore */ url);
+    } catch (err) {
+      failures.push(`${new URL(url).host}: ${err?.message ?? err}`);
+      console.warn(`[dataset] ${label} failed from ${url}`, err);
+    }
+  }
+  throw new Error(
+    `Не вдалося завантажити ${label}. Перевірте підключення до мережі або ` +
+    `блокувальник реклами. Деталі: ${failures.join(' | ')}`,
+  );
+}
+
 async function getSupabase() {
   if (supabase) return supabase;
-  
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+
+  const { createClient } = await importWithFallback([
+    'https://esm.sh/@supabase/supabase-js@2',
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm',
+    'https://unpkg.com/@supabase/supabase-js@2/dist/module/index.js',
+  ], 'Supabase client');
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   return supabase;
 }
@@ -34,7 +68,11 @@ async function getSupabase() {
 async function getSodium() {
   if (sodium) return sodium;
 
-  const libsodiumModule = await import('https://esm.sh/libsodium-wrappers@0.7.13');
+  const libsodiumModule = await importWithFallback([
+    'https://esm.sh/libsodium-wrappers@0.7.13',
+    'https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/+esm',
+    'https://unpkg.com/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.js',
+  ], 'бібліотеку шифрування (libsodium)');
   const lib = libsodiumModule.default ?? libsodiumModule;
   await lib.ready;
   sodium = lib;
