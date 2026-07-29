@@ -424,6 +424,51 @@ _PUT_RETRIES = 4
 _PUT_BACKOFF_S = 0.5
 
 
+def _metadata_disabled() -> bool:
+    """True when POINTSX_S3_NO_METADATA is set — drop x-amz-meta-* headers."""
+    return (os.environ.get("POINTSX_S3_NO_METADATA") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _error_detail(exc: Exception) -> str:
+    """Extra diagnostics for an S3 error whose parsed code/message are empty.
+
+    Providers that answer with a JSON (or empty) body instead of the S3 XML
+    error document leave botocore with nothing to parse, so the exception
+    stringifies to the useless "An error occurred () when calling ...: ".
+    Surface the HTTP status and the raw body so the failure is actionable.
+    """
+    meta = getattr(exc, "response", None)
+    if not isinstance(meta, dict):
+        return ""
+    rm = meta.get("ResponseMetadata") or {}
+    bits = []
+    status = rm.get("HTTPStatusCode")
+    if status:
+        bits.append(f"http_status={status}")
+    err = meta.get("Error") or {}
+    if err.get("Code"):
+        bits.append(f"code={err['Code']}")
+    if err.get("Message"):
+        bits.append(f"msg={err['Message']}")
+    hdrs = rm.get("HTTPHeaders") or {}
+    for h in ("x-amz-error-code", "x-amz-error-message", "content-type"):
+        if hdrs.get(h):
+            bits.append(f"{h}={hdrs[h]}")
+    if status in (401, 403):
+        bits.append(
+            "HINT: Supabase S3 needs credentials from Storage -> S3 Access Keys; "
+            "a project API key (sb_secret_.../service_role JWT) is NOT accepted"
+        )
+    elif status == 400:
+        bits.append(
+            "HINT: 400 often means an unsupported feature — Supabase S3 rejects "
+            "some x-amz-meta-* custom metadata; try POINTSX_S3_NO_METADATA=1"
+        )
+    return f"  [{'; '.join(bits)}]" if bits else ""
+
+
 def _put_with_retry(client, **kwargs) -> None:
     """put_object with backoff on provider-transient errors.
 
@@ -504,10 +549,17 @@ def archive_measurement(
                 Body=body,
                 ContentLength=len(body),
                 ContentType=content_type,
-                Metadata=md or {},
+                # Custom x-amz-meta-* headers are optional. Some S3-compatible
+                # backends (Supabase among them) reject requests carrying them,
+                # and the archive is worth more than the metadata — set
+                # POINTSX_S3_NO_METADATA=1 to drop them.
+                Metadata={} if _metadata_disabled() else (md or {}),
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Object-storage archive FAILED for request_id=%s: %s", rid, exc)
+        logger.warning(
+            "Object-storage archive FAILED for request_id=%s: %s%s",
+            rid, exc, _error_detail(exc),
+        )
         return False
     logger.warning(
         "Object-storage archive OK — request_id=%s key_prefix=%s",
