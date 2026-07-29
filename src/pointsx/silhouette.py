@@ -116,6 +116,10 @@ def front_thigh_y_level(kp: Keypoints, mask: np.ndarray) -> float | None:
 # to +0.70, so the optimum is broad and not overfitted to one level.
 THIGH_HIP_KNEE_FRACTION = 0.10
 
+# FRONT-view waist row, as a fraction of the pelvis->upper-neck span. Only the
+# front is anchored this way; the side keeps its min-search (see extract_all_widths).
+WAIST_FRONT_PELVIS_NECK_FRACTION = 0.25
+
 
 def _widest_segment_at_y(
     mask: np.ndarray, y: float, margin: int = 2
@@ -550,15 +554,30 @@ def extract_all_widths(
             torso_s,
         )
 
-    # Waist: shortest continuous line from pelvis to pelvis + 0.5*(upper_neck - pelvis).
+    # Waist — the two views deliberately use DIFFERENT methods, because the same
+    # method is not reliable in both:
+    #
+    #   FRONT: fixed anatomical row. Arms hang beside the waist and a loose top
+    #     bridges the taper, so the silhouette minimum is set by clothing/pose,
+    #     not anatomy. Measured against tape GT: min-search corr +0.77,
+    #     fixed 0.25 corr +0.89 (0.20 and 0.30 both +0.88 — broad optimum).
+    #   SIDE: keep the min-search (below). In profile there are no arms crossing
+    #     the torso, so the narrowest row genuinely IS the waist, and searching
+    #     adapts to where each person's waist actually sits. Measured: min-search
+    #     corr +0.84 beats every fixed fraction (best +0.79).
+    #
+    # Combination verified end-to-end (leave-one-out, per-fold refit constant):
+    #   front=min + side=min  MAE 8.92   ->   front=0.25 + side=min  MAE 8.17
+    # Both views still target the same anatomy; only the way they locate it
+    # differs.
     if is_valid(f_conf, KP.PELVIS, KP.UPPER_NECK):
-        y_pelvis = f_pts[KP.PELVIS, 1]
-        y_mid = y_pelvis + 0.4 * (f_pts[KP.UPPER_NECK, 1] - y_pelvis)
-        waist_f, waist_f_y = _extreme_continuous_width_and_y_between_y(
-            f_mask, y_pelvis, y_mid, prefer="min", x_band=f_band
+        y_pelvis = float(f_pts[KP.PELVIS, 1])
+        y_waist_f = y_pelvis + WAIST_FRONT_PELVIS_NECK_FRACTION * (
+            float(f_pts[KP.UPPER_NECK, 1]) - y_pelvis
         )
+        waist_f = _continuous_width_at_y(f_mask, y_waist_f, margin=3, x_band=f_band)
         widths["waist"] = (waist_f, None)
-        selected_y["waist"] = (waist_f_y, None)
+        selected_y["waist"] = (y_waist_f, None)
     if is_valid(s_conf, KP.PELVIS, KP.UPPER_NECK):
         y_pelvis = s_pts[KP.PELVIS, 1]
         y_mid = y_pelvis + 0.4 * (s_pts[KP.UPPER_NECK, 1] - y_pelvis)
