@@ -54,6 +54,19 @@ const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
+async function importMediaPipePackage() {
+  const failures = [];
+  for (const url of MP_PKGS) {
+    try {
+      return await import(/* @vite-ignore */ url);
+    } catch (err) {
+      failures.push(`${new URL(url).host}: ${err?.message ?? err}`);
+      console.warn(`[capture] MediaPipe failed from ${url}`, err);
+    }
+  }
+  throw new Error(`MediaPipe unavailable — ${failures.join(" | ")}`);
+}
+
 /**
  * VIDEO-mode PoseLandmarker requires strictly monotonic timestamp_ms on every detectForVideo call
  * (same instance). Mixing 0 for uploads with camera frames causes graph errors and a wedged UI.
@@ -151,19 +164,7 @@ export function checkCaptureReadiness() {
 export async function loadPoseLandmarker() {
   if (captureState.poseLandmarker || captureState.poseLoadError) return;
   try {
-    let mp = null;
-    const mpFailures = [];
-    for (const url of MP_PKGS) {
-      try {
-        mp = await import(/* @vite-ignore */ url);
-        break;
-      } catch (err) {
-        mpFailures.push(`${new URL(url).host}: ${err?.message ?? err}`);
-        console.warn(`[capture] MediaPipe failed from ${url}`, err);
-      }
-    }
-    if (!mp) throw new Error(`MediaPipe unavailable — ${mpFailures.join(" | ")}`);
-    const { FilesetResolver, PoseLandmarker } = mp;
+    const { FilesetResolver, PoseLandmarker } = await importMediaPipePackage();
     const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
     try {
       captureState.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
@@ -208,7 +209,7 @@ function disposePoseLandmarkerImage() {
 export async function loadPoseLandmarkerImage() {
   if (captureState.poseLandmarkerImage || captureState.poseImageLoadError) return;
   try {
-    const { FilesetResolver, PoseLandmarker } = await import(MP_PKG);
+    const { FilesetResolver, PoseLandmarker } = await importMediaPipePackage();
     const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
     const opts = (delegate) => ({
       baseOptions: { modelAssetPath: MODEL_URL, delegate },
@@ -490,6 +491,36 @@ export function revokeThumbUrl(imgEl) {
     } catch {
     }
     imgEl.removeAttribute("src");
+  }
+}
+
+/**
+ * Apply pre-filled capture blobs (e.g. transferred from main results page).
+ * Skips pose gate — photos were already validated on the capture flow.
+ */
+export function applyPrefillCapture(frontBlob, sideBlob) {
+  const { thumbFront, thumbSide } = getCaptureDom();
+  if (frontBlob) {
+    revokeThumbUrl(thumbFront);
+    captureState.frontBlob = frontBlob;
+    thumbFront.src = URL.createObjectURL(frontBlob);
+    thumbFront.hidden = false;
+    syncThumbSlotToImage(thumbFront);
+  }
+  if (sideBlob) {
+    revokeThumbUrl(thumbSide);
+    captureState.sideBlob = sideBlob;
+    thumbSide.src = URL.createObjectURL(sideBlob);
+    thumbSide.hidden = false;
+    syncThumbSlotToImage(thumbSide);
+  }
+  if (captureState.frontBlob && captureState.sideBlob) {
+    captureState.step = 2;
+    captureState.suspendPoseLoopAfterComplete = true;
+  } else if (captureState.frontBlob) {
+    captureState.step = 2;
+  } else {
+    captureState.step = 1;
   }
 }
 

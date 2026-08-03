@@ -117,6 +117,45 @@ body {
   transform: translateY(0);
 }
 
+.results-dataset-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+}
+
+.btn-dataset-prefill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  padding: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 75%, #1a1a2e) 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-dataset-prefill:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.btn-dataset-prefill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-dataset-prefill-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
 .layout {
   display: grid;
   gap: 1.25rem;

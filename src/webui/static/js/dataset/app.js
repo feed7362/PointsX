@@ -30,6 +30,7 @@ import {
   markMeasurementFieldStates,
 } from './measurements.js';
 import { uploadAndInsert } from './supabaseClient.js';
+import { loadDatasetPrefill, clearDatasetPrefill } from './transfer.js';
 
 // Dataset-specific DOM elements
 const datasetDom = {
@@ -483,6 +484,45 @@ function syncHeight() {
 }
 
 /**
+ * Load measurement results + photos transferred from the main capture page.
+ */
+async function applyDatasetPrefill() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('prefill')) return;
+
+  try {
+    const data = await loadDatasetPrefill();
+    if (!data) return;
+
+    if (Number.isFinite(data.heightCm)) {
+      datasetDom.heightInput.value = String(data.heightCm);
+    }
+    if (data.sex && datasetDom.sexSelect) {
+      datasetDom.sexSelect.value = data.sex;
+    }
+
+    renderMeasurementGrid(datasetDom.measurementsContainer, t, data.measurements ?? {});
+    prefillHeight();
+
+    if (data.frontBlob || data.sideBlob) {
+      session.applyPrefillCapture(data.frontBlob ?? null, data.sideBlob ?? null);
+      ui.updateUiStep();
+    }
+
+    await clearDatasetPrefill();
+    history.replaceState({}, '', '/dataset.html');
+    setStatus(t('dataset-prefill-loaded'));
+
+    const target = document.getElementById('section-measurements')
+      ?? document.getElementById('section-params');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) {
+    console.error('Failed to apply dataset prefill:', error);
+    setStatus(t('dataset-prefill-failed', { error: error?.message ?? String(error) }), true);
+  }
+}
+
+/**
  * Main initialization
  */
 async function init() {
@@ -580,6 +620,8 @@ async function init() {
   
   // Wire submit button
   datasetDom.btnSubmit.addEventListener('click', () => void handleDatasetSubmit());
+
+  await applyDatasetPrefill();
   
   // Clear pending confirm when user edits any measurement
   datasetDom.measurementsContainer.addEventListener('input', () => {

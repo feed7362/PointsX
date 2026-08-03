@@ -252,11 +252,24 @@
           <tbody id="results-body"></tbody>
         </table>
       </details>
+
+      <div class="results-dataset-actions" id="results-dataset-actions" hidden>
+        <button type="button" class="btn btn-dataset-prefill" id="btn-send-to-dataset"
+          aria-label="Надіслати мірки до форми датасету" title="Надіслати мірки до форми датасету">
+          <svg class="btn-dataset-prefill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <ellipse cx="12" cy="5.5" rx="7" ry="2.5" />
+            <path d="M5 5.5v13c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-13" />
+            <path d="M5 12c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5" />
+          </svg>
+          <span class="sr-only" data-i18n="btn-send-to-dataset">Надіслати мірки до форми датасету</span>
+        </button>
+      </div>
     </section>
   </main>
 
   <canvas id="capture-canvas" width="1024" height="1024" hidden></canvas>
-  <script type="module" src="/static/js/app.js?v=camera-https1"></script>
+  <script type="module" src="/static/js/app.js?v=camera-https2"></script>
 </body>
 
 </html>

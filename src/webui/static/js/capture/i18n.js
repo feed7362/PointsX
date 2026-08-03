@@ -14,6 +14,14 @@ const translations = {
     uk: "Долучитись до збору датасету",
     en: "Join Dataset Collection"
   },
+  "btn-send-to-dataset": {
+    uk: "Надіслати мірки до форми датасету",
+    en: "Send measurements to dataset form"
+  },
+  "err-dataset-transfer-failed": {
+    uk: "Не вдалося підготувати дані для датасету: {msg}",
+    en: "Could not prepare data for the dataset form: {msg}"
+  },
   "ref-heading": {
     uk: "Приклади правильної пози",
     en: "Proper Pose Examples"
@@ -1044,6 +1052,14 @@ const translations = {
   "dataset-success-heading": {
     uk: "Дякуємо!",
     en: "Thank you!"
+  },
+  "dataset-prefill-loaded": {
+    uk: "Мірки та фото завантажено з результатів заміру. Перевірте значення перед відправкою.",
+    en: "Measurements and photos loaded from your measurement results. Review values before submitting."
+  },
+  "dataset-prefill-failed": {
+    uk: "Не вдалося завантажити дані з результатів: {error}",
+    en: "Could not load data from measurement results: {error}"
   },
   "dataset-success-message": {
     uk: "Ваші дані успішно надіслані і допоможуть покращити точність системи. Ваші фото зашифровані та захищені.",

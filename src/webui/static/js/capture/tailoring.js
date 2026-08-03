@@ -15,6 +15,10 @@ import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { setStatus, updateUiStep } from "./ui.js";
 import { t, translateGarment, translateBackendError } from "./i18n.js";
+import {
+  envelopeToDatasetMeasurements,
+  saveDatasetPrefill,
+} from "../dataset/transfer.js";
 
 // ---------------------------------------------------------------------------
 // Catalog loading
@@ -114,6 +118,38 @@ function orderMeasurementsManual(list) {
     if (!MEASUREMENT_MANUAL_ORDER.includes(row?.id)) ordered.push(row);
   }
   return ordered;
+}
+
+function setResultsDatasetActionVisible(visible) {
+  const actionsEl = document.getElementById("results-dataset-actions");
+  if (actionsEl) actionsEl.hidden = !visible;
+}
+
+async function sendResultsToDatasetPage() {
+  const envelope = captureState.lastMockResponse;
+  const btnSend = document.getElementById("btn-send-to-dataset");
+  if (!envelope || !captureState.frontBlob || !captureState.sideBlob) {
+    setStatus(t("err-need-both-photos"), true);
+    return;
+  }
+  const { heightInput, sexSelect } = getCaptureDom();
+  const heightCm = Number(envelope.subject?.height_cm ?? heightInput.value);
+  const sex = envelope.subject?.sex ?? sexSelect.value;
+  const measurements = envelopeToDatasetMeasurements(envelope, heightCm);
+  try {
+    if (btnSend) btnSend.disabled = true;
+    await saveDatasetPrefill({
+      heightCm,
+      sex,
+      measurements,
+      frontBlob: captureState.frontBlob,
+      sideBlob: captureState.sideBlob,
+    });
+    window.location.href = "/dataset.html?prefill=1";
+  } catch (err) {
+    if (btnSend) btnSend.disabled = false;
+    setStatus(t("err-dataset-transfer-failed", { msg: err?.message ?? String(err) }), true);
+  }
 }
 
 const PIPELINE_VIZ_ROWS = [
@@ -621,6 +657,15 @@ export function attachMeasureHandler() {
     measureLoadingStep,
   } = getCaptureDom();
 
+  const btnSendToDataset = document.getElementById("btn-send-to-dataset");
+  if (btnSendToDataset && !btnSendToDataset.dataset.wired) {
+    btnSendToDataset.dataset.wired = "1";
+    const label = t("btn-send-to-dataset");
+    btnSendToDataset.setAttribute("aria-label", label);
+    btnSendToDataset.setAttribute("title", label);
+    btnSendToDataset.addEventListener("click", () => void sendResultsToDatasetPage());
+  }
+
   async function runMeasureRequest(mode = "capture") {
     const useTestImages = mode === "test";
     if (!useTestImages && (!captureState.frontBlob || !captureState.sideBlob)) {
@@ -638,6 +683,7 @@ export function attachMeasureHandler() {
     }
     setStatus(useTestImages ? t("status-test-calc") : t("status-calculating"));
     resultsSection.hidden = true;
+    setResultsDatasetActionVisible(false);
     const modelVizEl = document.getElementById("model-viz");
     if (modelVizEl) modelVizEl.hidden = true;
 
@@ -717,6 +763,7 @@ export function attachMeasureHandler() {
         const patternDetailsEl = document.getElementById("pattern-details");
         if (patternDetailsEl) patternDetailsEl.hidden = true;
         resultsSection.hidden = false;
+        setResultsDatasetActionVisible(false);
         const apiWarn =
           Array.isArray(data.warnings) && data.warnings.length
             ? " " + data.warnings.join(" ")
@@ -768,6 +815,9 @@ export function attachMeasureHandler() {
       }
 
       resultsSection.hidden = false;
+      setResultsDatasetActionVisible(
+        !useTestImages && Boolean(captureState.frontBlob && captureState.sideBlob)
+      );
       setStatus(t("status-done"));
     } catch (e) {
       const mv = document.getElementById("model-viz");
