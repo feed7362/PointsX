@@ -1,15 +1,21 @@
 name: deploy
 
-# Runs after `ci` succeeds on main. Each target deploys only when files it
-# depends on changed since the commit it last deployed (recorded as
+# Runs as the final job of ci.yml on main (all checks green) or by hand.
+# Each target deploys only when files it depends on changed since the commit it last deployed (recorded as
 # "source: <sha>" in the deploy commit message). Neither target is force-pushed:
 # a manual push to `vercel` or to the Space stays in history and is overlaid by
 # the next deploy from main.
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
+  # Called as the last job of ci.yml after every check passed on main.
+  workflow_call:
+    inputs:
+      web:
+        type: boolean
+        default: false
+      backend:
+        type: boolean
+        default: false
+  # Manual run (needs the workflow file on the repo's default branch).
   workflow_dispatch:
     inputs:
       web:
@@ -25,13 +31,12 @@ permissions:
   contents: write
 
 env:
-  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  SOURCE_SHA: ${{ github.sha }}
   SPACE_ID: Secret0123/Pointx-backend
   SPACE_URL: https://secret0123-pointx-backend.hf.space
 
 jobs:
   web:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     concurrency: { group: deploy-web, cancel-in-progress: false }
     steps:
@@ -81,7 +86,6 @@ jobs:
           echo "pushed $(git rev-parse --short HEAD) -> vercel"
 
   backend:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     concurrency: { group: deploy-backend, cancel-in-progress: false }
     steps:
