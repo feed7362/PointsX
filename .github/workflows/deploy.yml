@@ -85,6 +85,17 @@ jobs:
           git push origin vercel
           echo "pushed $(git rev-parse --short HEAD) -> vercel"
 
+      # Vercel's GitHub webhook has silently missed pushes before (no production
+      # deploy between 2026-06-28 and 2026-09-13). A Deploy Hook for the `vercel`
+      # branch (Vercel: Settings -> Git -> Deploy Hooks) triggers the build directly.
+      - name: trigger Vercel deploy hook
+        if: steps.changed.outputs.deploy == 'true'
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "VERCEL_DEPLOY_HOOK not set — relying on Vercel's git integration"; exit 0; fi
+          curl -sf -X POST "$HOOK" | python3 -c 'import sys,json; j=json.load(sys.stdin).get("job",{}); print("deploy job", j.get("id"), j.get("state"))'
+
   backend:
     runs-on: ubuntu-latest
     concurrency: { group: deploy-backend, cancel-in-progress: false }
