@@ -39,6 +39,7 @@ from pointsx.calibration import calibrate
 from pointsx.measurements import extract_measurements
 from pointsx.keypoints import MIN_CONFIDENCE
 from pointsx.models import BodyModels, PoseBackend
+from pointsx.pipeline import downscale_for_inference
 from pointsx.regression.features import build_feature_vector
 from pointsx.schemas import Keypoints
 
@@ -165,6 +166,8 @@ def build_dataset(
                     skipped_no_detect += 1
                     _remember(f"body {body_id}: cv2.imread returned None")
                     continue
+                front_img = downscale_for_inference(front_img)
+                side_img = downscale_for_inference(side_img)
 
                 front_kp = models.predict_pose(front_img, view="front", pose_backend=pose_backend)
                 side_kp  = models.predict_pose(side_img,  view="side", pose_backend=pose_backend)

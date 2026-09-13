@@ -128,3 +128,37 @@ mock і TTS — не використовувати.
 
 Порядок у Фазі 1: спершу злиття з baseline = 0 відмінностей, **потім** рішення 3 окремим комітом
 (воно навмисно змінює вхід), щоб дельта від зменшення була видима окремо від злиття.
+
+---
+
+## 5. Фаза 1 — виконано локально (2026-09-13, нічого не запушено)
+
+Гілка `main` (локальна, від `origin/vercel`):
+
+| Коміт | Що |
+|---|---|
+| `98b2f34`, `04a40d6`, `b9c7193` | рефакторинг і документи Фази 0 (cherry-pick) |
+| `cd81d3e` | `git subtree add` Pointx-backend, повна історія (30 комітів) |
+| `7588ab9` | `git subtree add` Pointx-frontend, повна історія (9 комітів) |
+| `dda47ce` | злиття бекенду в `src/` за §1.2 + рішення 1 і 2; дублікати `apps/backend/src`, `legacy/frontend` видалено |
+| `f9e6bbc` | UI: фікси `speech.js` (§2.2) + речення про HTTPS у `preview-idle-hint` |
+| наступний | рішення 3: `downscale_for_inference` у `pointsx/pipeline.py` |
+
+Лишилось в `apps/backend/`: `Dockerfile`, `.dockerignore`, `README.md` (картка Space), `.gitattributes`, `.env.example`.
+Воркфлоу деплою (Фаза 3) збиратиме з них і кореневих `pyproject.toml` + `src/` (без `static/`) дерево для Space.
+
+Перевірки:
+
+- snapshot 17 суб'єктів після злиття = `baseline-backend` = `baseline-refactor` (0 розділів відрізняються);
+- після рішення 3 — теж 0 (корпус 576×576, менше за 1280). Новий baseline: `baselines/baseline-main-1280.json`;
+- дельта рішення 3 на фото, збільшених ×3 (1728 px), обмеження проти без обмеження: зсув core-обхватів у середньому
+  від −0,04 до −0,19 см, максимум 1,0 см (груди); MAE до сантиметра майже без змін (груди 4,66 проти 4,82; талія 5,09 проти 5,02;
+  стегна 3,64 проти 3,71; обхват стегна 3,87 проти 3,91);
+- venv лише з `requirements.txt` + `POINTSX_VERCEL=1`: `api/index.py` імпортується без torch/cv2, `/api/measure/mock` 200,
+  `/`, `/dataset.html` 200 з `Permissions-Policy: camera=(self)`, `/api/measure` при недоступному Space → 502;
+- `pointsx-eval --help` працює; `node --check` для змінених JS.
+
+Не перевірено: `docker build` + `/api/health` (Docker daemon не запущений) — перенесено в CI Фази 2.
+
+Відкрите для Фази 3: `uv.lock` у корені ігнорується `.gitignore`, тому Dockerfile більше його не копіює;
+вирішити, чи комітити lock-файл для відтворюваних збірок.

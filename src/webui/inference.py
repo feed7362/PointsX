@@ -21,7 +21,7 @@ from pointsx.calibration import calibrate
 from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
 from pointsx.models import BodyModels, PoseBackend
-from pointsx.pipeline import MeasurementPipeline
+from pointsx.pipeline import MeasurementPipeline, downscale_for_inference
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
 from webui._timing import Timings
@@ -193,8 +193,16 @@ class WebuiPipeline:
         pose_backend: PoseBackend,
         timings: Timings | None = None,
     ) -> tuple[Keypoints, Keypoints, SilhouetteMask, SilhouetteMask]:
-        """Common pose+seg stage shared by full measure and preview modes."""
+        """Common pose+seg stage shared by full measure and preview modes.
+
+        Inputs are downscaled here (idempotent), so every caller measures on
+        the same image size as production. Callers that render overlays must
+        pass ``downscale_for_inference(img)`` to the visualizer too, or the
+        keypoints will not line up.
+        """
         tm = timings if timings is not None else Timings()
+        front_img = downscale_for_inference(front_img)
+        side_img = downscale_for_inference(side_img)
 
         with tm("pose_front"):
             front_kp = self.models.predict_pose(front_img, view="front", pose_backend=pose_backend)

@@ -18,6 +18,25 @@ from pointsx.schemas import BodyMeasurements, Keypoints
 
 logger = logging.getLogger(__name__)
 
+# Longest image side fed to pose + segmentation. YOLO resizes to imgsz=640
+# internally, so larger phone photos only cost CPU; 1280 keeps headroom for
+# limb silhouettes. Applied at every entry point (CLI, webui, eval, dataset
+# build) so offline numbers are computed on the same input as production.
+MAX_INFERENCE_SIDE = 1280
+
+
+def downscale_for_inference(img: np.ndarray, max_side: int = MAX_INFERENCE_SIDE) -> np.ndarray:
+    """Resize so the longest side is <= ``max_side`` px (INTER_AREA); idempotent."""
+    if img is None or img.size == 0:
+        return img
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / float(longest)
+    new_w, new_h = int(round(w * scale)), int(round(h * scale))
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
 
 class MeasurementPipeline:
     """Extract body measurements from front + side photos.
@@ -67,8 +86,8 @@ class MeasurementPipeline:
         Returns:
             BodyMeasurements with all extracted values.
         """
-        front_img = self._load_image(front_image)
-        side_img = self._load_image(side_image)
+        front_img = downscale_for_inference(self._load_image(front_image))
+        side_img = downscale_for_inference(self._load_image(side_image))
 
         logger.info("Running pose estimation (%s)...", pose_backend)
         front_kp = self._models.predict_pose(front_img, view="front", pose_backend=pose_backend)

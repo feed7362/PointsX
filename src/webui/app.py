@@ -639,27 +639,6 @@ async def request_validation_exception_handler(
     return JSONResponse(status_code=422, content={"detail": message})
 
 
-def _downscale_for_inference(img: Any, max_side: int = 1280) -> Any:
-    """Resize a phone-camera photo so its longest side is <= max_side px.
-
-    YOLO runs at imgsz=640 internally anyway — passing a 4000×3000 photo
-    only buys CPU time on its built-in resize step (~0.5–1.5 s per
-    image on free CPU). Keeping max_side at 1280 leaves headroom for
-    silhouette quality at the limbs without throwing away signal.
-    """
-    if img is None or img.size == 0:
-        return img
-    h, w = img.shape[:2]
-    longest = max(h, w)
-    if longest <= max_side:
-        return img
-    import cv2
-
-    scale = max_side / float(longest)
-    new_w, new_h = int(round(w * scale)), int(round(h * scale))
-    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-
 async def _validate_and_decode(
     upload: UploadFile, label: str
 ) -> tuple[Any, bytes]:
@@ -862,9 +841,13 @@ async def measure(
         front_img, front_bytes = await _validate_and_decode(front, "front")
         side_img,  side_bytes  = await _validate_and_decode(side,  "side")
 
+    # The pipeline downscales internally too (idempotent); doing it here keeps the
+    # overlay images in the same pixel frame as the keypoints and masks.
+    from pointsx.pipeline import downscale_for_inference
+
     with tm("downscale"):
-        front_img = _downscale_for_inference(front_img)
-        side_img = _downscale_for_inference(side_img)
+        front_img = downscale_for_inference(front_img)
+        side_img = downscale_for_inference(side_img)
 
     _, dataset_save_warning = await _save_capture_pair_to_dataset(front_bytes, side_bytes)
 
