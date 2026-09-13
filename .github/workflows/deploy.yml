@@ -99,7 +99,8 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           test -n "$HF_TOKEN" || { echo "HF_TOKEN secret is not set"; exit 1; }
-          git clone --quiet --depth 5 "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" "$RUNNER_TEMP/space-wt"
+          # full clone: Hugging Face refuses pushes from shallow clones
+          git clone --quiet "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" "$RUNNER_TEMP/space-wt"
           # never let the token reach the log or the remote url in later output
           git -C "$RUNNER_TEMP/space-wt" remote set-url origin "https://huggingface.co/spaces/${SPACE_ID}"
 
@@ -140,7 +141,8 @@ jobs:
             commit -q -m "deploy(backend): main@${SOURCE_SHA::7}" \
                       -m "source: $SOURCE_SHA" \
                       -m "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          git push --quiet "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" HEAD:main 2>&1 | sed "s#${HF_TOKEN}#***#g"
+          set -o pipefail
+          git push "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" HEAD:main 2>&1 | sed "s#${HF_TOKEN}#***#g"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "pushed $(git rev-parse --short HEAD) -> Space"
 
