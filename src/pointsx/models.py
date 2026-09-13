@@ -137,14 +137,13 @@ class BodyModels:
 
         if pose_coco_path:
             resolved = _ensure_yolo_weights(Path(pose_coco_path))
-            if resolved is not None:
-                self._pose_coco = YOLO(str(resolved))
-            else:
-                logger.warning(
-                    "COCO pose weights not found (%s) and auto-download failed; "
-                    "backend 'coco' disabled",
-                    pose_coco_path,
+            if resolved is None:
+                # Requested but unavailable: fail instead of silently serving only
+                # the custom backend while every default (coco) request 503s.
+                raise FileNotFoundError(
+                    f"COCO pose weights not found and not downloadable: {pose_coco_path}"
                 )
+            self._pose_coco = YOLO(str(resolved))
 
         seg_resolved = _ensure_yolo_weights(Path(seg_model_path))
         if seg_resolved is None:

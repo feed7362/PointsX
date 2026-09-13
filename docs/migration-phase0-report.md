@@ -146,6 +146,11 @@ mock і TTS — не використовувати.
 
 Лишилось в `apps/backend/`: `Dockerfile`, `.dockerignore`, `README.md` (картка Space), `.gitattributes`, `.env.example`.
 Воркфлоу деплою (Фаза 3) збиратиме з них і кореневих `pyproject.toml` + `src/` (без `static/`) дерево для Space.
+`docker build -f apps/backend/Dockerfile .` з кореня **не спрацює за задумом**: у корені немає `README.md`,
+а Dockerfile очікує картку Space. CI (Фаза 2) має збирати образ зі staged-дерева, де
+`apps/backend/README.md` → `README.md`. `src/webui/static/` виключено в `apps/backend/.dockerignore`.
+Перевірку з venv лише з `requirements.txt` (`vercel_check.py` у backup) перенести в CI як гейт:
+`pointsx/pipeline.py` імпортує `cv2` на верхньому рівні, тож його імпорт в `app.py` має лишатися всередині `measure()`.
 
 Перевірки:
 
@@ -157,6 +162,13 @@ mock і TTS — не використовувати.
 - venv лише з `requirements.txt` + `POINTSX_VERCEL=1`: `api/index.py` імпортується без torch/cv2, `/api/measure/mock` 200,
   `/`, `/dataset.html` 200 з `Permissions-Policy: camera=(self)`, `/api/measure` при недоступному Space → 502;
 - `pointsx-eval --help` працює; `node --check` для змінених JS.
+
+- `pointsx-eval --pose-backend coco` на корпусі: 0/17 збоїв, загальна MAE 6,06 см (219 спостережень).
+
+Рішення 2 у коді: якщо шлях до `yolo26-pose.pt` або `yolo12l-person-seg-extended.pt` задано, а файл не знайдено
+і не завантажено, `BodyModels` кидає `FileNotFoundError` → `pipeline_ready: false`. Без цього Space з одним
+`pose-cus.pt` показував би `pipeline_ready: true`, а кожен запит із типовим `coco` отримував би 503.
+Smoke-тест Фази 3 має перевіряти `pipeline_ready` **і** `"coco" in pose_backends`.
 
 Не перевірено: `docker build` + `/api/health` (Docker daemon не запущений) — перенесено в CI Фази 2.
 

@@ -20,3 +20,5 @@ docs/
 *.egg-info/
 dist/
 build/
+# Space is API-only: the SPA is served by Vercel. Also keeps garment PNGs out of the image.
+src/webui/static/
