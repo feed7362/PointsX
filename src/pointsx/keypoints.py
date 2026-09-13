@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:  # pragma: no cover
+    from pointsx.schemas import Keypoints
 
 
 class KP(IntEnum):
@@ -66,6 +70,10 @@ KP_NAMES = [
 # keeps obvious junk out while not dropping whole measurement chains.
 MIN_CONFIDENCE = 0.22
 
+# The nose is not part of the 16-point skeleton; it travels as a side channel
+# (``Keypoints.nose_xy`` / ``nose_conf``) and has its own, looser threshold.
+NOSE_MIN_CONFIDENCE = 0.2
+
 
 def point(kps: np.ndarray, idx: KP) -> np.ndarray:
     """Get (x, y) for a single keypoint."""
@@ -85,6 +93,16 @@ def distance(kps: np.ndarray, a: KP, b: KP) -> float:
 def is_valid(confidence: np.ndarray, *indices: KP) -> bool:
     """Check if all specified keypoints have sufficient confidence."""
     return all(confidence[int(i)] >= MIN_CONFIDENCE for i in indices)
+
+
+def mean_valid_y(kp: Keypoints, *indices: KP) -> float | None:
+    """Mean y of the given keypoints that pass the confidence gate, or None.
+
+    The "collect valid left/right y, then average" idiom used for knees, hips
+    and ankles throughout the measurement code.
+    """
+    ys = [float(kp.points[int(i), 1]) for i in indices if is_valid(kp.confidence, i)]
+    return float(np.mean(ys)) if ys else None
 
 
 def interpolate_y(kps: np.ndarray, top: KP, bottom: KP, ratio: float) -> float:

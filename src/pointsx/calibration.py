@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
-
-from pointsx.keypoints import KP, is_valid
+from pointsx.keypoints import KP, is_valid, mean_valid_y
 from pointsx.schemas import CalibrationInfo, Keypoints
 
 logger = logging.getLogger(__name__)
@@ -49,14 +47,8 @@ def _height_pixels(kp: Keypoints) -> float | None:
         bottom_y = pts[KP.LEFT_ANKLE, 1]
     elif is_valid(conf, KP.RIGHT_ANKLE):
         bottom_y = pts[KP.RIGHT_ANKLE, 1]
-    elif is_valid(conf, KP.LEFT_KNEE) or is_valid(conf, KP.RIGHT_KNEE):
+    elif (knee_y := mean_valid_y(kp, KP.LEFT_KNEE, KP.RIGHT_KNEE)) is not None:
         # Fallback: use knee + estimated ankle distance
-        knee_ys = []
-        if is_valid(conf, KP.LEFT_KNEE):
-            knee_ys.append(pts[KP.LEFT_KNEE, 1])
-        if is_valid(conf, KP.RIGHT_KNEE):
-            knee_ys.append(pts[KP.RIGHT_KNEE, 1])
-        knee_y = np.mean(knee_ys)
         partial_h = knee_y - top_y
         # knee_to_top is ~(1 - ANKLE_KNEE_RATIO) of total height
         total_h = partial_h / (1 - ANKLE_KNEE_RATIO)

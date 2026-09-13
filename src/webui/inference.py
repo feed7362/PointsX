@@ -18,12 +18,13 @@ from pathlib import Path
 import numpy as np
 
 from pointsx.calibration import calibrate
-from pointsx.keypoints import MIN_CONFIDENCE
 from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
 from pointsx.models import BodyModels, PoseBackend
+from pointsx.pipeline import MeasurementPipeline, downscale_for_inference
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
+from webui._timing import Timings
 
 logger = logging.getLogger(__name__)
 
@@ -41,28 +42,10 @@ class InferenceResult:
     pose_backend: str
 
 
-def _reference_point(kp: Keypoints) -> tuple[float, float]:
-    """Subject center for seg-mask selection (mirrors MeasurementPipeline)."""
-    valid = kp.confidence >= MIN_CONFIDENCE
-    if np.any(valid):
-        center = kp.points[valid].mean(axis=0)
-    else:
-        center = kp.points.mean(axis=0)
-    return float(center[0]), float(center[1])
-
-
-def _load_regressor(path: str | Path):
-    """Load the trained CircumferenceRegressor from a .pt file."""
-    import torch
-
-    from pointsx.regression.model import CircumferenceRegressor
-
-    model = CircumferenceRegressor()
-    model.load_state_dict(
-        torch.load(str(path), map_location="cpu", weights_only=True)
-    )
-    model.eval()
-    return model
+# Shared with the CLI orchestrator so seg-mask selection and regressor loading
+# cannot drift between the two entry points.
+_reference_point = MeasurementPipeline._keypoint_reference
+_load_regressor = MeasurementPipeline._load_regression_model
 
 
 class WebuiPipeline:
@@ -96,6 +79,49 @@ class WebuiPipeline:
                     reg_path,
                 )
 
+    def warmup(self) -> dict[str, float]:
+        """Run one dummy forward pass through each model.
+
+        PyTorch + Ultralytics defer JIT compilation, NMS kernel setup, and
+        memory-pool allocation to the first call. Warming up at startup
+        moves that ~3-5 s/model penalty from "first user request" to
+        "container boot", so the first real measurement isn't 2× slower
+        than the steady-state rate.
+
+        Sequential (not parallel) so peak memory stays bounded — important
+        on free CPU tiers where parallel model init can OOM.
+
+        Returns wall-clock timing per stage for the logs.
+        """
+        import time
+        timings: dict[str, float] = {}
+
+        # 640×640 mid-grey BGR image — enough pixels for the pose/seg
+        # heads to run through their full code paths but cheap to compute.
+        # Grey (not pure black) reduces the chance of degenerate behaviour
+        # in conv layers (anti-flat-input).
+        dummy = np.full((self.models.img_size, self.models.img_size, 3),
+                        128, dtype=np.uint8)
+
+        for backend in sorted(self.models.available_pose_backends()):
+            t0 = time.perf_counter()
+            try:
+                self.models.predict_pose(dummy, view="front", pose_backend=backend)
+                timings[f"pose:{backend}"] = time.perf_counter() - t0
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Warmup pose:%s failed: %s", backend, exc)
+
+        t0 = time.perf_counter()
+        try:
+            # Segmentation gets a synthetic reference point at image centre.
+            ref = (self.models.img_size / 2.0, self.models.img_size / 2.0)
+            self.models.predict_segmentation(dummy, view="front", reference_point=ref)
+            timings["seg"] = time.perf_counter() - t0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Warmup seg failed: %s", exc)
+
+        return timings
+
     def measure(
         self,
         front_img: np.ndarray,
@@ -103,16 +129,28 @@ class WebuiPipeline:
         height_cm: float,
         *,
         pose_backend: PoseBackend = "coco",
+        timings: Timings | None = None,
     ) -> InferenceResult:
-        """Run the full pose+seg+regression pipeline on a pair of images."""
+        """Run the full pose+seg+regression pipeline on a pair of images.
+
+        When a ``Timings`` instance is supplied, each blocking phase is
+        bracketed by ``with timings(phase_name):`` so the caller gets a
+        wall-clock breakdown without instrumenting every line.
+        """
+        tm = timings if timings is not None else Timings()
+
         front_kp, side_kp, front_mask, side_mask = self._predict_pose_and_masks(
-            front_img, side_img, pose_backend=pose_backend
+            front_img, side_img, pose_backend=pose_backend, timings=tm,
         )
 
-        cal = calibrate(front_kp, side_kp, height_cm)
-        bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
-        bm = estimate_circumferences(bm, regression_model=None)
-        bm = validate_measurements(bm)
+        with tm("calibrate"):
+            cal = calibrate(front_kp, side_kp, height_cm)
+        with tm("extract"):
+            bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
+        with tm("circumferences"):
+            bm = estimate_circumferences(bm, self.regressor)
+        with tm("validate"):
+            bm = validate_measurements(bm)
 
         return InferenceResult(
             body=bm,
@@ -121,7 +159,7 @@ class WebuiPipeline:
             front_mask=front_mask,
             side_mask=side_mask,
             cal=cal,
-            has_regressor=False,
+            has_regressor=self.regressor is not None,
             pose_backend=pose_backend,
         )
 
@@ -153,23 +191,38 @@ class WebuiPipeline:
         side_img: np.ndarray,
         *,
         pose_backend: PoseBackend,
+        timings: Timings | None = None,
     ) -> tuple[Keypoints, Keypoints, SilhouetteMask, SilhouetteMask]:
-        """Common pose+seg stage shared by full measure and preview modes."""
-        front_kp = self.models.predict_pose(front_img, view="front", pose_backend=pose_backend)
+        """Common pose+seg stage shared by full measure and preview modes.
+
+        Inputs are downscaled here (idempotent), so every caller measures on
+        the same image size as production. Callers that render overlays must
+        pass ``downscale_for_inference(img)`` to the visualizer too, or the
+        keypoints will not line up.
+        """
+        tm = timings if timings is not None else Timings()
+        front_img = downscale_for_inference(front_img)
+        side_img = downscale_for_inference(side_img)
+
+        with tm("pose_front"):
+            front_kp = self.models.predict_pose(front_img, view="front", pose_backend=pose_backend)
         if front_kp is None:
             raise ValueError("No person detected in front image")
-        side_kp = self.models.predict_pose(side_img, view="side", pose_backend=pose_backend)
+        with tm("pose_side"):
+            side_kp = self.models.predict_pose(side_img, view="side", pose_backend=pose_backend)
         if side_kp is None:
             raise ValueError("No person detected in side image")
 
-        front_mask = self.models.predict_segmentation(
-            front_img, view="front", reference_point=_reference_point(front_kp)
-        )
+        with tm("seg_front"):
+            front_mask = self.models.predict_segmentation(
+                front_img, view="front", reference_point=_reference_point(front_kp)
+            )
         if front_mask is None:
             raise ValueError("No body silhouette detected in front image")
-        side_mask = self.models.predict_segmentation(
-            side_img, view="side", reference_point=_reference_point(side_kp)
-        )
+        with tm("seg_side"):
+            side_mask = self.models.predict_segmentation(
+                side_img, view="side", reference_point=_reference_point(side_kp)
+            )
         if side_mask is None:
             raise ValueError("No body silhouette detected in side image")
 

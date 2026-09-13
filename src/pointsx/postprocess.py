@@ -39,18 +39,8 @@ def validate_measurements(m: BodyMeasurements) -> BodyMeasurements:
     """Run sanity checks and add warnings. Modifies and returns the same object."""
     warnings = []
 
-    # Ratio checks
-    for name, num_field, den_field, lo, hi in RATIO_CHECKS:
-        num = getattr(m, num_field, None)
-        den = getattr(m, den_field, None)
-        if num is not None and den is not None and den > 0:
-            ratio = num / den
-            if ratio < lo or ratio > hi:
-                warnings.append(
-                    f"{name} ratio {ratio:.2f} outside expected range [{lo:.2f}, {hi:.2f}]"
-                )
-
-    for name, num_field, den_field, lo, hi in CIRC_RATIO_CHECKS:
+    # Ratio checks (length ratios first, then circumference ratios)
+    for name, num_field, den_field, lo, hi in RATIO_CHECKS + CIRC_RATIO_CHECKS:
         num = getattr(m, num_field, None)
         den = getattr(m, den_field, None)
         if num is not None and den is not None and den > 0:

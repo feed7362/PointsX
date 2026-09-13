@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pointsx.keypoints import KP, distance, interpolate_y, is_valid
+from pointsx.keypoints import KP, NOSE_MIN_CONFIDENCE, distance, interpolate_y, is_valid, mean_valid_y
 from pointsx.schemas import Keypoints, SilhouetteMask
 
 # Upper-leg fraction caps — keep hip/thigh lines out of the knee region.
@@ -15,18 +15,12 @@ _THIGH_FALLBACK_FRAC = 0.25
 
 def _pelvis_and_knee_y(kp: Keypoints) -> tuple[float, float] | None:
     """Return (y_pelvis, y_knee) when both are available from keypoints."""
-    pts, conf = kp.points, kp.confidence
-    if not is_valid(conf, KP.PELVIS):
+    if not is_valid(kp.confidence, KP.PELVIS):
         return None
-    knee_ys: list[float] = []
-    if is_valid(conf, KP.LEFT_KNEE):
-        knee_ys.append(float(pts[KP.LEFT_KNEE, 1]))
-    if is_valid(conf, KP.RIGHT_KNEE):
-        knee_ys.append(float(pts[KP.RIGHT_KNEE, 1]))
-    if not knee_ys:
+    y_knee = mean_valid_y(kp, KP.LEFT_KNEE, KP.RIGHT_KNEE)
+    if y_knee is None:
         return None
-    y_pelvis = float(pts[KP.PELVIS, 1])
-    y_knee = float(np.mean(knee_ys))
+    y_pelvis = float(kp.points[KP.PELVIS, 1])
     if y_knee <= y_pelvis + 1.0:
         return None
     return y_pelvis, y_knee
@@ -45,15 +39,8 @@ def hip_search_y_range(kp: Keypoints) -> tuple[float, float] | None:
     leg_span = y_knee - y_pelvis
     y_hard_max = y_pelvis + _HIP_SEARCH_MAX_FRAC * leg_span
 
-    hip_ys: list[float] = []
-    pts, conf = kp.points, kp.confidence
-    if is_valid(conf, KP.LEFT_HIP):
-        hip_ys.append(float(pts[KP.LEFT_HIP, 1]))
-    if is_valid(conf, KP.RIGHT_HIP):
-        hip_ys.append(float(pts[KP.RIGHT_HIP, 1]))
-
-    if hip_ys:
-        y_hip = float(np.mean(hip_ys))
+    y_hip = mean_valid_y(kp, KP.LEFT_HIP, KP.RIGHT_HIP)
+    if y_hip is not None:
         band = 0.06 * leg_span
         y_start = max(y_pelvis + 0.02 * leg_span, y_hip - band)
         y_end = min(y_hard_max, y_hip + band)
@@ -94,13 +81,8 @@ def front_thigh_y_level(kp: Keypoints, mask: np.ndarray) -> float | None:
 
     if y_thigh == pelvis_y and span is not None:
         y_pelvis_f, y_knee = span
-        hip_ys: list[float] = []
-        if is_valid(conf, KP.LEFT_HIP):
-            hip_ys.append(float(pts[KP.LEFT_HIP, 1]))
-        if is_valid(conf, KP.RIGHT_HIP):
-            hip_ys.append(float(pts[KP.RIGHT_HIP, 1]))
-        if hip_ys:
-            y_hip = float(np.mean(hip_ys))
+        y_hip = mean_valid_y(kp, KP.LEFT_HIP, KP.RIGHT_HIP)
+        if y_hip is not None:
             y_thigh = int(round(y_hip + 0.12 * (y_knee - y_hip)))
         else:
             y_thigh = int(round(y_pelvis_f + _THIGH_FALLBACK_FRAC * (y_knee - y_pelvis_f)))
@@ -109,44 +91,14 @@ def front_thigh_y_level(kp: Keypoints, mask: np.ndarray) -> float | None:
     return float(y_thigh)
 
 
-# Fraction of the hip->knee span at which the thigh is measured (upper thigh,
-# just below the gluteal fold). Chosen empirically: on the 11-subject app corpus
-# with tape GT, 0.10 maximised correlation with true thigh circumference (+0.72,
-# vs -0.37 for the previous crotch-anchored extraction). 0.15-0.30 score +0.68
-# to +0.70, so the optimum is broad and not overfitted to one level.
-THIGH_HIP_KNEE_FRACTION = 0.10
-
 # FRONT-view waist row, as a fraction of the pelvis->upper-neck span. Only the
 # front is anchored this way; the side keeps its min-search (see extract_all_widths).
 WAIST_FRONT_PELVIS_NECK_FRACTION = 0.25
 
-
-def _widest_segment_at_y(
-    mask: np.ndarray, y: float, margin: int = 2
-) -> tuple[float, float, float] | None:
-    """Widest contiguous foreground run near row `y`.
-
-    Returns (x_start, x_end, width_px) of the widest segment, averaged over the
-    rows in [y-margin, y+margin] by picking the row whose widest segment is
-    median-sized (robust to a single ragged mask row). Returns None if no row has
-    a usable run.
-    """
-    h, w = mask.shape
-    y_int = int(round(y))
-    candidates: list[tuple[float, float, float]] = []
-    for row in range(max(0, y_int - margin), min(h - 1, y_int + margin) + 1):
-        cols = np.where(mask[row])[0]
-        if len(cols) < 2:
-            continue
-        segments = [s for s in _find_segments(cols) if len(s) >= 2]
-        if not segments:
-            continue
-        best = max(segments, key=lambda s: s[-1] - s[0])
-        candidates.append((float(best[0]), float(best[-1]), float(best[-1] - best[0])))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda c: c[2])
-    return candidates[len(candidates) // 2]
+# SIDE-view waist: narrowest continuous row searched between the pelvis and this
+# fraction of the pelvis->upper-neck span. Also the fallback waist row when the
+# search finds nothing (measurements.py).
+WAIST_SIDE_SEARCH_TOP_FRACTION = 0.4
 
 
 def measure_width_at_y(mask: np.ndarray, y: float, margin: int = 3) -> float | None:
@@ -257,27 +209,6 @@ def _continuous_width_at_y(
     return float(np.mean(widths))
 
 
-def _extreme_continuous_width_between_y(
-    mask: np.ndarray,
-    y0: float,
-    y1: float,
-    *,
-    prefer: str,
-    x_band: tuple[float, float] | None = None,
-) -> float | None:
-    """Min or max continuous width across all rows between y0 and y1."""
-    lo = int(round(min(y0, y1)))
-    hi = int(round(max(y0, y1)))
-    vals: list[float] = []
-    for yi in range(lo, hi + 1):
-        w = _continuous_width_at_y(mask, float(yi), margin=0, x_band=x_band)
-        if w is not None:
-            vals.append(w)
-    if not vals:
-        return None
-    return float(min(vals) if prefer == "min" else max(vals))
-
-
 def _extreme_continuous_width_and_y_between_y(
     mask: np.ndarray,
     y0: float,
@@ -334,13 +265,9 @@ def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | N
     # ~14 % of body height, plus a margin so we don't shave the silhouette.
     body_h_px: float | None = None
     head_y = pts[KP.HEAD_TOP, 1] if is_valid(conf, KP.HEAD_TOP) else None
-    ankle_ys: list[float] = []
-    if is_valid(conf, KP.LEFT_ANKLE):
-        ankle_ys.append(float(pts[KP.LEFT_ANKLE, 1]))
-    if is_valid(conf, KP.RIGHT_ANKLE):
-        ankle_ys.append(float(pts[KP.RIGHT_ANKLE, 1]))
-    if head_y is not None and ankle_ys:
-        body_h_px = abs(float(np.mean(ankle_ys)) - float(head_y))
+    ankle_y = mean_valid_y(side_kp, KP.LEFT_ANKLE, KP.RIGHT_ANKLE)
+    if head_y is not None and ankle_y is not None:
+        body_h_px = abs(ankle_y - float(head_y))
 
     if body_h_px is None or body_h_px <= 0:
         # Fall back to 20 % of mask width, which is a generous-but-safe default.
@@ -436,6 +363,36 @@ def _find_segments(cols: np.ndarray) -> list[np.ndarray]:
     return np.split(cols, split_points)
 
 
+def _band_width(mask: np.ndarray, y: float, band: tuple[float, float] | None) -> float | None:
+    """Silhouette span at row ``y``, clipped to the torso ``band`` when one exists.
+
+    Pose-aware bands keep outstretched / forward arms from contaminating
+    torso / hip / neck slices; without keypoints for a band we fall back to the
+    unclipped span.
+    """
+    if band is not None:
+        return measure_width_in_band_at_y(mask, y, band[0], band[1])
+    return measure_width_at_y(mask, y)
+
+
+def _neck_scan_start_y(kp: Keypoints) -> float | None:
+    """Top row of the neck search window (the same rule for both views).
+
+    Prefer a row one nose-to-crown distance *below* the nose (i.e. the chin),
+    then the nose itself, then the head top. None when nothing usable exists.
+    """
+    pts, conf = kp.points, kp.confidence
+    nose_ok = kp.nose_xy is not None and (kp.nose_conf or 0.0) >= NOSE_MIN_CONFIDENCE
+    if nose_ok and is_valid(conf, KP.HEAD_TOP):
+        y_nose = float(kp.nose_xy[1])
+        return y_nose + abs(y_nose - float(pts[KP.HEAD_TOP, 1]))
+    if nose_ok:
+        return float(kp.nose_xy[1])
+    if is_valid(conf, KP.HEAD_TOP):
+        return float(pts[KP.HEAD_TOP, 1])
+    return None
+
+
 def extract_all_widths(
     front_mask: SilhouetteMask,
     side_mask: SilhouetteMask,
@@ -447,99 +404,48 @@ def extract_all_widths(
 ]:
     """Extract body widths at key y-coordinates from both views.
 
+    Front and side are collected into separate per-view dicts and zipped at the
+    end, so every key present in either view appears in the result as
+    ``(front_px | None, side_px | None)``.
+
     Returns:
       - widths: body part -> (front_width_px, side_width_px)
-      - selected_y: body part -> (front_y_px, side_y_px) for selected lines
+      - selected_y: body part -> (front_y_px, side_y_px) for searched rows
     """
     f_pts, f_conf = front_kp.points, front_kp.confidence
     s_pts, s_conf = side_kp.points, side_kp.confidence
     f_mask = front_mask.mask
     s_mask = side_mask.mask
 
-    # Pose-aware bands for body-girth slices: keeps outstretched / forward arms
-    # from contaminating torso / waist / hip / neck width slices. Each band
-    # falls back to unclipped width when keypoints are insufficient.
     f_band = _front_torso_band(front_kp, f_mask.shape[1])
-    if f_band is not None:
-        x_lo_f, x_hi_f = f_band
-
-        def _front_torso_width(mask: np.ndarray, y: float) -> float | None:
-            return measure_width_in_band_at_y(mask, y, x_lo_f, x_hi_f)
-    else:
-        def _front_torso_width(mask: np.ndarray, y: float) -> float | None:
-            return measure_width_at_y(mask, y)
-
     s_band = _side_torso_band(side_kp, s_mask.shape[1])
-    if s_band is not None:
-        x_lo_s, x_hi_s = s_band
 
-        def _side_torso_width(mask: np.ndarray, y: float) -> float | None:
-            return measure_width_in_band_at_y(mask, y, x_lo_s, x_hi_s)
-    else:
-        def _side_torso_width(mask: np.ndarray, y: float) -> float | None:
-            return measure_width_at_y(mask, y)
-
-    widths: dict[str, tuple[float | None, float | None]] = {}
-    selected_y: dict[str, tuple[float | None, float | None]] = {}
+    front: dict[str, float | None] = {}
+    side: dict[str, float | None] = {}
+    front_y: dict[str, float | None] = {}
+    side_y: dict[str, float | None] = {}
 
     # Head: midpoint between head_top and upper_neck
     if is_valid(f_conf, KP.HEAD_TOP, KP.UPPER_NECK):
-        y_head_f = (f_pts[KP.HEAD_TOP, 1] + f_pts[KP.UPPER_NECK, 1]) / 2
-        widths["head"] = (_front_torso_width(f_mask, y_head_f), None)
+        front["head"] = _band_width(f_mask, (f_pts[KP.HEAD_TOP, 1] + f_pts[KP.UPPER_NECK, 1]) / 2, f_band)
     if is_valid(s_conf, KP.HEAD_TOP, KP.UPPER_NECK):
-        y_head_s = (s_pts[KP.HEAD_TOP, 1] + s_pts[KP.UPPER_NECK, 1]) / 2
-        existing = widths.get("head", (None, None))
-        widths["head"] = (existing[0], _side_torso_width(s_mask, y_head_s))
+        side["head"] = _band_width(s_mask, (s_pts[KP.HEAD_TOP, 1] + s_pts[KP.UPPER_NECK, 1]) / 2, s_band)
 
-    # Neck: shortest continuous line from a line below nose down to upper_neck.
-    # Start line: nose_y + |nose_y - head_top_y|.
-    if is_valid(f_conf, KP.UPPER_NECK):
-        y_upper_neck = float(f_pts[KP.UPPER_NECK, 1])
-        y_start = None
-        if (
-            front_kp.nose_xy is not None
-            and (front_kp.nose_conf or 0.0) >= 0.2
-            and is_valid(f_conf, KP.HEAD_TOP)
-        ):
-            y_nose = float(front_kp.nose_xy[1])
-            y_head_top = float(f_pts[KP.HEAD_TOP, 1])
-            y_start = y_nose + abs(y_nose - y_head_top)
-        elif front_kp.nose_xy is not None and (front_kp.nose_conf or 0.0) >= 0.2:
-            y_start = float(front_kp.nose_xy[1])
-        elif is_valid(f_conf, KP.HEAD_TOP):
-            y_start = float(f_pts[KP.HEAD_TOP, 1])
+    # Neck: narrowest continuous row between the chin line and upper_neck.
+    for kp, mask, band, out in ((front_kp, f_mask, f_band, front), (side_kp, s_mask, s_band, side)):
+        if not is_valid(kp.confidence, KP.UPPER_NECK):
+            continue
+        y_start = _neck_scan_start_y(kp)
         if y_start is not None:
-            neck_f = _extreme_continuous_width_between_y(
-                f_mask, y_start, y_upper_neck, prefer="min", x_band=f_band
-            )
-            widths["neck"] = (neck_f, None)
-    if is_valid(s_conf, KP.UPPER_NECK):
-        y_upper_neck = float(s_pts[KP.UPPER_NECK, 1])
-        y_start = None
-        if (
-            side_kp.nose_xy is not None
-            and (side_kp.nose_conf or 0.0) >= 0.2
-            and is_valid(s_conf, KP.HEAD_TOP)
-        ):
-            y_nose = float(side_kp.nose_xy[1])
-            y_head_top = float(s_pts[KP.HEAD_TOP, 1])
-            y_start = y_nose + abs(y_nose - y_head_top)
-        elif side_kp.nose_xy is not None and (side_kp.nose_conf or 0.0) >= 0.2:
-            y_start = float(side_kp.nose_xy[1])
-        elif is_valid(s_conf, KP.HEAD_TOP):
-            y_start = float(s_pts[KP.HEAD_TOP, 1])
-        if y_start is not None:
-            neck_s = _extreme_continuous_width_between_y(
-                s_mask, y_start, y_upper_neck, prefer="min", x_band=s_band
-            )
-            existing = widths.get("neck", (None, None))
-            widths["neck"] = (existing[0], neck_s)
+            out["neck"] = _extreme_continuous_width_and_y_between_y(
+                mask, y_start, float(kp.points[KP.UPPER_NECK, 1]), prefer="min", x_band=band
+            )[0]
 
     # Torso width:
     # - front: distance between shoulder points
     # - side: continuous silhouette width at midpoint between upper_neck and elbow
     if is_valid(f_conf, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
-        widths["torso"] = (distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER), None)
+        front["torso"] = distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
     if is_valid(s_conf, KP.UPPER_NECK) and (is_valid(s_conf, KP.RIGHT_ELBOW) or is_valid(s_conf, KP.LEFT_ELBOW)):
         elbow_y = (
             float(s_pts[KP.RIGHT_ELBOW, 1])
@@ -547,12 +453,7 @@ def extract_all_widths(
             else float(s_pts[KP.LEFT_ELBOW, 1])
         )
         y_torso_side = 0.5 * (float(s_pts[KP.UPPER_NECK, 1]) + elbow_y)
-        torso_s = _continuous_width_at_y(s_mask, y_torso_side, margin=3, x_band=s_band)
-        existing = widths.get("torso", (None, None))
-        widths["torso"] = (
-            existing[0],
-            torso_s,
-        )
+        side["torso"] = _continuous_width_at_y(s_mask, y_torso_side, margin=3, x_band=s_band)
 
     # Waist — the two views deliberately use DIFFERENT methods, because the same
     # method is not reliable in both:
@@ -572,72 +473,49 @@ def extract_all_widths(
     # differs.
     if is_valid(f_conf, KP.PELVIS, KP.UPPER_NECK):
         y_pelvis = float(f_pts[KP.PELVIS, 1])
-        y_waist_f = y_pelvis + WAIST_FRONT_PELVIS_NECK_FRACTION * (
-            float(f_pts[KP.UPPER_NECK, 1]) - y_pelvis
-        )
-        waist_f = _continuous_width_at_y(f_mask, y_waist_f, margin=3, x_band=f_band)
-        widths["waist"] = (waist_f, None)
-        selected_y["waist"] = (y_waist_f, None)
+        y_waist_f = y_pelvis + WAIST_FRONT_PELVIS_NECK_FRACTION * (float(f_pts[KP.UPPER_NECK, 1]) - y_pelvis)
+        front["waist"] = _continuous_width_at_y(f_mask, y_waist_f, margin=3, x_band=f_band)
+        front_y["waist"] = y_waist_f
     if is_valid(s_conf, KP.PELVIS, KP.UPPER_NECK):
         y_pelvis = s_pts[KP.PELVIS, 1]
-        y_mid = y_pelvis + 0.4 * (s_pts[KP.UPPER_NECK, 1] - y_pelvis)
-        waist_s, waist_s_y = _extreme_continuous_width_and_y_between_y(
-            s_mask, y_pelvis, y_mid, prefer="min", x_band=s_band
+        y_top = y_pelvis + WAIST_SIDE_SEARCH_TOP_FRACTION * (s_pts[KP.UPPER_NECK, 1] - y_pelvis)
+        side["waist"], side_y["waist"] = _extreme_continuous_width_and_y_between_y(
+            s_mask, y_pelvis, y_top, prefer="min", x_band=s_band
         )
-        existing = widths.get("waist", (None, None))
-        widths["waist"] = (existing[0], waist_s)
-        existing_y = selected_y.get("waist", (None, None))
-        selected_y["waist"] = (existing_y[0], waist_s_y)
 
     # Hip: largest continuous width in upper thigh (anchored on hip keypoints).
-    hip_range_f = hip_search_y_range(front_kp)
-    if hip_range_f is not None:
-        y_start, y_end = hip_range_f
-        hip_f = _extreme_continuous_width_between_y(
-            f_mask, y_start, y_end, prefer="max", x_band=f_band
-        )
-        widths["hip"] = (hip_f, None)
-
-    hip_range_s = hip_search_y_range(side_kp)
-    if hip_range_s is not None:
-        y_start, y_end = hip_range_s
-        hip_s = _extreme_continuous_width_between_y(
-            s_mask, y_start, y_end, prefer="max", x_band=s_band
-        )
-        existing = widths.get("hip", (None, None))
-        widths["hip"] = (existing[0], hip_s)
+    for kp, mask, band, out in ((front_kp, f_mask, f_band, front), (side_kp, s_mask, s_band, side)):
+        hip_range = hip_search_y_range(kp)
+        if hip_range is not None:
+            out["hip"] = _extreme_continuous_width_and_y_between_y(
+                mask, hip_range[0], hip_range[1], prefer="max", x_band=band
+            )[0]
 
     # Thigh:
     # - front: at the level where center gap between legs begins; measure one-leg continuous segment
-    # - side: at 30% below pelvis (toward knee/ankle)
+    # - side: at 50% between pelvis and knee (one depth, shared by both legs)
     if is_valid(f_conf, KP.PELVIS):
-        pelvis_x = int(round(float(f_pts[KP.PELVIS, 0])))
-        pelvis_y = int(round(float(f_pts[KP.PELVIS, 1])))
-        pelvis_x = int(np.clip(pelvis_x, 0, f_mask.shape[1] - 1))
-        pelvis_y = int(np.clip(pelvis_y, 0, f_mask.shape[0] - 1))
+        w_img = f_mask.shape[1]
+        pelvis_x = int(np.clip(int(round(float(f_pts[KP.PELVIS, 0]))), 0, w_img - 1))
         thigh_split_x = (
             int(round(float(f_pts[KP.UPPER_NECK, 0])))
             if is_valid(f_conf, KP.UPPER_NECK)
             else pelvis_x
         )
-        thigh_split_x = int(np.clip(thigh_split_x, 0, f_mask.shape[1] - 1))
-        y_thigh_f_raw = front_thigh_y_level(front_kp, f_mask)
-        y_thigh_f = int(round(y_thigh_f_raw)) if y_thigh_f_raw is not None else pelvis_y
-        for side_name, kp_knee in [("right", KP.RIGHT_KNEE), ("left", KP.LEFT_KNEE)]:
+        thigh_split_x = int(np.clip(thigh_split_x, 0, w_img - 1))
+        # front_thigh_y_level only returns None without a PELVIS, which is guarded above.
+        y_thigh_f = int(round(front_thigh_y_level(front_kp, f_mask)))
+        for side_name, kp_knee, kp_hip, x_band in (
+            ("right", KP.RIGHT_KNEE, KP.RIGHT_HIP, (0.0, float(thigh_split_x))),
+            ("left", KP.LEFT_KNEE, KP.LEFT_HIP, (float(thigh_split_x), float(w_img - 1))),
+        ):
             if is_valid(f_conf, kp_knee):
                 x_hint = f_pts[kp_knee, 0]
-            elif side_name == "right" and is_valid(f_conf, KP.RIGHT_HIP):
-                x_hint = f_pts[KP.RIGHT_HIP, 0]
-            elif side_name == "left" and is_valid(f_conf, KP.LEFT_HIP):
-                x_hint = f_pts[KP.LEFT_HIP, 0]
+            elif is_valid(f_conf, kp_hip):
+                x_hint = f_pts[kp_hip, 0]
             else:
                 continue
-            if side_name == "right":
-                x_band = (0.0, thigh_split_x)
-            else:
-                x_band = (thigh_split_x, float(f_mask.shape[1] - 1))
-            front_w = measure_limb_width_at_y(f_mask, y_thigh_f, x_hint, x_band=x_band)
-            widths[f"thigh_{side_name}"] = (front_w, None)
+            front[f"thigh_{side_name}"] = measure_limb_width_at_y(f_mask, y_thigh_f, x_hint, x_band=x_band)
 
     if is_valid(s_conf, KP.PELVIS):
         y_pelvis_s = float(s_pts[KP.PELVIS, 1])
@@ -647,55 +525,38 @@ def extract_all_widths(
             y_ref = float(s_pts[KP.RIGHT_ANKLE, 1])
         else:
             y_ref = y_pelvis_s
-        # NOTE: deliberately NOT THIGH_HIP_KNEE_FRACTION. The side view is anchored
-        # to the PELVIS keypoint, so 0.10 lands on the buttocks and reads a depth of
-        # 23-38 cm — anatomically impossible for a thigh. It scored a marginally
-        # better corrected MAE (4.7 vs 5.7) only because buttock depth correlates
-        # with thigh size, while the RAW ellipse error doubled (13 -> 27 cm), i.e.
-        # the constant was hiding mismatched inputs. 0.5 keeps the slice on the
-        # thigh itself.
-        y_thigh_s = y_pelvis_s + 0.5 * (y_ref - y_pelvis_s)
-        side_w = _side_torso_width(s_mask, y_thigh_s)
-        for key in ["thigh_right", "thigh_left"]:
-            existing = widths.get(key, (None, None))
-            widths[key] = (existing[0], side_w)
+        # NOTE: deliberately NOT the 0.10 hip->knee fraction that fits the FRONT
+        # view. The side view is anchored to the PELVIS keypoint, so 0.10 lands on
+        # the buttocks and reads a depth of 23-38 cm — anatomically impossible for
+        # a thigh. It scored a marginally better corrected MAE (4.7 vs 5.7) only
+        # because buttock depth correlates with thigh size, while the RAW ellipse
+        # error doubled (13 -> 27 cm), i.e. the constant was hiding mismatched
+        # inputs. 0.5 keeps the slice on the thigh itself.
+        side["thigh_right"] = side["thigh_left"] = _band_width(
+            s_mask, y_pelvis_s + 0.5 * (y_ref - y_pelvis_s), s_band
+        )
 
     # Calf: 60% between knee and ankle
-    for side_name, kp_knee, kp_ankle in [
+    for side_name, kp_knee, kp_ankle in (
         ("right", KP.RIGHT_KNEE, KP.RIGHT_ANKLE),
         ("left", KP.LEFT_KNEE, KP.LEFT_ANKLE),
-    ]:
+    ):
         if is_valid(f_conf, kp_knee, kp_ankle):
             y_calf_f = interpolate_y(f_pts, kp_knee, kp_ankle, 0.6)
-            x_hint = f_pts[kp_ankle, 0]
-            front_w = measure_limb_width_at_y(f_mask, y_calf_f, x_hint)
-            key = f"calf_{side_name}"
-            widths[key] = (front_w, None)
-
+            front[f"calf_{side_name}"] = measure_limb_width_at_y(f_mask, y_calf_f, f_pts[kp_ankle, 0])
     if is_valid(s_conf, KP.RIGHT_KNEE, KP.RIGHT_ANKLE):
         y_calf_s = interpolate_y(s_pts, KP.RIGHT_KNEE, KP.RIGHT_ANKLE, 0.6)
-        side_w = _side_torso_width(s_mask, y_calf_s)
-        for key in ["calf_right", "calf_left"]:
-            existing = widths.get(key, (None, None))
-            widths[key] = (existing[0], side_w)
+        side["calf_right"] = side["calf_left"] = _band_width(s_mask, y_calf_s, s_band)
 
     # Wrist
-    for side_name, kp_wrist in [
-        ("right", KP.RIGHT_WRIST),
-        ("left", KP.LEFT_WRIST),
-    ]:
+    for side_name, kp_wrist in (("right", KP.RIGHT_WRIST), ("left", KP.LEFT_WRIST)):
         if is_valid(f_conf, kp_wrist):
-            y_wrist_f = f_pts[kp_wrist, 1]
-            x_hint = f_pts[kp_wrist, 0]
-            front_w = measure_limb_width_at_y(f_mask, y_wrist_f, x_hint)
-            key = f"wrist_{side_name}"
-            widths[key] = (front_w, None)
-
+            front[f"wrist_{side_name}"] = measure_limb_width_at_y(
+                f_mask, f_pts[kp_wrist, 1], f_pts[kp_wrist, 0]
+            )
     if is_valid(s_conf, KP.RIGHT_WRIST):
-        y_wrist_s = s_pts[KP.RIGHT_WRIST, 1]
-        side_w = _side_torso_width(s_mask, y_wrist_s)
-        for key in ["wrist_right", "wrist_left"]:
-            existing = widths.get(key, (None, None))
-            widths[key] = (existing[0], side_w)
+        side["wrist_right"] = side["wrist_left"] = _band_width(s_mask, s_pts[KP.RIGHT_WRIST, 1], s_band)
 
+    widths = {key: (front.get(key), side.get(key)) for key in front.keys() | side.keys()}
+    selected_y = {key: (front_y.get(key), side_y.get(key)) for key in front_y.keys() | side_y.keys()}
     return widths, selected_y

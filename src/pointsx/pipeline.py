@@ -18,6 +18,25 @@ from pointsx.schemas import BodyMeasurements, Keypoints
 
 logger = logging.getLogger(__name__)
 
+# Longest image side fed to pose + segmentation. YOLO resizes to imgsz=640
+# internally, so larger phone photos only cost CPU; 1280 keeps headroom for
+# limb silhouettes. Applied at every entry point (CLI, webui, eval, dataset
+# build) so offline numbers are computed on the same input as production.
+MAX_INFERENCE_SIDE = 1280
+
+
+def downscale_for_inference(img: np.ndarray, max_side: int = MAX_INFERENCE_SIDE) -> np.ndarray:
+    """Resize so the longest side is <= ``max_side`` px (INTER_AREA); idempotent."""
+    if img is None or img.size == 0:
+        return img
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / float(longest)
+    new_w, new_h = int(round(w * scale)), int(round(h * scale))
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
 
 class MeasurementPipeline:
     """Extract body measurements from front + side photos.
@@ -44,10 +63,19 @@ class MeasurementPipeline:
             img_size=img_size,
             device=device,
         )
+        # Regressor is opt-in: pass a path only when explicitly requested
+        # (CLI --regression-model; webui POINTSX_USE_REGRESSOR=1). Without it the
+        # Ramanujan ellipse is used, which the envelope correction tables expect.
         self._regression_model = None
-        if regression_model_path and Path(regression_model_path).exists():
-            self._regression_model = self._load_regression_model(regression_model_path)
-            logger.info("Loaded regression model from %s", regression_model_path)
+        if regression_model_path:
+            if Path(regression_model_path).exists():
+                self._regression_model = self._load_regression_model(regression_model_path)
+                logger.info("Loaded regression model from %s", regression_model_path)
+            else:
+                logger.warning(
+                    "Regression model path %s does not exist; falling back to ellipse approximation",
+                    regression_model_path,
+                )
 
     def __call__(
         self,
@@ -63,12 +91,15 @@ class MeasurementPipeline:
             front_image: Front-view photo (path or BGR ndarray).
             side_image: Side/profile-view photo (path or BGR ndarray).
             height_cm: Known height of the person in centimeters.
+            pose_backend: "coco" (COCO-17 mapped to 16 points) or "custom" (native 16-point).
 
         Returns:
-            BodyMeasurements with all extracted values.
+            BodyMeasurements with all extracted values. Circumferences come from
+            the regressor when one was loaded in ``__init__``, otherwise from the
+            Ramanujan ellipse.
         """
-        front_img = self._load_image(front_image)
-        side_img = self._load_image(side_image)
+        front_img = downscale_for_inference(self._load_image(front_image))
+        side_img = downscale_for_inference(self._load_image(side_image))
 
         logger.info("Running pose estimation (%s)...", pose_backend)
         front_kp = self._models.predict_pose(front_img, view="front", pose_backend=pose_backend)
@@ -99,7 +130,7 @@ class MeasurementPipeline:
         )
 
         logger.info("Estimating circumferences...")
-        measurements = estimate_circumferences(measurements, regression_model=None)
+        measurements = estimate_circumferences(measurements, self._regression_model)
 
         logger.info("Validating...")
         measurements = validate_measurements(measurements)

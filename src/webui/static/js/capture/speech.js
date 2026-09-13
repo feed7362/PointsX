@@ -19,6 +19,12 @@ let activeAudio = null;
 const audioBlobCache = new Map();
 const AUDIO_CACHE_MAX = 48;
 
+/** Session-level kill switch — once the server returns 503 (or fetch fails at the
+ * network level) we stop calling /api/tts for the rest of the page lifetime and go
+ * straight to the browser fallback. Timeouts (AbortError) do NOT trip it: the warmup
+ * request can time out on a Vercel cold start while the endpoint is healthy. */
+let serverTtsDisabledForSession = false;
+
 /** Same-origin TTS endpoint (avoids bad resolution from import maps / subpaths). */
 function ttsEndpointUrl() {
   if (typeof window === "undefined" || !window.location?.origin) return "/api/tts";
@@ -47,6 +53,7 @@ function stopActiveAudio() {
 }
 
 async function fetchTtsMp3Blob(text) {
+  if (serverTtsDisabledForSession) throw new Error("tts:disabled-this-session");
   const cached = audioBlobCache.get(text);
   if (cached) return cached;
   const ac = new AbortController();
@@ -58,7 +65,11 @@ async function fetchTtsMp3Blob(text) {
       body: JSON.stringify({ text }),
       signal: ac.signal,
     });
-    if (!res.ok) throw new Error(`tts:${res.status}`);
+    if (!res.ok) {
+      // 503 = backend has POINTSX_TTS_DISABLE=1 or edge-tts is blocked. Stop trying.
+      if (res.status === 503) serverTtsDisabledForSession = true;
+      throw new Error(`tts:${res.status}`);
+    }
     const blob = await res.blob();
     if (blob.size < 32) throw new Error("tts:empty");
     const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
@@ -68,6 +79,10 @@ async function fetchTtsMp3Blob(text) {
     audioBlobCache.set(text, blob);
     trimAudioBlobCache();
     return blob;
+  } catch (err) {
+    // Network-level failure (CORS, DNS, blocked host) — disable for the session.
+    if (err?.name === "TypeError") serverTtsDisabledForSession = true;
+    throw err;
   } finally {
     window.clearTimeout(to);
   }
@@ -114,30 +129,29 @@ function playMp3Blob(blob, generation, volume = 0.95) {
     const url = URL.createObjectURL(blob);
     const a = new Audio();
     activeAudio = a;
+    let urlRevoked = false;
+    const safeRevoke = () => {
+      if (urlRevoked) return;
+      urlRevoked = true;
+      // Delay so an in-flight fetch started by the audio element can finish first.
+      setTimeout(() => {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }, 5000);
+    };
     const cleanup = () => {
-      URL.revokeObjectURL(url);
+      safeRevoke();
       if (activeAudio === a) activeAudio = null;
     };
-    a.addEventListener(
-      "ended",
-      () => {
-        cleanup();
-        resolve();
-      },
-      { once: true },
-    );
-    a.addEventListener(
-      "error",
-      () => {
-        cleanup();
-        reject(new Error("audio playback error"));
-      },
-      { once: true },
-    );
+    // After loadeddata the element holds its own copy of the audio; the URL is no longer needed.
+    a.addEventListener("loadeddata", safeRevoke, { once: true });
+    a.addEventListener("ended", () => { cleanup(); resolve(); }, { once: true });
+    a.addEventListener("error", () => { cleanup(); reject(new Error("audio playback error")); }, { once: true });
     a.src = url;
     a.volume = volume;
     a.play().catch((e) => {
-      cleanup();
+      // Do NOT revoke here: autoplay rejection (NotAllowedError) fires while the element is
+      // still loading the blob, and revoking turns that load into ERR_FILE_NOT_FOUND.
+      if (activeAudio === a) activeAudio = null;
       reject(e);
     });
   });
