@@ -1,0 +1,162 @@
+name: deploy
+
+# Runs after `ci` succeeds on main. Each target deploys only when files it
+# depends on changed since the commit it last deployed (recorded as
+# "source: <sha>" in the deploy commit message). Neither target is force-pushed:
+# a manual push to `vercel` or to the Space stays in history and is overlaid by
+# the next deploy from main.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      web:
+        description: deploy web (Vercel) even if nothing changed
+        type: boolean
+        default: false
+      backend:
+        description: deploy backend (HF Space) even if nothing changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  SPACE_ID: Secret0123/Pointx-backend
+  SPACE_URL: https://secret0123-pointx-backend.hf.space
+
+jobs:
+  web:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    concurrency: { group: deploy-web, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: what changed since the last web deploy
+        id: changed
+        run: |
+          git fetch --no-tags origin vercel
+          last="$(git log -1 --format=%B origin/vercel | grep -oE 'source: [0-9a-f]{40}' | cut -d' ' -f2 || true)"
+          if [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null; then
+            files="$(git diff --name-only "$last" "$SOURCE_SHA" -- \
+              api src/webui src/pointsx vercel.json requirements.txt .vercelignore \
+              scripts/ci/stage_vercel.sh .github/workflows/deploy.yml)"
+          else
+            files="(first deploy from main: no 'source:' marker on vercel)"
+          fi
+          echo "last=${last:-none}"; echo "$files"
+          if [ -n "$files" ] || [ "${{ inputs.web }}" = "true" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"; echo "nothing to deploy"
+          fi
+
+      - name: stage tree
+        if: steps.changed.outputs.deploy == 'true'
+        run: bash scripts/ci/stage_vercel.sh "$RUNNER_TEMP/web"
+
+      - name: commit on top of vercel and push
+        if: steps.changed.outputs.deploy == 'true'
+        run: |
+          git worktree add "$RUNNER_TEMP/vercel-wt" origin/vercel
+          cd "$RUNNER_TEMP/vercel-wt"
+          git checkout -B vercel
+          git rm -rq . 2>/dev/null || true
+          cp -R "$RUNNER_TEMP/web/." .
+          git add -A
+          if git diff --cached --quiet; then echo "tree identical to vercel HEAD"; exit 0; fi
+          git -c user.name=github-actions -c user.email=github-actions@github.com \
+            commit -q -m "deploy(web): main@${SOURCE_SHA::7}" \
+                      -m "source: $SOURCE_SHA" \
+                      -m "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push origin vercel
+          echo "pushed $(git rev-parse --short HEAD) -> vercel"
+
+  backend:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    concurrency: { group: deploy-backend, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: clone the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN" || { echo "HF_TOKEN secret is not set"; exit 1; }
+          git clone --quiet --depth 5 "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" "$RUNNER_TEMP/space-wt"
+          # never let the token reach the log or the remote url in later output
+          git -C "$RUNNER_TEMP/space-wt" remote set-url origin "https://huggingface.co/spaces/${SPACE_ID}"
+
+      - name: what changed since the last backend deploy
+        id: changed
+        run: |
+          last="$(git -C "$RUNNER_TEMP/space-wt" log -1 --format=%B | grep -oE 'source: [0-9a-f]{40}' | cut -d' ' -f2 || true)"
+          if [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null; then
+            files="$(git diff --name-only "$last" "$SOURCE_SHA" -- \
+              src/pointsx src/webui ':(exclude)src/webui/static' apps/backend pyproject.toml \
+              scripts/ci/stage_hf_space.sh scripts/ci/space_smoke.py .github/workflows/deploy.yml)"
+          else
+            files="(first deploy from main: no 'source:' marker on the Space)"
+          fi
+          echo "last=${last:-none}"; echo "$files"
+          if [ -n "$files" ] || [ "${{ inputs.backend }}" = "true" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"; echo "nothing to deploy"
+          fi
+
+      - name: stage tree
+        if: steps.changed.outputs.deploy == 'true'
+        run: bash scripts/ci/stage_hf_space.sh "$RUNNER_TEMP/space"
+
+      - name: commit on top of the Space history and push
+        if: steps.changed.outputs.deploy == 'true'
+        id: push
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/space-wt"
+          git rm -rq . 2>/dev/null || true
+          cp -R "$RUNNER_TEMP/space/." .
+          git add -A
+          if git diff --cached --quiet; then echo "tree identical to Space HEAD"; echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git -c user.name=github-actions -c user.email=github-actions@github.com \
+            commit -q -m "deploy(backend): main@${SOURCE_SHA::7}" \
+                      -m "source: $SOURCE_SHA" \
+                      -m "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push --quiet "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_ID}" HEAD:main 2>&1 | sed "s#${HF_TOKEN}#***#g"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "pushed $(git rev-parse --short HEAD) -> Space"
+
+      - name: wait for the Space to build and run
+        if: steps.changed.outputs.deploy == 'true'
+        run: |
+          want="${{ steps.push.outputs.sha }}"
+          for i in $(seq 1 60); do
+            j="$(curl -sf "https://huggingface.co/api/spaces/${SPACE_ID}")" || j='{}'
+            stage="$(echo "$j" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d.get("runtime",{}).get("stage","?"), d.get("sha",""))')"
+            echo "$(date +%T) $stage"
+            case "$stage" in
+              "RUNNING $want"*) exit 0 ;;
+              "SLEEPING $want"*) echo "already deployed and asleep; smoke test will wake it"; exit 0 ;;
+              BUILD_ERROR*|RUNTIME_ERROR*|CONFIG_ERROR*) echo "Space failed: $stage"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "timed out waiting for the Space"; exit 1
+
+      - name: smoke test
+        if: steps.changed.outputs.deploy == 'true'
+        run: python3 scripts/ci/space_smoke.py "$SPACE_URL"

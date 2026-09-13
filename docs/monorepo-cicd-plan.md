@@ -240,6 +240,24 @@ core-обхвати (окремий тест це стереже). Еталон 
 
 *Перевірка:* обидва деплої відтворювані, ручні `git push` більше не потрібні.
 
+**Стан (2026-09-13):** `.github/workflows/deploy.yml` — один воркфлоу, дві job (`web`, `backend`), запускається
+після успішного `ci` на `main` (`workflow_run`) або вручну (`workflow_dispatch` з прапорцями «деплоїти попри відсутність змін»).
+
+| | `web` → гілка `vercel` | `backend` → Space `Secret0123/Pointx-backend` |
+|---|---|---|
+| Що деплоїться | `scripts/ci/stage_vercel.sh`: `vercel.json`, `requirements.txt`, `.vercelignore`, `api/`, `src/webui/`, `src/pointsx/` без synthetic/regression/train/eval; **без** `pyproject.toml` (з ним Vercel тягне torch — див. старий `deploy-vercel.sh`) | `scripts/ci/stage_hf_space.sh`: `apps/backend/*` у корені + `pyproject.toml` + `src/` без `static/` |
+| Коли | змінились ці шляхи від коміту, записаного як `source: <sha>` в останньому деплой-коміті гілки | те саме, маркер читається з HEAD git-репозиторію Space |
+| Як | коміт **поверх** поточного `vercel` (без `--force`) через `GITHUB_TOKEN` | коміт **поверх** історії Space, push через `HF_TOKEN` |
+| Після | Vercel деплоїть гілку сам | очікування `runtime.stage == RUNNING` з тим самим sha (до 30 хв), потім `scripts/ci/space_smoke.py`: `pipeline_ready`, `"coco" in pose_backends`, не proxy-режим, mock → 18 мірок |
+
+**Ручний push у `vercel` лишається другим методом** (рішення 2026-09-13): гілка без protection, CI ніколи не
+переписує історію, тож `git push origin <коміт>:vercel` деплоїться як є; наступний деплой з `main` накладе своє дерево
+поверх. Правки, зроблені лише там, при цьому губляться — їх треба донести й у `main`. README у гілці це пояснює.
+Відмінність від сьогоднішнього стану: `vercel` більше не гілка розробки з повним деревом, а згенероване дерево деплою.
+
+Smoke Space не робить справжній `/api/measure`: для цього потрібна закомічена пара фото (§7.1, варіант 1 або 2), поки її немає.
+`HF_TOKEN` доданий власником у Secrets (2026-09-13).
+
 ### Фаза 4 — прибирання
 
 15. Видалити віддалені `demo`, `ui-and-size-charts` (їхні коміти недосяжні з `main` — перед видаленням
