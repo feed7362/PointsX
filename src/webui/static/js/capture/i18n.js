@@ -75,8 +75,8 @@ const translations = {
     en: "Camera is Off"
   },
   "preview-idle-hint": {
-    uk: "Натисніть «Увімкнути камеру», щоб побачити превʼю й ескіз пози для заміру. Або завантажте фото.",
-    en: "Click \"Turn on camera\" to see preview and pose outline for measurement. Or upload photos."
+    uk: "Натисніть «Увімкнути камеру», щоб побачити превʼю й ескіз пози для заміру. На телефоні в локальній мережі потрібен HTTPS. Або завантажте фото.",
+    en: "Click \"Turn on camera\" to see preview and pose outline for measurement. On a phone over the local network, HTTPS is required. Or upload photos."
   },
   "btn-start": {
     uk: "Увімкнути камеру",
