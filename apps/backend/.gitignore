@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Secrets / local config — .env.example IS tracked as the template
+.env
+.env.*
+!.env.example
+keys/
+*.pem
+*.key
+
+# Model weights: resolved at runtime from the storage bucket / HF Hub
+# (LOCAL_DATA_DIR, HF_MODELS_REPO), never committed — they are large and
+# versioned outside git.
+models/
+*.pt
+*.onnx
+*.npz
+
+# Data / generated artefacts
+data/
+runs/
+supabase-dump/
+bucket-dump/
+eval/.cache/
+eval/reports/
+*.log
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
