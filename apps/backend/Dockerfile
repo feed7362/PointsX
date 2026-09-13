@@ -52,7 +52,7 @@ ENV PATH="/home/user/.local/bin:${PATH}" \
 WORKDIR /home/user/app
 
 # Deps first (build-cache stays warm across source edits).
-COPY --chown=user pyproject.toml uv.lock README.md /home/user/app/
+COPY --chown=user pyproject.toml README.md /home/user/app/
 COPY --chown=user src /home/user/app/src
 
 # CPU-only torch wheels (saves ~1.5 GB vs the default cuda wheels).

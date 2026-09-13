@@ -19,7 +19,7 @@ def main():
     parser.add_argument(
         "--pose-backend",
         choices=("custom", "coco"),
-        default="custom",
+        default="coco",
         help="Pose model: custom 16-point (LV-MHP) or COCO-17 (converted to 16)",
     )
     parser.add_argument(

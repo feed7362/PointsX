@@ -1,24 +1,39 @@
 """FastAPI app: static capture UI + real body-measurement endpoint.
 
+One app, two deployments:
+    HF Space (Docker)  loads the models and runs /api/measure locally.
+    Vercel             POINTSX_VERCEL=1 + POINTSX_INFERENCE_ENDPOINT → proxy mode:
+                       no models, /api/measure is forwarded to the Space; /api/tts,
+                       /api/measure/mock and the static UI are served locally. The
+                       Vercel venv has no torch/opencv, so heavy imports stay lazy.
+
 Configuration (environment variables, all optional):
     POINTSX_POSE_MODEL_CUSTOM path to 16-keypoint (LV-MHP) pose .pt
                               default: models/pose-cus.pt
     POINTSX_POSE_MODEL_COCO   path to COCO-17 pose .pt (mapped to 16 internally)
                               default: models/yolo26-pose.pt
+                              (we keep the heavier pose model — calibration
+                              accuracy depends on HEAD_TOP/ankle stability.)
     POINTSX_POSE_MODEL        legacy: if set, overrides POINTSX_POSE_MODEL_CUSTOM only
     POINTSX_SEG_MODEL         path to YOLO segmentation .pt
                               default: models/yolo12l-person-seg-extended.pt
-    POINTSX_REGRESSION_MODEL  path to regression .pt
-                              default: models/reg.pt if present;
-                              set to an empty string to force the Ramanujan ellipse
-                              fallback instead.
+    POINTSX_USE_REGRESSOR     ``1`` to use the circumference regressor instead of the
+                              Ramanujan ellipse (default: off — the correction tables
+                              in envelope.py were fitted against the ellipse)
+    POINTSX_REGRESSION_MODEL  regressor .pt used when POINTSX_USE_REGRESSOR=1
+                              default: models/reg.pt
     POINTSX_DEVICE            "auto" | "cpu" | "cuda" | "0" | …  (default: "auto")
+    POINTSX_WARMUP_DISABLE    ``1`` to skip the startup dummy forward pass
     POINTSX_DATASET_DIR       path to save captured image pairs (default: dataset)
     POINTSX_TTS_VOICE         Ukrainian neural voice for ``/api/tts`` (default: uk-UA-PolinaNeural)
     POINTSX_TTS_DISABLE       ``1``/``true`` to disable server TTS (browser speech fallback only)
+    POINTSX_VERCEL            set by api/index.py on Vercel (skips the static mount)
+    POINTSX_INFERENCE_ENDPOINT  base URL of the HF Space; with POINTSX_VERCEL → proxy mode
+    HF_MODELS_REPO / HF_MODELS_REVISION / HF_TOKEN  model repo for weight pre-fetch
+    CORS_ALLOW_ORIGINS        comma-separated origins (default: ``*``)
 
-If model loading fails, the server still starts; `/api/measure` returns 503 until
-the issue is fixed.
+If model loading fails, the server still starts; `/api/measure` returns 503 and
+`/api/health` reports ``pipeline_ready: false`` until the issue is fixed.
 
 Speech hints use ``POST /api/tts`` (edge-tts, needs internet). If ``uv sync`` fails
 (for example Torch wheels on some platforms), install TTS separately:
@@ -36,9 +51,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -59,6 +75,8 @@ DATASET_DIR = Path(os.environ.get("POINTSX_DATASET_DIR", str(_DATASET_DIR_DEFAUL
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DISALLOWED_CONTENT_PREFIXES = ("text/", "video/", "audio/")
+
+_TRUTHY = ("1", "true", "yes", "on")
 
 _dataset_lock = asyncio.Lock()
 
@@ -95,6 +113,10 @@ _PIPELINE_VALUE_ERROR_UK = {
     ),
     "Invalid sex for measurement pipeline": "Некоректне значення статі для пайплайну.",
 }
+
+
+def _env_flag(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in _TRUTHY
 
 
 def _pipeline_value_error_detail(message: str) -> str:
@@ -399,13 +421,93 @@ def _resolve_path(env_var: str, default: str) -> str:
     return raw or default
 
 
+def _prefetch_weights(paths: list[str | None]) -> None:
+    """Make sure each weight file exists locally before the models load.
+
+    Sources in priority order (idempotent — files already on disk stay, so
+    warm restarts download nothing):
+      1. LOCAL_DATA_DIR/models/<name>   ← HF Storage Bucket mounted at /data
+      2. HF Hub model repo (env: HF_MODELS_REPO)
+      3. S3 bucket under MODELS_S3_KEY_PREFIX (when archival is configured)
+    """
+    hf_repo = (os.environ.get("HF_MODELS_REPO") or "").strip()
+    hf_revision = (os.environ.get("HF_MODELS_REVISION") or "main").strip()
+    hf_token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None)
+
+    def _pull(local: str | None) -> None:
+        if not local:
+            return
+        p = Path(local)
+        if p.is_file() and p.stat().st_size > 0:
+            return
+
+        # First: HF Storage Bucket mounted at LOCAL_DATA_DIR/models/.
+        try:
+            from webui import storage as _storage_check
+            bucket_path = _storage_check.local_model_path(p.name)
+            if bucket_path is not None:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                # Symlink if possible (saves disk + matches mount semantics),
+                # else copy. Falls back to copy on Windows without privilege.
+                try:
+                    if p.exists() or p.is_symlink():
+                        p.unlink()
+                    p.symlink_to(bucket_path)
+                    logger.warning("Bucket-mount linked — file=%s → %s", p.name, bucket_path)
+                except (OSError, NotImplementedError):
+                    import shutil as _sh
+                    _sh.copy2(bucket_path, p)
+                    logger.warning("Bucket-mount copied — file=%s ← %s", p.name, bucket_path)
+                return
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Second: HF Hub model repo (free, unlimited public).
+        if hf_repo:
+            try:
+                from huggingface_hub import hf_hub_download
+                p.parent.mkdir(parents=True, exist_ok=True)
+                downloaded = hf_hub_download(
+                    repo_id=hf_repo,
+                    filename=p.name,
+                    revision=hf_revision,
+                    token=hf_token,
+                    local_dir=str(p.parent),
+                )
+                logger.warning(
+                    "HF Hub download OK — repo=%s file=%s → %s (size=%d bytes)",
+                    hf_repo, p.name, downloaded, Path(downloaded).stat().st_size,
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "HF Hub download FAILED — repo=%s file=%s err=%s. Will try S3 next.",
+                    hf_repo, p.name, exc,
+                )
+
+        # Fallback: S3 bucket (when archival is configured).
+        from webui import storage as _storage
+        if not _storage.is_enabled():
+            return
+        models_prefix = (os.environ.get("MODELS_S3_KEY_PREFIX") or "models/").lstrip("/")
+        if not models_prefix.endswith("/"):
+            models_prefix += "/"
+        _storage.download_to_path(models_prefix + p.name, local)
+
+    try:
+        for path in paths:
+            _pull(path)
+    except Exception:  # noqa: BLE001
+        logger.exception("Weight pre-fetch raised — pipeline will try local paths.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the WebuiPipeline once, store on app.state.pipeline.
 
     In Vercel proxy mode (POINTSX_VERCEL + POINTSX_INFERENCE_ENDPOINT set),
-    model loading is intentionally skipped — /api/measure is proxied to the
-    remote inference backend instead.
+    weight pre-fetch, model loading, warmup and the storage probe are all
+    skipped — /api/measure is proxied to the remote inference backend instead.
 
     Failures are logged but do not crash the server — the endpoint will return
     503 until env vars are corrected and the server is restarted.
@@ -428,15 +530,17 @@ async def lifespan(app: FastAPI):
         pose_custom = str(legacy_pose).strip()
         logger.info("POINTSX_POSE_MODEL set — using as custom pose path (legacy override).")
     seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
-    # Auto-load the regressor when present; users can override via env var or
-    # disable it explicitly with POINTSX_REGRESSION_MODEL="" (empty string).
-    reg_default = "models/reg.pt"
-    reg_raw = os.environ.get("POINTSX_REGRESSION_MODEL")
-    if reg_raw is None:
-        reg_path = reg_default if Path(reg_default).exists() else None
-    else:
-        reg_path = reg_raw.strip() or None
+    # Regressor is opt-in: it produced outliers on real photos (negative-cm
+    # hips/thighs on some subjects), and the per-sex correction tables in
+    # envelope.py were fitted against the Ramanujan ellipse output.
+    reg_path = (
+        _resolve_path("POINTSX_REGRESSION_MODEL", "models/reg.pt")
+        if _env_flag("POINTSX_USE_REGRESSOR")
+        else None
+    )
     device    = _resolve_path("POINTSX_DEVICE", "auto")
+
+    _prefetch_weights([pose_coco, seg_path, reg_path])
 
     try:
         from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
@@ -463,11 +567,31 @@ async def lifespan(app: FastAPI):
             reg_path or "<ellipse-fallback>",
             device,
         )
+
+        # Warm up each model with a dummy forward pass so the very first
+        # /api/measure request isn't ~2× slower than the warm rate.
+        if not _env_flag("POINTSX_WARMUP_DISABLE"):
+            try:
+                timings = app.state.pipeline.warmup()
+                pretty = ", ".join(f"{k}={v:.2f}s" for k, v in timings.items())
+                logger.warning("Pipeline warmed up — %s.", pretty or "no models warmed")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Warmup raised — first request may be slow: %s", exc)
     except Exception as exc:  # noqa: BLE001 — we want the server to keep running
         app.state.pipeline_load_error = str(exc)
         logger.error(
             "Failed to load WebuiPipeline (endpoint will return 503): %s", exc,
         )
+
+    # Probe storage on startup so the operator immediately knows whether
+    # archival is configured.
+    try:
+        from webui import storage as _storage_probe
+
+        state = "ENABLED" if _storage_probe.is_enabled() else "DISABLED"
+        logger.warning("Storage probe: archival is %s on startup", state)
+    except Exception:  # noqa: BLE001
+        logger.exception("Storage probe failed unexpectedly")
 
     yield
 
@@ -481,9 +605,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FitMeasure AI WebUI", version="0.3.0", lifespan=lifespan)
 
 # On Vercel, static files are served directly via rewrite rules — skip the mount.
-# Locally the mount is needed so uvicorn serves CSS/JS/images from the static dir.
-if not os.environ.get("POINTSX_VERCEL"):
+# The HF Space image does not ship static/ (API-only), so the mount is conditional too.
+if STATIC_DIR.is_dir() and not os.environ.get("POINTSX_VERCEL"):
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+else:
+    logger.info("Static mount skipped (dir present=%s) — API-only.", STATIC_DIR.is_dir())
+
+# CORS_ALLOW_ORIGINS: comma-separated list; ``*`` allows any origin.
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -501,6 +637,27 @@ async def request_validation_exception_handler(
 ) -> JSONResponse:
     message = _validation_errors_to_uk(list(exc.errors()))
     return JSONResponse(status_code=422, content={"detail": message})
+
+
+def _downscale_for_inference(img: Any, max_side: int = 1280) -> Any:
+    """Resize a phone-camera photo so its longest side is <= max_side px.
+
+    YOLO runs at imgsz=640 internally anyway — passing a 4000×3000 photo
+    only buys CPU time on its built-in resize step (~0.5–1.5 s per
+    image on free CPU). Keeping max_side at 1280 leaves headroom for
+    silhouette quality at the limbs without throwing away signal.
+    """
+    if img is None or img.size == 0:
+        return img
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    import cv2
+
+    scale = max_side / float(longest)
+    new_w, new_h = int(round(w * scale)), int(round(h * scale))
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 async def _validate_and_decode(
@@ -544,10 +701,15 @@ async def _validate_and_decode(
 
 
 @app.get("/")
-async def index() -> FileResponse:
+async def index() -> Any:
+    """Serve the bundled SPA when present; the API-only Space returns a JSON banner."""
     index_path = STATIC_DIR / "index.html"
     if not index_path.is_file():
-        raise HTTPException(status_code=500, detail="Missing static index")
+        return JSONResponse({
+            "service": "pointx-backend",
+            "status": "ok",
+            "api": ["/api/measure", "/api/measure/mock", "/api/tts", "/api/health"],
+        })
     return FileResponse(index_path)
 
 
@@ -555,8 +717,34 @@ async def index() -> FileResponse:
 async def dataset() -> FileResponse:
     dataset_path = STATIC_DIR / "dataset.html"
     if not dataset_path.is_file():
-        raise HTTPException(status_code=500, detail="Missing dataset page")
+        raise HTTPException(status_code=404, detail="Missing dataset page")
     return FileResponse(dataset_path)
+
+
+@app.get("/api/health")
+async def health(request: Request) -> JSONResponse:
+    """Cheap liveness + readiness probe.
+
+    Reports pipeline-loaded state separately so a caller (HF container health,
+    post-deploy smoke test) can distinguish "Space is up" from "Space is up AND
+    ready to measure".
+    """
+    pipeline = getattr(request.app.state, "pipeline", None)
+    err = getattr(request.app.state, "pipeline_load_error", None)
+    backends: list[str] = []
+    if pipeline is not None:
+        try:
+            backends = sorted(pipeline.models.available_pose_backends())
+        except Exception:  # noqa: BLE001
+            pass
+    return JSONResponse({
+        "service": "pointx-backend",
+        "status": "ok",
+        "proxy_mode": _IS_VERCEL_PROXY_MODE,
+        "pipeline_ready": pipeline is not None,
+        "pose_backends": backends,
+        "pipeline_load_error": err,
+    })
 
 
 async def _proxy_measure_to_hf(
@@ -569,7 +757,7 @@ async def _proxy_measure_to_hf(
     """Forward the parsed multipart /api/measure request parameters to the HF Space backend.
 
     The upstream response (JSON or error) is returned verbatim to the client.
-    Uses httpx with a generous timeout for heavy GPU inference.
+    Uses httpx with a generous timeout for heavy CPU inference.
     """
     import httpx
 
@@ -608,15 +796,22 @@ async def _proxy_measure_to_hf(
         )
 
 
+def _with_warning(envelope: MeasurementEnvelope, warning: str | None) -> MeasurementEnvelope:
+    if not warning:
+        return envelope
+    return envelope.model_copy(update={"warnings": [*envelope.warnings, warning]})
+
+
 @app.post("/api/measure", response_model=MeasurementEnvelope)
 async def measure(
     request: Request,
+    background_tasks: BackgroundTasks,
     height_cm: float = Form(..., ge=100, le=250),
     sex: Literal["male", "female", "other"] = Form(...),
     pose_backend: Literal["custom", "coco"] = Form("coco"),
     front: UploadFile = File(...),
     side: UploadFile = File(...),
-) -> Response:
+) -> Any:
     """Run pose + seg + (optional) regression on the supplied photo pair.
 
     In Vercel proxy mode, the request is forwarded transparently to the
@@ -660,19 +855,83 @@ async def measure(
             ),
         )
 
-    front_img, front_bytes = await _validate_and_decode(front, "front")
-    side_img,  side_bytes  = await _validate_and_decode(side,  "side")
+    from webui._timing import Timings
+    tm = Timings()
 
-    _, dataset_save_warning = await _save_capture_pair_to_dataset(
-        front_bytes, side_bytes,
-    )
+    with tm("decode"):
+        front_img, front_bytes = await _validate_and_decode(front, "front")
+        side_img,  side_bytes  = await _validate_and_decode(side,  "side")
+
+    with tm("downscale"):
+        front_img = _downscale_for_inference(front_img)
+        side_img = _downscale_for_inference(side_img)
+
+    _, dataset_save_warning = await _save_capture_pair_to_dataset(front_bytes, side_bytes)
+
+    # One request_id per call, used for both the envelope and the archive prefix.
+    request_id = str(uuid.uuid4())
+
+    def _archive(envelope_obj: MeasurementEnvelope, *, outcome: str) -> None:
+        """Persist photos + envelope to whichever store(s) are configured.
+
+        1. Local filesystem (LOCAL_DATA_DIR) — inline, ~50 ms.
+        2. S3-compatible bucket — FastAPI BackgroundTask, runs after the
+           response is sent so the bucket round-trip stays off the critical path.
+        Failures are logged and never affect the response.
+        """
+        try:
+            from webui import storage
+            args = dict(
+                request_id=request_id,
+                front_bytes=front_bytes,
+                front_content_type=(front.content_type or "image/jpeg"),
+                side_bytes=side_bytes,
+                side_content_type=(side.content_type or "image/jpeg"),
+                envelope_json=envelope_obj.model_dump(mode="json", by_alias=True),
+                metadata={
+                    "height_cm": str(height_cm),
+                    "sex": sex,
+                    "pose_backend": pose_backend,
+                    "outcome": outcome,
+                    "created_at": envelope_obj.created_at,
+                },
+            )
+
+            local_ok = storage.archive_measurement_local(**args)
+            s3_scheduled = False
+            if storage.is_enabled():
+                def _bg_s3_upload(_args=args, _outcome=outcome, _rid=request_id):
+                    try:
+                        ok = storage.archive_measurement(**_args)
+                        logger.warning("Archive (bg): outcome=%s request_id=%s s3_ok=%s", _outcome, _rid, ok)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("Archive (bg) raised for request_id=%s", _rid)
+                background_tasks.add_task(_bg_s3_upload)
+                s3_scheduled = True
+
+            logger.warning(
+                "Archive: outcome=%s request_id=%s local=%s s3_scheduled=%s",
+                outcome, request_id, local_ok, s3_scheduled,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Archive raised — measurement response is unaffected.")
 
     try:
-        result = pipeline.measure(front_img, side_img, height_cm, pose_backend=pose_backend)
+        # Pipeline is sync (PyTorch + numpy). asyncio.to_thread keeps the
+        # event loop responsive so /api/tts and health checks can still
+        # answer while this request crunches pose+seg.
+        result = await asyncio.to_thread(
+            pipeline.measure,
+            front_img, side_img, height_cm,
+            pose_backend=pose_backend, timings=tm,
+        )
     except ValueError as exc:
         err_text = str(exc).strip()
         if err_text.startswith("Cannot calibrate "):
-            preview = pipeline.preview(front_img, side_img, pose_backend=pose_backend)
+            preview = await asyncio.to_thread(
+                pipeline.preview,
+                front_img, side_img, pose_backend=pose_backend,
+            )
             envelope = _build_visualization_only_envelope(
                 preview_result=preview,
                 height_cm=height_cm,
@@ -682,14 +941,9 @@ async def measure(
                 front_bgr=front_img,
                 side_bgr=side_img,
             )
-            if dataset_save_warning:
-                envelope = envelope.model_copy(
-                    update={"warnings": [*envelope.warnings, dataset_save_warning]},
-                )
-            logger.info(
-                "Full model output envelope: %s",
-                envelope.model_dump(mode="json", by_alias=True),
-            )
+            envelope.request_id = request_id
+            envelope = _with_warning(envelope, dataset_save_warning)
+            _archive(envelope, outcome="calibration_failed")
             return envelope
         raise HTTPException(
             status_code=400,
@@ -704,19 +958,25 @@ async def measure(
 
     from webui.envelope import body_to_envelope
 
-    envelope = body_to_envelope(
-        result=result,
-        subject_height_cm=height_cm,
-        sex=sex,
-        request_id=str(uuid.uuid4()),
-        front_bgr=front_img,
-        side_bgr=side_img,
-    )
-    if dataset_save_warning:
-        envelope = envelope.model_copy(
-            update={"warnings": [*envelope.warnings, dataset_save_warning]},
+    # `with_viz` query param gates the heavy base64-PNG render. Default
+    # ON for backward-compat; ?with_viz=0 shaves ~1-2 s off the response.
+    with_viz = request.query_params.get("with_viz", "1").strip().lower() not in ("0", "false", "no", "off")
+
+    with tm("envelope"):
+        envelope = body_to_envelope(
+            result=result,
+            subject_height_cm=height_cm,
+            sex=sex,
+            request_id=request_id,
+            front_bgr=front_img if with_viz else None,
+            side_bgr=side_img if with_viz else None,
         )
-    logger.info("Full model output envelope: %s", envelope.model_dump(mode="json", by_alias=True))
+    envelope = _with_warning(envelope, dataset_save_warning)
+
+    logger.warning("Measurement timings — %s", tm.format())
+
+    _archive(envelope, outcome="ok")
+
     return envelope
 
 
@@ -731,7 +991,7 @@ async def measure_mock(
 
 @app.post("/api/tts")
 async def tts_synthesize(body: TtsRequest) -> Response:
-    """Synthesize Ukrainian speech (MP3) using a lightweight neural Edge voice."""
+    """Synthesize speech (MP3) using a lightweight neural Edge voice."""
     from webui import tts as tts_mod
 
     if tts_mod.tts_disabled():

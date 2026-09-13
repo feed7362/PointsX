@@ -1,8 +1,14 @@
 """Ukrainian neural TTS via edge-tts (Microsoft Edge voices, no local GPU model).
 
-Requires outbound HTTPS. Configure with env:
-    POINTSX_TTS_VOICE   default ``uk-UA-PolinaNeural`` (alt: ``uk-UA-OstapNeural``)
-    POINTSX_TTS_DISABLE  if ``1`` / ``true`` / ``yes``, ``/api/tts`` returns 503.
+Requires outbound HTTPS / WSS. Configure with env:
+    POINTSX_TTS_VOICE    default ``uk-UA-PolinaNeural`` (alt: ``uk-UA-OstapNeural``)
+    POINTSX_TTS_DISABLE  if ``1``/``true``/``yes``, ``/api/tts`` returns 503
+                         immediately (browser SpeechSynthesis takes over).
+
+Note: ``edge-tts`` reaches Microsoft via WSS. Microsoft started filtering
+datacenter IPs in 2024, so this often fails on hosted Spaces / serverless
+runtimes. The frontend's speech.js falls back to ``window.speechSynthesis``
+on any 503, so the demo stays usable either way.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ def tts_disabled() -> bool:
 
 
 async def synthesize_uk_speech_mp3(text: str) -> bytes:
-    """Return MP3 bytes for ``text`` using the configured Ukrainian neural voice."""
+    """Return MP3 bytes for `text` using the configured Ukrainian neural voice."""
     stripped = text.strip()
     if not stripped:
         raise ValueError("empty text")

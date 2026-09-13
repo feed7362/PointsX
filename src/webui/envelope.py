@@ -97,8 +97,7 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # only apply to these four IDs (chest/waist/hip/thigh) — other measurements
 # are not bias-corrected here.
 #
-# Fit fresh values via ``pointsx-eval --fit-offsets`` (lives in the
-# Pointx-backend checkout) and paste the printed dict back here when new
+# Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed dict back here when new
 # ground-truth subjects arrive. Refitted 2026-07-20 on the app GT corpus (n=11
 # real subjects with tape measurements, 8 F / 3 M), AFTER the thigh-width
 # extraction fix. Method: median(gt / predicted), the L1-optimal multiplicative

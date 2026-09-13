@@ -38,6 +38,79 @@ def _adjust_custom_keypoint_confidence(conf: np.ndarray) -> np.ndarray:
 PoseBackend = Literal["custom", "coco"]
 
 
+def _try_ultralytics_download(name: str) -> Path | None:
+    """Pass a bare filename to YOLO() to trigger Ultralytics' built-in download.
+
+    Returns the on-disk path of the downloaded weights, or None on failure.
+    """
+    try:
+        YOLO(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-download of %s failed: %s", name, exc)
+        return None
+    cwd_candidate = Path.cwd() / name
+    if cwd_candidate.is_file():
+        return cwd_candidate
+    logger.warning("Ultralytics returned without writing %s", name)
+    return None
+
+
+def _ensure_yolo_weights(path: Path) -> Path | None:
+    """If `path` doesn't exist, fetch exactly that basename via Ultralytics.
+
+    Only the requested checkpoint is tried. A different model family is never
+    substituted under the expected filename — that would silently change every
+    measurement. Missing weights surface as a load error instead
+    (``/api/health`` reports ``pipeline_ready: false``).
+
+    After a successful download the file is mirrored into LOCAL_DATA_DIR
+    (HF Storage Bucket mount, if configured) so the next cold start skips it.
+    """
+    if path.is_file():
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Auto-downloading YOLO weights %s via Ultralytics…", path.name)
+    downloaded = _try_ultralytics_download(path.name)
+    if downloaded is None:
+        return None
+    try:
+        if downloaded.resolve() != path.resolve():
+            downloaded.replace(path)
+    except OSError as exc:
+        logger.warning("Could not move %s to %s: %s", downloaded, path, exc)
+        return downloaded
+    _mirror_to_local_data_dir(path)
+    return path
+
+
+def _mirror_to_local_data_dir(src: Path) -> None:
+    """Copy `src` to LOCAL_DATA_DIR/<basename> (best-effort, never raises).
+
+    The bucket-mount lookup in webui/storage.py looks under both
+    /data/models/ and /data/. We write to /data/ root so the file is
+    immediately discoverable on the next restart.
+    """
+    import os
+    import shutil
+
+    base = os.environ.get("LOCAL_DATA_DIR")
+    if not base:
+        return
+    try:
+        target = Path(base) / src.name
+        if target.is_file() and target.stat().st_size == src.stat().st_size:
+            return  # already mirrored
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, target)
+        logger.warning(
+            "Mirrored weights to bucket — %s → %s (size=%d). Next boot is cached.",
+            src, target, target.stat().st_size,
+        )
+    except OSError as exc:
+        logger.warning("Mirror to %s failed: %s", base, exc)
+
+
 class BodyModels:
     """Loads and runs YOLO pose (custom 16-pt + COCO-17) + segmentation."""
 
@@ -62,12 +135,23 @@ class BodyModels:
         else:
             logger.warning("Custom pose weights not found (%s); backend 'custom' disabled", pose_custom_path)
 
-        if pose_coco_path and Path(pose_coco_path).is_file():
-            self._pose_coco = YOLO(str(pose_coco_path))
-        else:
-            logger.warning("COCO pose weights not found (%s); backend 'coco' disabled", pose_coco_path)
+        if pose_coco_path:
+            resolved = _ensure_yolo_weights(Path(pose_coco_path))
+            if resolved is not None:
+                self._pose_coco = YOLO(str(resolved))
+            else:
+                logger.warning(
+                    "COCO pose weights not found (%s) and auto-download failed; "
+                    "backend 'coco' disabled",
+                    pose_coco_path,
+                )
 
-        self._seg = YOLO(str(seg_model_path))
+        seg_resolved = _ensure_yolo_weights(Path(seg_model_path))
+        if seg_resolved is None:
+            raise FileNotFoundError(
+                f"Segmentation weights not found and not downloadable: {seg_model_path}"
+            )
+        self._seg = YOLO(str(seg_resolved))
 
     def available_pose_backends(self) -> set[PoseBackend]:
         """Backends with loaded weights."""

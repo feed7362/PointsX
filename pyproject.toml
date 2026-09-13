@@ -26,13 +26,29 @@ dependencies = [
     "rich>=15.0.0",
     "python-multipart>=0.0.26",
     "edge-tts>=7.0.0",
+    # Demo-branch only: Cloudflare R2 archival for /api/measure. boto3 talks
+    # to R2 via its S3-compatible endpoint. Silently noop'd when the R2_*
+    # env vars are missing, so this is safe to ship on any deployment.
+    "boto3>=1.35.0",
+    # Sealed-box encryption for archived photos — same libsodium
+    # scheme as the dataset flow (encrypt-only: needs the public key).
     "pynacl>=1.6.2",
+    # Loads `.env` (gitignored) at webui startup so local dev doesn't need a
+    # wrapper shell script. On HF Spaces / Docker the env is injected by the
+    # platform and python-dotenv is a no-op.
+    "python-dotenv>=1.0.0",
+    # HF Hub for pulling model weights from a model repo (free, unlimited
+    # public bandwidth + storage) instead of paying for S3 transfer.
+    "huggingface_hub>=0.26.0",
+    # Vercel proxy mode forwards /api/measure to the HF Space.
+    "httpx>=0.27.0",
     "supabase>=2.31.0",
 ]
 
 [project.scripts]
 pointsx = "pointsx.cli:main"
 pointsx-web = "webui.__main__:main"
+pointsx-eval = "pointsx.eval:main"
 
 [build-system]
 requires = ["hatchling"]

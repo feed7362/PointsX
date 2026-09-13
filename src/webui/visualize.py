@@ -57,6 +57,17 @@ def _get_font(size: int) -> ImageFont.ImageFont:
             return font
         except Exception:
             continue
+    # PIL's default is a BITMAP font with no Cyrillic coverage, so every
+    # Ukrainian label degrades to tofu squares. This used to fail silently —
+    # warn loudly and name the fix.
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "No TrueType font found (tried %d paths) — falling back to PIL's bitmap "
+        "default, which has NO Cyrillic glyphs, so overlay labels will render as "
+        "squares. Install fonts-dejavu-core in the image.",
+        len(paths),
+    )
     font = ImageFont.load_default()
     _FONT_CACHE[size] = font
     return font
