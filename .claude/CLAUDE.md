@@ -106,7 +106,8 @@ python -m pointsx.synthetic.pipeline --n-bodies 500 --blender-exe /path/to/blend
 
 ## Notes
 
-- No test suite yet — no `tests/` directory
+- `tests/` has model/pose-adapter/synthetic-landmark tests only; no geometry tests yet — verify
+  measurement refactors with a before/after snapshot over `supabase-dump/subjects.csv`
 - `.gitignore` excludes: `.venv/`, `data/`, `models/*.pt`, `runs/`, `__pycache__/`
 - `smpl-anthropometry` requires manual install from GitHub (not on PyPI)
 - Blender required externally for synthetic pipeline rendering

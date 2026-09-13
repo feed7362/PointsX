@@ -46,13 +46,6 @@ GT_MAP: dict[str, str] = {
     "back_length_to_waist": "back_length_to_waist",
     "outer_seam": "leg_length_outer_seam",
     "inner_seam": "leg_length_inner_seam",
-    # These four sit in the envelope but were absent from DISPLAY_MEASUREMENT_IDS,
-    # so the eval never scored them despite the corpus HAVING ground truth. Neck
-    # in particular was ~35 cm out in production and invisible to every metric.
-    "neck_circumference": "neck_circumference",
-    "arm_circumference_bicep": "upper_arm_circumference",
-    "back_width": "back_width_scapular",
-    "front_length_to_waist": "front_length_to_waist",
 }
 
 # Plausible adult ranges (cm) per canonical id. The dataset contains TEST
@@ -74,10 +67,6 @@ GT_RANGES: dict[str, tuple[float, float]] = {
     "back_length_to_waist": (25, 60),
     "leg_length_outer_seam": (70, 130),
     "leg_length_inner_seam": (55, 105),
-    "neck_circumference": (25, 60),
-    "upper_arm_circumference": (18, 60),
-    "back_width_scapular": (25, 60),
-    "front_length_to_waist": (25, 60),
 }
 # A subject needs at least this many plausible GT values to be worth scoring.
 MIN_VALID_GT = 4

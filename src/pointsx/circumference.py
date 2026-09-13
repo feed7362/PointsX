@@ -6,6 +6,10 @@ import math
 
 from pointsx.schemas import BodyMeasurements
 
+# Body parts with a (front width, side width) pair on BodyMeasurements. This is
+# also the regressor's output order (see _estimate_with_regression).
+ELLIPSE_PARTS = ("neck", "waist", "hip", "thigh", "calf", "wrist")
+
 
 def ramanujan_ellipse_circumference(width_a: float, width_b: float) -> float:
     """Estimate circumference of an ellipse using Ramanujan's approximation.
@@ -47,12 +51,12 @@ def estimate_circumferences(
         return _estimate_with_regression(m, regression_model)
 
     # Ellipse-based estimation for all circumferences
-    m.neck_circumference_cm = _estimate_single(m.neck_width_front_cm, m.neck_width_side_cm)
-    m.waist_circumference_cm = _estimate_single(m.waist_width_front_cm, m.waist_width_side_cm)
-    m.hip_circumference_cm = _estimate_single(m.hip_width_front_cm, m.hip_width_side_cm)
-    m.thigh_circumference_cm = _estimate_single(m.thigh_width_front_cm, m.thigh_width_side_cm)
-    m.calf_circumference_cm = _estimate_single(m.calf_width_front_cm, m.calf_width_side_cm)
-    m.wrist_circumference_cm = _estimate_single(m.wrist_width_front_cm, m.wrist_width_side_cm)
+    for part in ELLIPSE_PARTS:
+        setattr(
+            m,
+            f"{part}_circumference_cm",
+            _estimate_single(getattr(m, f"{part}_width_front_cm"), getattr(m, f"{part}_width_side_cm")),
+        )
 
     return m
 
@@ -68,11 +72,7 @@ def _estimate_with_regression(m: BodyMeasurements, model) -> BodyMeasurements:
 
     predictions = model.predict(features)
 
-    m.neck_circumference_cm = float(predictions[0])
-    m.waist_circumference_cm = float(predictions[1])
-    m.hip_circumference_cm = float(predictions[2])
-    m.thigh_circumference_cm = float(predictions[3])
-    m.calf_circumference_cm = float(predictions[4])
-    m.wrist_circumference_cm = float(predictions[5])
+    for i, part in enumerate(ELLIPSE_PARTS):
+        setattr(m, f"{part}_circumference_cm", float(predictions[i]))
 
     return m

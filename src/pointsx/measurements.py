@@ -4,23 +4,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from pointsx.keypoints import KP, distance, is_valid, midpoint
+from pointsx.keypoints import KP, distance, is_valid, mean_valid_y, midpoint
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
-from pointsx.silhouette import extract_all_widths
+from pointsx.silhouette import WAIST_SIDE_SEARCH_TOP_FRACTION, _find_segments, extract_all_widths
 
 
 def _avg(*values: float | None) -> float | None:
     """Average of non-None values."""
     valid = [v for v in values if v is not None]
     return float(np.mean(valid)) if valid else None
-
-
-def _split_segments(cols: np.ndarray) -> list[np.ndarray]:
-    if len(cols) == 0:
-        return []
-    diffs = np.diff(cols)
-    split_points = np.where(diffs > 3)[0] + 1
-    return np.split(cols, split_points)
 
 
 def _left_arm_contour_path(
@@ -46,7 +38,7 @@ def _left_arm_contour_path(
     cols0 = np.where(mask[y0])[0]
     if len(cols0) < 2:
         return []
-    segments0 = [s for s in _split_segments(cols0) if len(s) >= 2]
+    segments0 = [s for s in _find_segments(cols0) if len(s) >= 2]
     left_half0 = [s for s in segments0 if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
     if not left_half0:
         return []
@@ -63,7 +55,7 @@ def _left_arm_contour_path(
         cols = np.where(mask[y])[0]
         if len(cols) < 2:
             break
-        segments = [s for s in _split_segments(cols) if len(s) >= 2]
+        segments = [s for s in _find_segments(cols) if len(s) >= 2]
         left_half_segments = [s for s in segments if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
         if not left_half_segments:
             break
@@ -87,7 +79,7 @@ def _left_arm_contour_path(
         cols = np.where(mask[y])[0]
         if len(cols) < 2:
             continue
-        segments = [s for s in _split_segments(cols) if len(s) >= 2]
+        segments = [s for s in _find_segments(cols) if len(s) >= 2]
         if not segments:
             continue
         left_half_segments = [s for s in segments if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
@@ -104,7 +96,7 @@ def _left_arm_contour_path(
     # End: left-most intersection of wrist y-line with the selected segment.
     cols_w = np.where(mask[y_wrist])[0]
     if len(cols_w) >= 2:
-        segments_w = [s for s in _split_segments(cols_w) if len(s) >= 2]
+        segments_w = [s for s in _find_segments(cols_w) if len(s) >= 2]
         if segments_w:
             left_half_segments_w = [s for s in segments_w if 0.5 * (float(s[0]) + float(s[-1])) <= x_mid_img]
             candidates_w = [s for s in left_half_segments_w if abs(((s[0] + s[-1]) * 0.5) - x_track) <= max_jump]
@@ -173,21 +165,17 @@ def extract_measurements(
     # ── Leg length outer (side): straight line from 25% above pelvis to bottom segmentation end ──
     if is_valid(s_conf, KP.PELVIS, KP.THORAX):
         sm = side_mask.mask
-        h_s, w_s = sm.shape
+        h_s = sm.shape[0]
         pelvis_y = float(s_pts[KP.PELVIS, 1])
         thorax_y = float(s_pts[KP.THORAX, 1])
         y_start_f = pelvis_y + 0.25 * (thorax_y - pelvis_y)
         y_start = int(np.clip(int(round(y_start_f)), 0, h_s - 1))
-        torso_x = float(s_pts[KP.PELVIS, 0])
 
-        cols_start = np.where(sm[y_start])[0]
+        # Vertical distance from the anchor row to the lowest silhouette row
+        # (sole line); needs a real body slice at the anchor row.
         ys_fg = np.where(sm.any(axis=1))[0]
-        if len(cols_start) >= 2 and len(ys_fg) > 0:
-            y_end = int(ys_fg[-1])
-            # Outer leg as a vertical segment: one x chosen at anchor row, same x at sole line (y only differs).
-            x_line = cols_start[0] if abs(cols_start[0] - torso_x) > abs(cols_start[-1] - torso_x) else cols_start[-1]
-            x_line = int(np.clip(int(x_line), 0, w_s - 1))
-            m.leg_length_outer_cm = float(abs(y_end - y_start)) / ps
+        if sm[y_start].sum() >= 2 and len(ys_fg) > 0:
+            m.leg_length_outer_cm = float(abs(int(ys_fg[-1]) - y_start)) / ps
 
     # ── Leg length inner (front): single vertical line with static x ──
     if is_valid(f_conf, KP.PELVIS):
@@ -195,22 +183,10 @@ def extract_measurements(
         h, w = fm.shape
         pelvis_x = int(np.clip(int(round(float(f_pts[KP.PELVIS, 0]))), 0, w - 1))
         pelvis_y = int(np.clip(int(round(float(f_pts[KP.PELVIS, 1]))), 0, h - 1))
-        ankle_ys = []
-        if is_valid(f_conf, KP.LEFT_ANKLE):
-            ankle_ys.append(float(f_pts[KP.LEFT_ANKLE, 1]))
-        if is_valid(f_conf, KP.RIGHT_ANKLE):
-            ankle_ys.append(float(f_pts[KP.RIGHT_ANKLE, 1]))
-        knee_ys = []
-        if is_valid(f_conf, KP.LEFT_KNEE):
-            knee_ys.append(float(f_pts[KP.LEFT_KNEE, 1]))
-        if is_valid(f_conf, KP.RIGHT_KNEE):
-            knee_ys.append(float(f_pts[KP.RIGHT_KNEE, 1]))
-        if ankle_ys:
-            y_ankle = int(round(np.mean(ankle_ys)))
-        elif knee_ys:
-            y_ankle = int(round(np.mean(knee_ys)))
-        else:
-            y_ankle = h - 1
+        y_bottom_ref = mean_valid_y(front_kp, KP.LEFT_ANKLE, KP.RIGHT_ANKLE)
+        if y_bottom_ref is None:
+            y_bottom_ref = mean_valid_y(front_kp, KP.LEFT_KNEE, KP.RIGHT_KNEE)
+        y_ankle = int(round(y_bottom_ref)) if y_bottom_ref is not None else h - 1
         y_ankle = int(np.clip(y_ankle, pelvis_y + 1, h - 1))
         # Keep previous start anchor.
         y_start = int(round(y_ankle + 0.8 * (pelvis_y - y_ankle)))
@@ -221,7 +197,6 @@ def extract_measurements(
             # Keep one inner-leg line (left side), x stays static.
             top_cands = cols_top[cols_top < pelvis_x]
             if len(top_cands) > 0:
-                x_line = int(top_cands.max())
                 ys_fg = np.where(fm.any(axis=1))[0]
                 ys_fg = ys_fg[ys_fg >= y_start]
                 if len(ys_fg) > 0:
@@ -250,32 +225,18 @@ def extract_measurements(
     wy = selected_y.get("waist")
     if wy is not None:
         m.waist_level_front_px, m.waist_level_side_px = wy
-    # Fallback if width-search had no valid row.
-    if m.waist_level_front_px is None and is_valid(f_conf, KP.PELVIS, KP.UPPER_NECK):
-        py = float(f_pts[KP.PELVIS, 1])
-        ny = float(f_pts[KP.UPPER_NECK, 1])
-        m.waist_level_front_px = py + 0.4 * (ny - py)
+    # Side fallback when the min-search found no usable row: top of its search
+    # window. (The front row is fixed, so it is always recorded above.)
     if m.waist_level_side_px is None and is_valid(s_conf, KP.PELVIS, KP.UPPER_NECK):
         py = float(s_pts[KP.PELVIS, 1])
         ny = float(s_pts[KP.UPPER_NECK, 1])
-        m.waist_level_side_px = py + 0.4 * (ny - py)
+        m.waist_level_side_px = py + WAIST_SIDE_SEARCH_TOP_FRACTION * (ny - py)
 
-    # Thigh: average left and right
-    t_r_f, t_r_s = _to_cm("thigh_right")
-    t_l_f, t_l_s = _to_cm("thigh_left")
-    m.thigh_width_front_cm = _avg(t_r_f, t_l_f)
-    m.thigh_width_side_cm = _avg(t_r_s, t_l_s)
-
-    # Calf: average left and right
-    c_r_f, c_r_s = _to_cm("calf_right")
-    c_l_f, c_l_s = _to_cm("calf_left")
-    m.calf_width_front_cm = _avg(c_r_f, c_l_f)
-    m.calf_width_side_cm = _avg(c_r_s, c_l_s)
-
-    # Wrist: average left and right
-    w_r_f, w_r_s = _to_cm("wrist_right")
-    w_l_f, w_l_s = _to_cm("wrist_left")
-    m.wrist_width_front_cm = _avg(w_r_f, w_l_f)
-    m.wrist_width_side_cm = _avg(w_r_s, w_l_s)
+    # Limbs: average left and right (the side view carries one shared depth).
+    for part in ("thigh", "calf", "wrist"):
+        r_f, r_s = _to_cm(f"{part}_right")
+        l_f, l_s = _to_cm(f"{part}_left")
+        setattr(m, f"{part}_width_front_cm", _avg(r_f, l_f))
+        setattr(m, f"{part}_width_side_cm", _avg(r_s, l_s))
 
     return m

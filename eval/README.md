@@ -31,10 +31,10 @@ BodyM ships **binary silhouettes only — no RGB, no keypoints.** Consequences:
    width profile) that is *not* our production keypoint-anchored path. If we tune
    that finder to BodyM we optimize a proxy. **Mitigation, load-bearing:** the
    eval imports the **real** `pointsx.circumference` /
-   `pointsx.silhouette.measure_width_at_y` modules. Be exact about the slice:
+   `pointsx.silhouette._find_segments` helpers. Be exact about the slice:
    **calibration, landmark row-finding, and arm-clipping are all eval-side new
    code** — the *only* production code BodyM exercises is
-   `ramanujan_ellipse_circumference` + `measure_width_at_y`. So the true, narrow
+   `ramanujan_ellipse_circumference` + `_find_segments`. So the true, narrow
    claim is: *"is two-widths→ellipse accurate against real scan GT, given correct
    widths?"* — not "tests the circumference core." Stated, not hidden.
 

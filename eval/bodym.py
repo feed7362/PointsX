@@ -12,7 +12,8 @@ Pipeline (silhouette-only, no keypoints — BodyM has none):
       -> real pointsx.ramanujan_ellipse_circumference(front_w, side_d)
     vs per-sex-mean baseline ("can't get worse").
 
-Real production code exercised: ramanujan_ellipse_circumference + measure_width_at_y.
+Real production code exercised: ramanujan_ellipse_circumference + _find_segments
+(calibration, row finding and arm clipping are eval-side — see eval/README.md).
 Everything else (calibrate, rows, arm-clip) is eval-side — see README.
 
 Usage:
@@ -38,8 +39,9 @@ sys.path.insert(0, str(EVAL_DIR))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from pipelines import PIPELINES  # noqa: E402
+
 from pointsx.circumference import ramanujan_ellipse_circumference  # noqa: E402
-from pointsx.silhouette import _find_segments, measure_width_at_y  # noqa: E402
+from pointsx.silhouette import _find_segments  # noqa: E402
 
 BUCKET = "amazon-bodym"
 CACHE = EVAL_DIR / ".cache"

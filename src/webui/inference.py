@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 
 from pointsx.calibration import calibrate
-from pointsx.keypoints import MIN_CONFIDENCE
 from pointsx.circumference import estimate_circumferences
 from pointsx.measurements import extract_measurements
 from pointsx.models import BodyModels, PoseBackend
+from pointsx.pipeline import MeasurementPipeline
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints, SilhouetteMask
 
@@ -41,28 +41,10 @@ class InferenceResult:
     pose_backend: str
 
 
-def _reference_point(kp: Keypoints) -> tuple[float, float]:
-    """Subject center for seg-mask selection (mirrors MeasurementPipeline)."""
-    valid = kp.confidence >= MIN_CONFIDENCE
-    if np.any(valid):
-        center = kp.points[valid].mean(axis=0)
-    else:
-        center = kp.points.mean(axis=0)
-    return float(center[0]), float(center[1])
-
-
-def _load_regressor(path: str | Path):
-    """Load the trained CircumferenceRegressor from a .pt file."""
-    import torch
-
-    from pointsx.regression.model import CircumferenceRegressor
-
-    model = CircumferenceRegressor()
-    model.load_state_dict(
-        torch.load(str(path), map_location="cpu", weights_only=True)
-    )
-    model.eval()
-    return model
+# Shared with the CLI orchestrator so seg-mask selection and regressor loading
+# cannot drift between the two entry points.
+_reference_point = MeasurementPipeline._keypoint_reference
+_load_regressor = MeasurementPipeline._load_regression_model
 
 
 class WebuiPipeline:

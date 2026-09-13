@@ -8,7 +8,7 @@ keypoints + widths (no extra ML required).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 from pointsx.circumference import ramanujan_ellipse_circumference
 from pointsx.keypoints import KP, distance, is_valid, midpoint
@@ -97,24 +97,17 @@ _DEFAULT_CONFIDENCE: dict[str, float] = {
 # only apply to these four IDs (chest/waist/hip/thigh) — other measurements
 # are not bias-corrected here.
 #
-# Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed
-# dict back here when you have new ground-truth subjects. Defaults are seeded
-# from a small (n=3) eval set, so expect them to update.
-# Refitted 2026-07-20 on the app GT corpus (n=11 real subjects with tape
-# measurements), AFTER the thigh-width extraction fix — the previous values were
-# fitted on n=3 and against broken thigh widths, so they were stale twice over.
-# Method: median(gt / predicted), the L1-optimal multiplicative correction
-# (`pointsx-eval --fit-offsets`), rounded to 0.5 %.
+# Fit fresh values via ``pointsx-eval --fit-offsets`` (lives in the
+# Pointx-backend checkout) and paste the printed dict back here when new
+# ground-truth subjects arrive. Refitted 2026-07-20 on the app GT corpus (n=11
+# real subjects with tape measurements, 8 F / 3 M), AFTER the thigh-width
+# extraction fix. Method: median(gt / predicted), the L1-optimal multiplicative
+# correction, rounded to 0.5 %.
 #
-# CHEST IS DELIBERATELY ABSENT = no correction applied. Its fitted bias is not
-# statistically significant (bootstrap 95 % CI spans zero: female -3.4 %
-# [-7.2, +0.5], male +3.9 % [-7.3, +6.6] — opposite signs, both small), and
-# correcting it measurably HURTS: leave-one-out MAE 6.6 cm corrected vs 5.4 cm
-# uncorrected. The same pattern holds on the independent BodyM benchmark, where
-# scaling chest also degraded it. Do not "complete" this table by adding chest.
-#
-# Leave-one-out MAE over the four circumferences: 6.50 cm with this table,
-# 6.81 cm correcting all four, 11.0 cm with no correction at all.
+# Male chest is deliberately absent (see the inline note on the female cell):
+# its fitted +3.9 % improves in-sample but worsens leave-one-out — n=3
+# overfitting. Leave-one-out MAE over the four circumferences: 6.50 cm with
+# this table, 6.81 cm correcting all four, 11.0 cm with no correction at all.
 #
 # CAVEAT: the male cells rest on n=3 subjects — treat them as provisional and
 # refit once the corpus has ~8+ male subjects.
@@ -172,13 +165,6 @@ _LENGTH_SCALES_PCT: dict[str, float] = {
     "leg_length_inner_seam":  -9.5,   # %   MAE 10.7 -> 6.8
     "leg_length_outer_seam":  -2.5,   #     MAE  8.7 -> 7.7
     "neck_base_height":       +4.0,   #     MAE  6.3 -> 2.8
-}
-
-# Backwards-compat alias retained as an empty dict — older code paths that
-# might still reference _SEX_CIRCUMFERENCE_OFFSETS_CM should be updated, but
-# until then they get a no-op.
-_SEX_CIRCUMFERENCE_OFFSETS_CM: dict[str, dict[str, float]] = {
-    "female": {}, "male": {}, "other": {},
 }
 
 # Set of IDs eligible for the multiplicative bias correction. Anything outside
@@ -440,17 +426,6 @@ def body_to_envelope(
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
-
-    # Outer-leg override DISABLED for A/B test against the merged
-    # extract_measurements implementation (side-view diagonal from 20% above
-    # pelvis to bottom of side mask). Re-enable by un-commenting the block
-    # below if our envelope-side derivation wins on the eval set.
-    # outer_leg_cm = _derive_outer_leg_to_floor(
-    #     bm, result.front_kp, result.front_mask, result.cal.px_per_cm_front,
-    #     subject_height_cm,
-    # )
-    # if outer_leg_cm is not None:
-    #     bm.leg_length_outer_cm = outer_leg_cm
 
     if apply_sex_offsets:
         scales_table = sex_offsets_override or _SEX_CIRCUMFERENCE_SCALES_PCT
