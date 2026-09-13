@@ -106,8 +106,11 @@ python -m pointsx.synthetic.pipeline --n-bodies 500 --blender-exe /path/to/blend
 
 ## Notes
 
-- `tests/` has model/pose-adapter/synthetic-landmark tests only; no geometry tests yet — verify
-  measurement refactors with a before/after snapshot over `supabase-dump/subjects.csv`
+- `tests/test_snapshot.py` is the CI geometry gate: procedural bodies in `tests/fixtures/synthetic_bodies.py`
+  vs `tests/fixtures/expected/synthetic_snapshot.json`. Intentional geometry change →
+  `python tests/fixtures/synthetic_bodies.py --write-expected` and commit the JSON with the code.
+  It does not cover pose/seg models; for those, also compare a before/after run over `supabase-dump/subjects.csv`
+  locally (real photos — never commit or upload anything derived from them)
 - `.gitignore` excludes: `.venv/`, `data/`, `models/*.pt`, `runs/`, `__pycache__/`
 - `smpl-anthropometry` requires manual install from GitHub (not on PyPI)
 - Blender required externally for synthetic pipeline rendering

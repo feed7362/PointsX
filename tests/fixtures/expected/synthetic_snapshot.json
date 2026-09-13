@@ -1,0 +1,694 @@
+{
+ "f_avg_168": {
+  "body": {
+   "arm_length_cm": 55.3,
+   "arm_length_from_neck_cm": 75.1,
+   "calf_circumference_cm": 28.0,
+   "calf_width_front_cm": 8.6,
+   "calf_width_side_cm": 9.2,
+   "head_depth_side_cm": 19.1,
+   "head_width_front_cm": 15.2,
+   "height_cm": 168.0,
+   "hip_circumference_cm": 93.7,
+   "hip_width_front_cm": 35.9,
+   "hip_width_side_cm": 23.1,
+   "leg_length_inner_cm": 63.1,
+   "leg_length_outer_cm": 94.0,
+   "neck_circumference_cm": 33.6,
+   "neck_width_front_cm": 10.5,
+   "neck_width_side_cm": 10.9,
+   "shoulder_slope_width_cm": 15.8,
+   "shoulder_width_cm": 33.0,
+   "thigh_circumference_cm": 52.9,
+   "thigh_width_front_cm": 17.4,
+   "thigh_width_side_cm": 16.3,
+   "torso_width_front_cm": 33.0,
+   "torso_width_side_cm": 21.7,
+   "waist_circumference_cm": 76.3,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 493.0,
+   "waist_width_front_cm": 29.0,
+   "waist_width_side_cm": 19.1,
+   "wrist_circumference_cm": 50.0,
+   "wrist_width_front_cm": 6.3,
+   "wrist_width_side_cm": 23.1
+  },
+  "calibration": [
+   6.071429,
+   6.071429
+  ],
+  "envelope": {
+   "ankle_circumference": 17.3,
+   "arm_length_shoulder_to_wrist": 55.3,
+   "back_length_to_waist": 45.3,
+   "back_width_scapular": 21.7,
+   "calf_circumference": 28.0,
+   "chest_circumference": 82.9,
+   "chest_width_front": 33.0,
+   "front_length_to_waist": 52.3,
+   "hip_circumference": 89.0,
+   "leg_length_inner_seam": 57.1,
+   "leg_length_outer_seam": 91.7,
+   "neck_base_height": 154.6,
+   "neck_circumference": 33.6,
+   "shoulder_slope_width": 15.8,
+   "thigh_circumference": 43.9,
+   "upper_arm_circumference": 29.5,
+   "waist_circumference": 63.0,
+   "wrist_circumference": 50.0
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    493.0
+   ]
+  },
+  "warnings": [
+   "shoulder/height ratio 0.20 outside expected range [0.22, 0.30]",
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]"
+  ],
+  "widths": {
+   "calf_left": [
+    52.0,
+    56.0
+   ],
+   "calf_right": [
+    52.0,
+    56.0
+   ],
+   "head": [
+    92.0,
+    116.0
+   ],
+   "hip": [
+    218.0,
+    140.0
+   ],
+   "neck": [
+    64.0,
+    66.0
+   ],
+   "thigh_left": [
+    105.571,
+    98.857
+   ],
+   "thigh_right": [
+    105.571,
+    98.857
+   ],
+   "torso": [
+    200.357,
+    131.714
+   ],
+   "waist": [
+    176.0,
+    116.0
+   ],
+   "wrist_left": [
+    38.429,
+    140.0
+   ],
+   "wrist_right": [
+    38.429,
+    140.0
+   ]
+  }
+ },
+ "f_curvy_172": {
+  "body": {
+   "arm_length_cm": 56.5,
+   "arm_length_from_neck_cm": 76.8,
+   "calf_circumference_cm": 31.2,
+   "calf_width_front_cm": 9.5,
+   "calf_width_side_cm": 10.4,
+   "head_depth_side_cm": 18.9,
+   "head_width_front_cm": 14.8,
+   "height_cm": 172.0,
+   "hip_circumference_cm": 104.6,
+   "hip_width_front_cm": 40.1,
+   "hip_width_side_cm": 25.6,
+   "leg_length_inner_cm": 64.6,
+   "leg_length_outer_cm": 96.3,
+   "neck_circumference_cm": 35.5,
+   "neck_width_front_cm": 11.1,
+   "neck_width_side_cm": 11.5,
+   "shoulder_slope_width_cm": 16.3,
+   "shoulder_width_cm": 34.0,
+   "thigh_circumference_cm": 59.2,
+   "thigh_width_front_cm": 19.5,
+   "thigh_width_side_cm": 18.2,
+   "torso_width_front_cm": 34.0,
+   "torso_width_side_cm": 24.6,
+   "waist_circumference_cm": 85.8,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 493.0,
+   "waist_width_front_cm": 32.2,
+   "waist_width_side_cm": 21.9,
+   "wrist_circumference_cm": 55.4,
+   "wrist_width_front_cm": 6.1,
+   "wrist_width_side_cm": 26.0
+  },
+  "calibration": [
+   5.930233,
+   5.930233
+  ],
+  "envelope": {
+   "ankle_circumference": 19.3,
+   "arm_length_shoulder_to_wrist": 56.5,
+   "back_length_to_waist": 46.4,
+   "back_width_scapular": 24.6,
+   "calf_circumference": 31.2,
+   "chest_circumference": 88.4,
+   "chest_width_front": 34.0,
+   "front_length_to_waist": 53.5,
+   "hip_circumference": 99.3,
+   "leg_length_inner_seam": 58.4,
+   "leg_length_outer_seam": 93.9,
+   "neck_base_height": 158.3,
+   "neck_circumference": 35.5,
+   "shoulder_slope_width": 16.3,
+   "thigh_circumference": 49.2,
+   "upper_arm_circumference": 31.5,
+   "waist_circumference": 70.8,
+   "wrist_circumference": 55.4
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    493.0
+   ]
+  },
+  "warnings": [
+   "shoulder/height ratio 0.20 outside expected range [0.22, 0.30]",
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]"
+  ],
+  "widths": {
+   "calf_left": [
+    56.143,
+    61.429
+   ],
+   "calf_right": [
+    56.143,
+    61.429
+   ],
+   "head": [
+    88.0,
+    112.0
+   ],
+   "hip": [
+    238.0,
+    152.0
+   ],
+   "neck": [
+    66.0,
+    68.0
+   ],
+   "thigh_left": [
+    115.571,
+    108.0
+   ],
+   "thigh_right": [
+    115.571,
+    108.0
+   ],
+   "torso": [
+    201.628,
+    145.714
+   ],
+   "waist": [
+    191.143,
+    130.0
+   ],
+   "wrist_left": [
+    36.429,
+    154.0
+   ],
+   "wrist_right": [
+    36.429,
+    154.0
+   ]
+  }
+ },
+ "f_slim_160": {
+  "body": {
+   "arm_length_cm": 52.9,
+   "arm_length_from_neck_cm": 71.5,
+   "calf_circumference_cm": 24.6,
+   "calf_width_front_cm": 7.5,
+   "calf_width_side_cm": 8.2,
+   "head_depth_side_cm": 18.5,
+   "head_width_front_cm": 14.4,
+   "height_cm": 160.0,
+   "hip_circumference_cm": 85.4,
+   "hip_width_front_cm": 32.9,
+   "hip_width_side_cm": 20.7,
+   "leg_length_inner_cm": 60.1,
+   "leg_length_outer_cm": 89.6,
+   "neck_circumference_cm": 32.0,
+   "neck_width_front_cm": 10.0,
+   "neck_width_side_cm": 10.4,
+   "shoulder_slope_width_cm": 14.9,
+   "shoulder_width_cm": 31.0,
+   "thigh_circumference_cm": 47.6,
+   "thigh_width_front_cm": 15.9,
+   "thigh_width_side_cm": 14.3,
+   "torso_width_front_cm": 31.0,
+   "torso_width_side_cm": 19.8,
+   "waist_circumference_cm": 68.0,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 493.0,
+   "waist_width_front_cm": 25.9,
+   "waist_width_side_cm": 16.9,
+   "wrist_circumference_cm": 45.8,
+   "wrist_width_front_cm": 6.2,
+   "wrist_width_side_cm": 20.9
+  },
+  "calibration": [
+   6.375,
+   6.375
+  ],
+  "envelope": {
+   "ankle_circumference": 15.3,
+   "arm_length_shoulder_to_wrist": 52.9,
+   "back_length_to_waist": 43.2,
+   "back_width_scapular": 19.8,
+   "calf_circumference": 24.6,
+   "chest_circumference": 77.1,
+   "chest_width_front": 31.0,
+   "front_length_to_waist": 49.8,
+   "hip_circumference": 81.1,
+   "leg_length_inner_seam": 54.4,
+   "leg_length_outer_seam": 87.3,
+   "neck_base_height": 147.3,
+   "neck_circumference": 32.0,
+   "shoulder_slope_width": 14.9,
+   "thigh_circumference": 39.5,
+   "upper_arm_circumference": 27.5,
+   "waist_circumference": 56.1,
+   "wrist_circumference": 45.8
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    493.0
+   ]
+  },
+  "warnings": [
+   "shoulder/height ratio 0.19 outside expected range [0.22, 0.30]",
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]",
+   "Calf circumference 24.6 cm outside expected range [25, 55] cm"
+  ],
+  "widths": {
+   "calf_left": [
+    47.571,
+    52.286
+   ],
+   "calf_right": [
+    47.571,
+    52.286
+   ],
+   "head": [
+    92.0,
+    118.0
+   ],
+   "hip": [
+    210.0,
+    132.0
+   ],
+   "neck": [
+    64.0,
+    66.0
+   ],
+   "thigh_left": [
+    101.571,
+    91.429
+   ],
+   "thigh_right": [
+    101.571,
+    91.429
+   ],
+   "torso": [
+    197.625,
+    126.286
+   ],
+   "waist": [
+    164.857,
+    108.0
+   ],
+   "wrist_left": [
+    39.571,
+    133.429
+   ],
+   "wrist_right": [
+    39.571,
+    133.429
+   ]
+  }
+ },
+ "m_avg_182": {
+  "body": {
+   "arm_length_cm": 59.5,
+   "arm_length_from_neck_cm": 82.8,
+   "calf_circumference_cm": 27.9,
+   "calf_width_front_cm": 8.5,
+   "calf_width_side_cm": 9.3,
+   "head_depth_side_cm": 20.0,
+   "head_width_front_cm": 16.1,
+   "height_cm": 182.0,
+   "hip_circumference_cm": 91.8,
+   "hip_width_front_cm": 35.0,
+   "hip_width_side_cm": 22.8,
+   "leg_length_inner_cm": 68.3,
+   "leg_length_outer_cm": 101.9,
+   "neck_circumference_cm": 39.8,
+   "neck_width_front_cm": 12.5,
+   "neck_width_side_cm": 12.8,
+   "shoulder_slope_width_cm": 18.6,
+   "shoulder_width_cm": 40.0,
+   "thigh_circumference_cm": 52.1,
+   "thigh_width_front_cm": 16.9,
+   "thigh_width_side_cm": 16.3,
+   "torso_width_front_cm": 40.0,
+   "torso_width_side_cm": 23.6,
+   "waist_circumference_cm": 86.6,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 487.0,
+   "waist_width_front_cm": 31.9,
+   "waist_width_side_cm": 22.8,
+   "wrist_circumference_cm": 50.7,
+   "wrist_width_front_cm": 6.1,
+   "wrist_width_side_cm": 23.6
+  },
+  "calibration": [
+   5.604396,
+   5.604396
+  ],
+  "envelope": {
+   "ankle_circumference": 17.3,
+   "arm_length_shoulder_to_wrist": 59.5,
+   "back_length_to_waist": 49.1,
+   "back_width_scapular": 23.6,
+   "calf_circumference": 27.9,
+   "chest_circumference": 101.6,
+   "chest_width_front": 40.0,
+   "front_length_to_waist": 56.6,
+   "hip_circumference": 82.2,
+   "leg_length_inner_seam": 61.8,
+   "leg_length_outer_seam": 99.3,
+   "neck_base_height": 167.5,
+   "neck_circumference": 39.8,
+   "shoulder_slope_width": 18.6,
+   "thigh_circumference": 39.9,
+   "upper_arm_circumference": 34.5,
+   "waist_circumference": 73.2,
+   "wrist_circumference": 50.7
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    487.0
+   ]
+  },
+  "warnings": [
+   "shoulder/height ratio 0.22 outside expected range [0.22, 0.30]",
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]"
+  ],
+  "widths": {
+   "calf_left": [
+    47.571,
+    52.0
+   ],
+   "calf_right": [
+    47.571,
+    52.0
+   ],
+   "head": [
+    90.0,
+    112.0
+   ],
+   "hip": [
+    196.0,
+    128.0
+   ],
+   "neck": [
+    70.0,
+    72.0
+   ],
+   "thigh_left": [
+    94.571,
+    91.429
+   ],
+   "thigh_right": [
+    94.571,
+    91.429
+   ],
+   "torso": [
+    224.176,
+    132.286
+   ],
+   "waist": [
+    178.857,
+    128.0
+   ],
+   "wrist_left": [
+    34.429,
+    132.0
+   ],
+   "wrist_right": [
+    34.429,
+    132.0
+   ]
+  }
+ },
+ "m_broad_190": {
+  "body": {
+   "arm_length_cm": 62.0,
+   "arm_length_from_neck_cm": 87.2,
+   "calf_circumference_cm": 31.4,
+   "calf_width_front_cm": 9.6,
+   "calf_width_side_cm": 10.4,
+   "head_depth_side_cm": 20.5,
+   "head_width_front_cm": 16.4,
+   "height_cm": 190.0,
+   "hip_circumference_cm": 101.0,
+   "hip_width_front_cm": 38.0,
+   "hip_width_side_cm": 25.7,
+   "leg_length_inner_cm": 71.3,
+   "leg_length_outer_cm": 106.4,
+   "neck_circumference_cm": 43.3,
+   "neck_width_front_cm": 13.4,
+   "neck_width_side_cm": 14.2,
+   "shoulder_slope_width_cm": 20.2,
+   "shoulder_width_cm": 44.0,
+   "thigh_circumference_cm": 57.9,
+   "thigh_width_front_cm": 18.5,
+   "thigh_width_side_cm": 18.4,
+   "torso_width_front_cm": 44.0,
+   "torso_width_side_cm": 26.4,
+   "waist_circumference_cm": 99.0,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 627.0,
+   "waist_width_front_cm": 36.5,
+   "waist_width_side_cm": 26.1,
+   "wrist_circumference_cm": 57.1,
+   "wrist_width_front_cm": 6.2,
+   "wrist_width_side_cm": 26.8
+  },
+  "calibration": [
+   5.368421,
+   5.368421
+  ],
+  "envelope": {
+   "ankle_circumference": 19.5,
+   "arm_length_shoulder_to_wrist": 62.0,
+   "back_length_to_waist": 51.3,
+   "back_width_scapular": 26.4,
+   "calf_circumference": 31.4,
+   "chest_circumference": 112.3,
+   "chest_width_front": 44.0,
+   "front_length_to_waist": 59.1,
+   "hip_circumference": 90.4,
+   "leg_length_inner_seam": 64.6,
+   "leg_length_outer_seam": 103.7,
+   "neck_base_height": 174.9,
+   "neck_circumference": 43.3,
+   "shoulder_slope_width": 20.2,
+   "thigh_circumference": 44.3,
+   "upper_arm_circumference": 38.2,
+   "waist_circumference": 83.7,
+   "wrist_circumference": 57.1
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    627.0
+   ]
+  },
+  "warnings": [
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]",
+   "waist/hip circumference ratio 0.98 outside expected range [0.65, 0.95]"
+  ],
+  "widths": {
+   "calf_left": [
+    51.429,
+    56.0
+   ],
+   "calf_right": [
+    51.429,
+    56.0
+   ],
+   "head": [
+    88.0,
+    110.0
+   ],
+   "hip": [
+    204.0,
+    138.0
+   ],
+   "neck": [
+    72.0,
+    76.0
+   ],
+   "thigh_left": [
+    99.143,
+    98.857
+   ],
+   "thigh_right": [
+    99.143,
+    98.857
+   ],
+   "torso": [
+    236.211,
+    141.714
+   ],
+   "waist": [
+    196.0,
+    140.0
+   ],
+   "wrist_left": [
+    33.286,
+    144.0
+   ],
+   "wrist_right": [
+    33.286,
+    144.0
+   ]
+  }
+ },
+ "m_slim_175": {
+  "body": {
+   "arm_length_cm": 57.4,
+   "arm_length_from_neck_cm": 79.1,
+   "calf_circumference_cm": 24.7,
+   "calf_width_front_cm": 7.4,
+   "calf_width_side_cm": 8.3,
+   "head_depth_side_cm": 19.6,
+   "head_width_front_cm": 15.4,
+   "height_cm": 175.0,
+   "hip_circumference_cm": 85.7,
+   "hip_width_front_cm": 32.9,
+   "hip_width_side_cm": 20.9,
+   "leg_length_inner_cm": 65.7,
+   "leg_length_outer_cm": 98.0,
+   "neck_circumference_cm": 37.2,
+   "neck_width_front_cm": 11.7,
+   "neck_width_side_cm": 12.0,
+   "shoulder_slope_width_cm": 17.4,
+   "shoulder_width_cm": 37.0,
+   "thigh_circumference_cm": 47.7,
+   "thigh_width_front_cm": 15.9,
+   "thigh_width_side_cm": 14.5,
+   "torso_width_front_cm": 37.0,
+   "torso_width_side_cm": 20.6,
+   "waist_circumference_cm": 75.0,
+   "waist_level_front_px": 524.8,
+   "waist_level_side_px": 491.0,
+   "waist_width_front_cm": 28.4,
+   "waist_width_side_cm": 18.9,
+   "wrist_circumference_cm": 46.5,
+   "wrist_width_front_cm": 6.3,
+   "wrist_width_side_cm": 21.3
+  },
+  "calibration": [
+   5.828571,
+   5.828571
+  ],
+  "envelope": {
+   "ankle_circumference": 15.3,
+   "arm_length_shoulder_to_wrist": 57.4,
+   "back_length_to_waist": 47.2,
+   "back_width_scapular": 20.6,
+   "calf_circumference": 24.7,
+   "chest_circumference": 92.4,
+   "chest_width_front": 37.0,
+   "front_length_to_waist": 54.5,
+   "hip_circumference": 76.7,
+   "leg_length_inner_seam": 59.5,
+   "leg_length_outer_seam": 95.5,
+   "neck_base_height": 161.1,
+   "neck_circumference": 37.2,
+   "shoulder_slope_width": 17.4,
+   "thigh_circumference": 36.5,
+   "upper_arm_circumference": 31.4,
+   "waist_circumference": 63.4,
+   "wrist_circumference": 46.5
+  },
+  "selected_y": {
+   "waist": [
+    524.775,
+    491.0
+   ]
+  },
+  "warnings": [
+   "shoulder/height ratio 0.21 outside expected range [0.22, 0.30]",
+   "leg/height ratio 0.56 outside expected range [0.43, 0.53]",
+   "Calf circumference 24.7 cm outside expected range [25, 55] cm"
+  ],
+  "widths": {
+   "calf_left": [
+    43.286,
+    48.286
+   ],
+   "calf_right": [
+    43.286,
+    48.286
+   ],
+   "head": [
+    90.0,
+    114.0
+   ],
+   "hip": [
+    192.0,
+    122.0
+   ],
+   "neck": [
+    68.0,
+    70.0
+   ],
+   "thigh_left": [
+    92.571,
+    84.286
+   ],
+   "thigh_right": [
+    92.571,
+    84.286
+   ],
+   "torso": [
+    215.657,
+    120.286
+   ],
+   "waist": [
+    165.429,
+    110.0
+   ],
+   "wrist_left": [
+    36.571,
+    124.0
+   ],
+   "wrist_right": [
+    36.571,
+    124.0
+   ]
+  }
+ }
+}

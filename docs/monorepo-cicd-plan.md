@@ -210,6 +210,26 @@ pose/seg-моделях цей вхід не ловить — їх покрив�
 *Перевірка:* навмисно зламати константу в `envelope.py` у чернетковому PR → CI має впасти
 саме на snapshot.
 
+**Стан (2026-09-13):** кроки 9–10 зроблено, `.github/workflows/ci.yml`, 5 паралельних job:
+
+| Job | Що перевіряє |
+|---|---|
+| `lint` | ruff, блокує лише клас помилок `E9,F63,F7,F82` (синтаксис, невизначені імена); повний звіт — без блокування, поки борг не сплачено |
+| `test` | CPU-torch + `pip install -e .` → `pytest`: юніт-тести + `tests/test_snapshot.py` |
+| `vercel-smoke` | venv лише з `requirements.txt` → `scripts/ci/vercel_smoke.py`: без torch/cv2, mock 200, `/` і `/dataset.html`, проксі → 502 |
+| `docker` | `scripts/ci/stage_hf_space.sh` збирає дерево Space (без `static/`) → `docker build` + імпорт застосунку в контейнері; той самий скрипт піде в `deploy-backend.yml` |
+| `web` | `node --check` усіх JS у `static/`, валідність `vercel.json`. `build_static.mjs` більше не існує (модель C відкинуто) |
+
+Фікстури — **процедурні**, не кешовані маски реальних людей: `tests/fixtures/synthetic_bodies.py` малює
+6 тіл (3 Ж / 3 Ч, 160–190 см) з параметрів у сантиметрах. Маски й кейпоінти реальних суб'єктів — теж
+похідні персональні дані, у публічний репозиторій їм не можна. Покриття: усі 18 id envelope, у т. ч. чотири
+core-обхвати (окремий тест це стереже). Еталон — `tests/fixtures/expected/synthetic_snapshot.json`;
+після навмисної зміни геометрії: `python tests/fixtures/synthetic_bodies.py --write-expected`, JSON комітиться разом із кодом.
+
+Перевірено локально: `pytest` 14/14; зсув жіночої корекції стегон −5,0 → −4,0 % валить snapshot рівно на
+трьох жіночих `hip_circumference`; `vercel_smoke.py` зелений; actionlint без зауважень. Крок 11 (обов'язкова
+перевірка для `main`) — налаштування репозиторію, робить власник після першого зеленого прогону.
+
 ### Фаза 3 — деплой
 
 12. `deploy-web.yml` (push у `vercel`). Перевірка: тривіальна зміна тексту доїжджає.

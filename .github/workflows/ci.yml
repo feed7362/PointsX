@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Bug-class rules only (syntax errors, undefined names). Style debt is
+      # reported but not blocking until it is paid down.
+      - name: ruff (blocking)
+        run: uvx ruff check src tests api eval scripts --select E9,F63,F7,F82
+      - name: ruff (full, report only)
+        run: uvx ruff check src tests api eval scripts --statistics || true
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+      - name: install (CPU torch)
+        run: |
+          uv venv --python "$PYTHON_VERSION"
+          uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -e . pytest
+      - name: pytest (unit + geometry snapshot)
+        run: .venv/bin/python -m pytest -q
+
+  vercel-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: venv from requirements.txt only
+        run: |
+          uv venv --python "$PYTHON_VERSION"
+          uv pip install -r requirements.txt
+      - run: .venv/bin/python scripts/ci/vercel_smoke.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/stage_hf_space.sh "$RUNNER_TEMP/space"
+      - uses: docker/setup-buildx-action@v3
+      - name: build Space image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/space
+          push: false
+          load: true
+          tags: pointsx-space:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: container imports the app
+        run: docker run --rm --entrypoint python pointsx-space:ci -c "import webui.app, pointsx.pipeline; print('ok')"
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: syntax-check static JS
+        run: find src/webui/static -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: vercel.json is valid JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))"
