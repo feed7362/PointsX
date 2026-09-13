@@ -63,10 +63,19 @@ class MeasurementPipeline:
             img_size=img_size,
             device=device,
         )
+        # Regressor is opt-in: pass a path only when explicitly requested
+        # (CLI --regression-model; webui POINTSX_USE_REGRESSOR=1). Without it the
+        # Ramanujan ellipse is used, which the envelope correction tables expect.
         self._regression_model = None
-        if regression_model_path and Path(regression_model_path).exists():
-            self._regression_model = self._load_regression_model(regression_model_path)
-            logger.info("Loaded regression model from %s", regression_model_path)
+        if regression_model_path:
+            if Path(regression_model_path).exists():
+                self._regression_model = self._load_regression_model(regression_model_path)
+                logger.info("Loaded regression model from %s", regression_model_path)
+            else:
+                logger.warning(
+                    "Regression model path %s does not exist; falling back to ellipse approximation",
+                    regression_model_path,
+                )
 
     def __call__(
         self,
@@ -82,9 +91,12 @@ class MeasurementPipeline:
             front_image: Front-view photo (path or BGR ndarray).
             side_image: Side/profile-view photo (path or BGR ndarray).
             height_cm: Known height of the person in centimeters.
+            pose_backend: "coco" (COCO-17 mapped to 16 points) or "custom" (native 16-point).
 
         Returns:
-            BodyMeasurements with all extracted values.
+            BodyMeasurements with all extracted values. Circumferences come from
+            the regressor when one was loaded in ``__init__``, otherwise from the
+            Ramanujan ellipse.
         """
         front_img = downscale_for_inference(self._load_image(front_image))
         side_img = downscale_for_inference(self._load_image(side_image))
@@ -118,7 +130,7 @@ class MeasurementPipeline:
         )
 
         logger.info("Estimating circumferences...")
-        measurements = estimate_circumferences(measurements, regression_model=None)
+        measurements = estimate_circumferences(measurements, self._regression_model)
 
         logger.info("Validating...")
         measurements = validate_measurements(measurements)

@@ -33,7 +33,11 @@ def main():
         help="Weights for COCO 17-keypoint pose (used when --pose-backend=coco)",
     )
     parser.add_argument("--seg-model", default="models/yolo12l-person-seg-extended.pt", help="Path to segmentation model")
-    parser.add_argument("--regression-model", default=None, help="Path to circumference regression model")
+    parser.add_argument(
+        "--regression-model",
+        default=None,
+        help="Opt-in circumference regressor .pt; omit to use the Ramanujan ellipse (default)",
+    )
     parser.add_argument("--device", default="auto", help="Inference device: auto, cpu, cuda")
     parser.add_argument(
         "--output", choices=["table", "json", "csv"], default="table",
