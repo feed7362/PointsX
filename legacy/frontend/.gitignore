@@ -1,0 +1,23 @@
+# Vercel build output
+public/
+
+# Editors
+.idea/
+.vscode/
+.cursor/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env (POINTSX_API_BASE for local previews — never commit)
+.env
+.env.local
+.env.*.local
+
+# Node deps (none required, but in case)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
