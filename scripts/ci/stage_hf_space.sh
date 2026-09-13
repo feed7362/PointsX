@@ -23,7 +23,15 @@ cp "$root/apps/backend/Dockerfile" \
 
 cp -R "$root/src" "$out/src"
 rm -rf "$out/src/webui/static"
+# The image installs fonts-dejavu-core (Dockerfile); the bundled .ttf exists for
+# Vercel only, and Hugging Face rejects pushes with binary files outside LFS/Xet.
+rm -rf "$out/src/webui/fonts"
 find "$out/src" -type d -name __pycache__ -prune -exec rm -rf {} +
+
+# Fail here rather than at the Hub's pre-receive hook.
+if bins="$(cd "$out" && find . -type f -size +0 -print0 | xargs -0 grep -IL .)" && [ -n "$bins" ]; then
+  echo "binary files in the Space tree (not allowed without LFS):" >&2; echo "$bins" >&2; exit 1
+fi
 
 echo "staged Space tree in $out:"
 (cd "$out" && find . -maxdepth 3 -not -path './src/*/*' | sort)
