@@ -1,27 +1,61 @@
 /**
  * MediaPipe pose runtime, camera, capture timers, and frame-to-blob pipeline.
+ *
+ * Facade: implementation is split into the modules re-exported below; existing
+ * `import * as ...` users keep the same names.
  */
+
+export {
+  CAPTURE_TIMER_SECONDS,
+  STABLE_POSE_MS,
+  clearCaptureTimer,
+  interruptAutoPoseCountdown,
+  resetAutoCaptureUi,
+  resetPoseStableHold,
+  resetTimerButtonLabel,
+  startAutoPoseCountdown,
+  startCaptureTimer,
+} from "./autoCapture.js";
+
+export {
+  POSE_MP_MIN_DETECTION_CONF,
+  POSE_MP_MIN_PRESENCE_CONF,
+  POSE_MP_MIN_TRACKING_CONF,
+  loadPoseLandmarker,
+  loadPoseLandmarkerImage,
+} from "./poseModel.js";
+
+export {
+  applyPrefillCapture,
+  applyUploadedImage,
+  revokeThumbUrl,
+} from "./uploads.js";
 
 import { t } from "../i18n/index.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { checkPoseForStep } from "./poseGate.js";
-import { logPoseGateCheck, logPoseDebugCapture } from "./poseDebug.js";
+import { logPoseDebugCapture, logPoseGateCheck } from "./poseDebug.js";
 import { syncOverlaySize } from "./overlay.js";
+import { cancelSpeechSynthesis, primeVoiceAfterUserGesture } from "./speech.js";
 import {
-  cancelSpeechSynthesis,
-  hideCountdownOverlay,
-  primeVoiceAfterUserGesture,
-  showCountdownOverlay,
-  speakCountdownDigit,
-} from "./speech.js";
-import { setStatus, setPoseStatus, setPoseStatusVisual, updateUiStep } from "./ui.js";
-import { clearThumbSlotPhoto, syncThumbSlotToImage } from "./thumbLayout.js";
+  setPoseStatus,
+  setPoseStatusVisual,
+  setStatus,
+  updateUiStep,
+} from "./ui.js";
+import { syncThumbSlotToImage } from "./thumbLayout.js";
+import { cameraErrorMessage, cameraUnavailableReason, requestCameraStream } from "./camera.js";
+import { loadPoseLandmarker, nextPoseVideoTimestampMs } from "./poseModel.js";
+import { imageBitmapToSquare } from "./imageOps.js";
+import { revokeThumbUrl } from "./uploads.js";
 import {
-  cameraErrorMessage,
-  cameraUnavailableReason,
-  requestCameraStream,
-} from "./camera.js";
+  STABLE_POSE_MS,
+  clearCaptureTimer,
+  resetAutoCaptureUi,
+  resetPoseStableHold,
+  startAutoPoseCountdown,
+} from "./autoCapture.js";
 
 /** Camera off: idle art inside preview; camera on: show live feed. */
 function syncPreviewIdleState(cameraLive) {
@@ -30,113 +64,11 @@ function syncPreviewIdleState(cameraLive) {
   previewIdle?.setAttribute("aria-hidden", cameraLive ? "true" : "false");
 }
 
+
 export const MIN_VIDEO_DIMENSION = 480;
+
 export const POSE_MIN_INTERVAL_MS = 120;
-export const POSE_MP_MIN_DETECTION_CONF = 0.38;
-export const POSE_MP_MIN_PRESENCE_CONF = 0.38;
-export const POSE_MP_MIN_TRACKING_CONF = 0.38;
-export const CAPTURE_TIMER_SECONDS = 10;
-export const STABLE_POSE_MS = 700;
 
-/** Match server `MAX_UPLOAD_BYTES` in webui/app.py */
-const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
-const UPLOAD_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-// MediaPipe module sources, tried in order. esm.sh alone was a single point of
-// failure: an outage or an ad-blocker filtering it silently disabled the live
-// pose guidance (and broke dataset upload via the same CDN). jsdelivr's /+esm
-// endpoint is separate infrastructure serving self-contained ES modules.
-const MP_PKGS = [
-  "https://esm.sh/@mediapipe/tasks-vision@0.10.14",
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm",
-];
-const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
-
-async function importMediaPipePackage() {
-  const failures = [];
-  for (const url of MP_PKGS) {
-    try {
-      return await import(/* @vite-ignore */ url);
-    } catch (err) {
-      failures.push(`${new URL(url).host}: ${err?.message ?? err}`);
-      console.warn(`[capture] MediaPipe failed from ${url}`, err);
-    }
-  }
-  throw new Error(`MediaPipe unavailable — ${failures.join(" | ")}`);
-}
-
-/**
- * VIDEO-mode PoseLandmarker requires strictly monotonic timestamp_ms on every detectForVideo call
- * (same instance). Mixing 0 for uploads with camera frames causes graph errors and a wedged UI.
- */
-let lastPoseVideoTimestampMs = -1;
-
-async function readImageBitmapHorizontallyFlipped(bitmap) {
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas 2D unavailable");
-  ctx.translate(canvas.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(bitmap, 0, 0);
-  return createImageBitmap(canvas);
-}
-
-async function imageBitmapToBlob(bitmap, preferredMime) {
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(bitmap, 0, 0);
-  const types =
-    preferredMime && /^image\/(jpeg|png|webp)$/i.test(preferredMime)
-      ? [preferredMime, "image/jpeg"]
-      : ["image/jpeg"];
-  for (const mime of types) {
-    const q = mime === "image/jpeg" ? 0.92 : undefined;
-    /** @type {Blob | null} */
-    const blob = await new Promise((res) => canvas.toBlob((b) => res(b), mime, q));
-    if (blob && blob.size > 0) return blob;
-  }
-  return null;
-}
-
-/**
- * Square output for pose/seg models: landscape → centered crop (H×H); portrait → pad sides to H×H.
- * Near-square images return a fresh ImageBitmap copy.
- */
-async function imageBitmapToSquare(bitmap) {
-  const w = bitmap.width;
-  const h = bitmap.height;
-  if (Math.abs(w - h) <= 1) {
-    return createImageBitmap(bitmap);
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = h;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas 2D unavailable");
-  if (w > h) {
-    const sx = (w - h) / 2;
-    ctx.drawImage(bitmap, sx, 0, h, h, 0, 0, h, h);
-  } else {
-    ctx.fillStyle = "#0f1218";
-    ctx.fillRect(0, 0, h, h);
-    ctx.drawImage(bitmap, (h - w) / 2, 0);
-  }
-  return createImageBitmap(canvas);
-}
-
-function nextPoseVideoTimestampMs() {
-  let t = Math.floor(performance.now());
-  if (t <= lastPoseVideoTimestampMs) t = lastPoseVideoTimestampMs + 1;
-  lastPoseVideoTimestampMs = t;
-  return t;
-}
 
 /** Verify camera track exists and resolution meets MIN_VIDEO_DIMENSION. */
 export function checkCaptureReadiness() {
@@ -160,397 +92,6 @@ export function checkCaptureReadiness() {
   return { ok: true };
 }
 
-/** Lazy-load MediaPipe PoseLandmarker (GPU with CPU fallback). */
-export async function loadPoseLandmarker() {
-  if (captureState.poseLandmarker || captureState.poseLoadError) return;
-  try {
-    const { FilesetResolver, PoseLandmarker } = await importMediaPipePackage();
-    const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
-    try {
-      captureState.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: POSE_MP_MIN_DETECTION_CONF,
-        minPosePresenceConfidence: POSE_MP_MIN_PRESENCE_CONF,
-        minTrackingConfidence: POSE_MP_MIN_TRACKING_CONF,
-      });
-    } catch {
-      captureState.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: POSE_MP_MIN_DETECTION_CONF,
-        minPosePresenceConfidence: POSE_MP_MIN_PRESENCE_CONF,
-        minTrackingConfidence: POSE_MP_MIN_TRACKING_CONF,
-      });
-    }
-  } catch (e) {
-    captureState.poseLoadError = e;
-    console.error(e);
-  }
-}
-
-/** Release upload landmarker so the next file gets a clean WASM graph (avoids odd state across runs). */
-function disposePoseLandmarkerImage() {
-  const m = captureState.poseLandmarkerImage;
-  if (m) {
-    try {
-      m.close();
-    } catch {
-      /* ignore */
-    }
-  }
-  captureState.poseLandmarkerImage = null;
-  captureState.poseImageLoadError = null;
-}
-
-/** Lazy-load a second PoseLandmarker in IMAGE mode for file uploads (no video timestamps / tracking). */
-export async function loadPoseLandmarkerImage() {
-  if (captureState.poseLandmarkerImage || captureState.poseImageLoadError) return;
-  try {
-    const { FilesetResolver, PoseLandmarker } = await importMediaPipePackage();
-    const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
-    const opts = (delegate) => ({
-      baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      runningMode: "IMAGE",
-      numPoses: 1,
-      minPoseDetectionConfidence: POSE_MP_MIN_DETECTION_CONF,
-      minPosePresenceConfidence: POSE_MP_MIN_PRESENCE_CONF,
-      minTrackingConfidence: POSE_MP_MIN_TRACKING_CONF,
-    });
-    try {
-      captureState.poseLandmarkerImage = await PoseLandmarker.createFromOptions(vision, opts("GPU"));
-    } catch {
-      captureState.poseLandmarkerImage = await PoseLandmarker.createFromOptions(vision, opts("CPU"));
-    }
-  } catch (e) {
-    captureState.poseImageLoadError = e;
-    console.error(e);
-  }
-}
-
-/** Clear the stable-OK pose timer (starts fresh on next OK frame). */
-export function resetPoseStableHold() {
-  captureState.poseStableOkSinceMs = null;
-}
-
-/** Stop stable-pose countdown, hide overlay, and cancel speech. */
-export function interruptAutoPoseCountdown() {
-  if (!captureState.autoPoseCountdownIntervalId) return;
-  clearInterval(captureState.autoPoseCountdownIntervalId);
-  captureState.autoPoseCountdownIntervalId = 0;
-  hideCountdownOverlay();
-  cancelSpeechSynthesis();
-}
-
-/** Clear auto-capture countdown and stable-pose hold. */
-export function resetAutoCaptureUi() {
-  interruptAutoPoseCountdown();
-  resetPoseStableHold();
-}
-
-/** Reset the timed capture button label to the default caption. */
-export function resetTimerButtonLabel() {
-  const { btnCaptureTimer } = getCaptureDom();
-  btnCaptureTimer.textContent = t("sess-photo-timer-btn", { sec: CAPTURE_TIMER_SECONDS });
-}
-
-/** Stop the N-second manual timer if running; optionally clear status text. */
-export function clearCaptureTimer(setNeutralStatus = false) {
-  if (captureState.captureTimerIntervalId) {
-    clearInterval(captureState.captureTimerIntervalId);
-    captureState.captureTimerIntervalId = 0;
-  }
-  captureState.captureTimerRemaining = 0;
-  resetTimerButtonLabel();
-  if (setNeutralStatus) setStatus("");
-}
-
-/**
- * Run the same pose gate on a still using the IMAGE landmarker (independent of VIDEO session state).
- * @param {1|2} viewStep 1 = front, 2 = profile
- * @param {ImageBitmap} bitmap
- * @returns {{ ok: boolean, reason?: string, landmarks?: any, world?: any, gate?: { ok: boolean, reason?: string } }}
- */
-function gatePoseOnBitmap(viewStep, bitmap) {
-  const marker = captureState.poseLandmarkerImage;
-  if (!marker) {
-    return { ok: false, reason: t("sess-pose-model-not-ready") };
-  }
-  const result = marker.detect(bitmap);
-  const lm = result.landmarks && result.landmarks[0];
-  const worldLm = result.worldLandmarks && result.worldLandmarks[0];
-  if (!lm) {
-    return { ok: false, reason: t("sess-no-person") };
-  }
-  const gate = checkPoseForStep(viewStep, lm, worldLm);
-  if (!gate.ok) {
-    return {
-      ok: false,
-      reason: gate.reason || t("sess-pose-invalid"),
-      landmarks: lm,
-      world: worldLm,
-      gate,
-    };
-  }
-  return { ok: true, landmarks: lm, world: worldLm, gate };
-}
-
-/**
- * Store uploaded blob(s), update thumbs and wizard step (shared by pose-validated and debug-skip paths).
- * @param {"front"|"side"} which
- * @param {File} file
- * @param {Blob} storageBlob  processed image (square) for API + thumbnail
- * @param {string} poseLine     copy for `#pose-status`
- * @param {{ mirrored?: boolean }} [opts]
- */
-function commitUploadedImage(which, file, storageBlob, poseLine, opts = {}) {
-  const mirrored = Boolean(opts.mirrored);
-  const { thumbFront, thumbSide } = getCaptureDom();
-  resetAutoCaptureUi();
-  cancelSpeechSynthesis();
-  // Upload flow should be silent: keep visual pose status without TTS.
-  setPoseStatusVisual(poseLine, "ok");
-  const url = URL.createObjectURL(storageBlob);
-  if (which === "front") {
-    captureState.suspendPoseLoopAfterComplete = false;
-    revokeThumbUrl(thumbFront);
-    captureState.frontBlob = storageBlob;
-    thumbFront.src = url;
-    thumbFront.hidden = false;
-    syncThumbSlotToImage(thumbFront);
-    if (captureState.sideBlob) {
-      captureState.step = 2;
-      captureState.suspendPoseLoopAfterComplete = true;
-      stopCamera();
-      setStatus(t("sess-front-ready-both"));
-    } else {
-      captureState.step = 2;
-      captureState.guideSmoothDelta.dx = 0;
-      captureState.guideSmoothDelta.dy = 0;
-      captureState.guideSmoothDelta.fitHeight = null;
-      captureState.guideSmoothDelta.fitTop = null;
-      captureState.guideSmoothDelta.fitLeft = null;
-      setStatus(t("sess-front-ready-need-side"));
-    }
-  } else {
-    revokeThumbUrl(thumbSide);
-    captureState.sideBlob = storageBlob;
-    thumbSide.src = url;
-    thumbSide.hidden = false;
-    syncThumbSlotToImage(thumbSide);
-    const flipHint = mirrored ? t("sess-mirrored-auto") : "";
-    if (captureState.frontBlob) {
-      captureState.step = 2;
-      captureState.suspendPoseLoopAfterComplete = true;
-      stopCamera();
-      setStatus(t("sess-side-ready-both", { flipHint }));
-    } else {
-      captureState.step = 1;
-      captureState.suspendPoseLoopAfterComplete = false;
-      setStatus(t("sess-side-ready-need-front", { flipHint }));
-    }
-  }
-  updateUiStep();
-  syncOverlaySize();
-}
-
-/**
- * Use a user-picked file as front or side capture; rejects if pose gate fails (same rules as camera).
- * `File` is a `Blob` — compatible with `/api/measure` FormData.
- */
-export async function applyUploadedImage(which, file) {
-  if (!file) return;
-  if (!UPLOAD_MIME.has(file.type)) {
-    setStatus(t("sess-image-format-invalid"), true);
-    return;
-  }
-  if (file.size > UPLOAD_MAX_BYTES) {
-    setStatus(t("sess-file-too-large"), true);
-    return;
-  }
-
-  if (captureState.debugSkipUploadPoseGate) {
-    let bmp;
-    try {
-      bmp = await createImageBitmap(file);
-    } catch {
-      setStatus(t("sess-read-image-failed"), true);
-      return;
-    }
-    try {
-      const squared = await imageBitmapToSquare(bmp);
-      bmp.close();
-      bmp = null;
-      const storageBlob = await imageBitmapToBlob(squared, file.type);
-      squared.close();
-      if (!storageBlob) {
-        setStatus(t("sess-crop-square-failed"), true);
-        return;
-      }
-      commitUploadedImage(which, file, storageBlob, t("sess-file-accepted-no-check"));
-    } finally {
-      if (bmp) bmp.close();
-    }
-    return;
-  }
-
-  const viewStep = which === "front" ? 1 : 2;
-  try {
-    await loadPoseLandmarkerImage();
-    if (captureState.poseImageLoadError) {
-      setStatus(t("sess-mediapipe-failed"), true);
-      setPoseStatus(t("sess-mediapipe-failed"), "bad");
-      return;
-    }
-
-    let bitmap;
-    try {
-      bitmap = await createImageBitmap(file);
-    } catch {
-      setStatus(t("sess-read-image-failed"), true);
-      return;
-    }
-
-    try {
-      let poseChk = gatePoseOnBitmap(viewStep, bitmap);
-      logPoseGateCheck(
-        "upload",
-        viewStep,
-        poseChk.landmarks ?? null,
-        poseChk.world ?? null,
-        { ok: poseChk.ok, reason: poseChk.reason }
-      );
-
-      let mirroredSide = false;
-      if (!poseChk.ok && viewStep === 2) {
-        let flipped = null;
-        try {
-          flipped = await readImageBitmapHorizontallyFlipped(bitmap);
-          const poseChkF = gatePoseOnBitmap(viewStep, flipped);
-          logPoseGateCheck(
-            "upload",
-            viewStep,
-            poseChkF.landmarks ?? null,
-            poseChkF.world ?? null,
-            { ok: poseChkF.ok, reason: poseChkF.reason }
-          );
-          if (poseChkF.ok) {
-            bitmap.close();
-            bitmap = flipped;
-            flipped = null;
-            poseChk = poseChkF;
-            mirroredSide = true;
-          }
-        } finally {
-          if (flipped) flipped.close();
-        }
-      }
-
-      if (!poseChk.ok) {
-        setStatus(poseChk.reason || t("sess-pose-invalid"), true);
-        setPoseStatus(poseChk.reason || t("sess-pose-invalid"), "bad");
-        return;
-      }
-
-      let squared;
-      try {
-        squared = await imageBitmapToSquare(bitmap);
-      } finally {
-        bitmap.close();
-        bitmap = null;
-      }
-
-      const storageBlob = await imageBitmapToBlob(squared, file.type);
-      squared.close();
-      if (!storageBlob) {
-        setStatus(t("sess-crop-square-failed"), true);
-        setPoseStatus("", "bad");
-        return;
-      }
-
-      commitUploadedImage(which, file, storageBlob, t("sess-pose-valid-photo"), {
-        mirrored: which === "side" && mirroredSide,
-      });
-    } finally {
-      if (bitmap) bitmap.close();
-    }
-  } finally {
-    disposePoseLandmarkerImage();
-  }
-}
-
-/** Revoke an object URL on a thumbnail img element. */
-export function revokeThumbUrl(imgEl) {
-  if (!imgEl || !imgEl.src) return;
-  clearThumbSlotPhoto(imgEl);
-  if (imgEl.src.startsWith("blob:")) {
-    try {
-      URL.revokeObjectURL(imgEl.src);
-    } catch {
-    }
-    imgEl.removeAttribute("src");
-  }
-}
-
-/**
- * Apply pre-filled capture blobs (e.g. transferred from main results page).
- * Skips pose gate — photos were already validated on the capture flow.
- */
-export function applyPrefillCapture(frontBlob, sideBlob) {
-  const { thumbFront, thumbSide } = getCaptureDom();
-  if (frontBlob) {
-    revokeThumbUrl(thumbFront);
-    captureState.frontBlob = frontBlob;
-    thumbFront.src = URL.createObjectURL(frontBlob);
-    thumbFront.hidden = false;
-    syncThumbSlotToImage(thumbFront);
-  }
-  if (sideBlob) {
-    revokeThumbUrl(thumbSide);
-    captureState.sideBlob = sideBlob;
-    thumbSide.src = URL.createObjectURL(sideBlob);
-    thumbSide.hidden = false;
-    syncThumbSlotToImage(thumbSide);
-  }
-  if (captureState.frontBlob && captureState.sideBlob) {
-    captureState.step = 2;
-    captureState.suspendPoseLoopAfterComplete = true;
-  } else if (captureState.frontBlob) {
-    captureState.step = 2;
-  } else {
-    captureState.step = 1;
-  }
-}
-
-/** Start 3–2–1 overlay and then capture when pose stayed OK for STABLE_POSE_MS. */
-export function startAutoPoseCountdown() {
-  if (captureState.autoPoseCountdownIntervalId || captureState.captureTimerIntervalId) return;
-  if (!captureState.stream || (captureState.frontBlob && captureState.sideBlob)) return;
-  cancelSpeechSynthesis();
-  resetPoseStableHold();
-  let n = 3;
-  const stepTick = () => {
-    showCountdownOverlay(n);
-    setPoseStatusVisual(t("sess-taking-photo-in", { n }), "ok");
-    speakCountdownDigit(n);
-  };
-  stepTick();
-  captureState.autoPoseCountdownIntervalId = window.setInterval(() => {
-    n -= 1;
-    if (n <= 0) {
-      clearInterval(captureState.autoPoseCountdownIntervalId);
-      captureState.autoPoseCountdownIntervalId = 0;
-      hideCountdownOverlay();
-      captureFrameToBlob(onCaptureReady);
-      return;
-    }
-    showCountdownOverlay(n);
-    setPoseStatusVisual(t("sess-taking-photo-in", { n }), "ok");
-    speakCountdownDigit(n);
-  }, 1000);
-}
 
 /** Throttled pose detection, gate evaluation, capture button state, and auto-countdown trigger. */
 export function runPoseIfNeeded() {
@@ -648,6 +189,7 @@ export function runPoseIfNeeded() {
   }
 }
 
+
 /** RAF loop: pose checks and overlay unless capture is suspended after completion. */
 export function loop() {
   if (captureState.suspendPoseLoopAfterComplete) {
@@ -661,6 +203,7 @@ export function loop() {
   syncOverlaySize();
   captureState.raf = requestAnimationFrame(loop);
 }
+
 
 /** Request user media, start pose loop, and reset capture controls. */
 export async function startCamera() {
@@ -720,6 +263,7 @@ export async function startCamera() {
   }
 }
 
+
 /** Stop tracks, timers, speech, and reset guide smoothing state. */
 export function stopCamera() {
   const { video, btnCapture, btnCaptureTimer, btnStop } = getCaptureDom();
@@ -744,6 +288,7 @@ export function stopCamera() {
   setPoseStatus("", "");
   syncPreviewIdleState(false);
 }
+
 
 /**
  * Re-verify pose on the exact frame, mirror the canvas like `.preview-wrap.mirror`,
@@ -856,6 +401,7 @@ export function captureFrameToBlob(callback) {
   })();
 }
 
+
 /** After a blob is ready: update thumbs, advance step, and stop or restart the camera as needed. */
 export function onCaptureReady(blob) {
   const { thumbFront, thumbSide } = getCaptureDom();
@@ -895,46 +441,6 @@ export function onCaptureReady(blob) {
   }
 }
 
-/** Toggle or run the fixed-delay (CAPTURE_TIMER_SECONDS) capture timer. */
-export function startCaptureTimer() {
-  const { btnCapture, btnCaptureTimer } = getCaptureDom();
-  if (!captureState.stream) {
-    setStatus(t("sess-turn-on-camera-timer"), true);
-    return;
-  }
-  if (captureState.captureTimerIntervalId) {
-    clearCaptureTimer(true);
-    resetAutoCaptureUi();
-    setStatus(t("sess-timer-cancelled"));
-    btnCapture.disabled = !captureState.lastPoseGate.ok;
-    btnCaptureTimer.disabled = !captureState.lastPoseGate.ok;
-    return;
-  }
-  resetAutoCaptureUi();
-  cancelSpeechSynthesis();
-  captureState.captureTimerRemaining = CAPTURE_TIMER_SECONDS;
-  btnCapture.disabled = true;
-  btnCaptureTimer.disabled = false;
-  btnCaptureTimer.textContent = t("sess-cancel-timer-btn", { sec: captureState.captureTimerRemaining });
-  setStatus(t("sess-timer-countdown-pose", { sec: captureState.captureTimerRemaining }));
-  captureState.captureTimerIntervalId = window.setInterval(() => {
-    if (!captureState.stream) {
-      clearCaptureTimer();
-      btnCapture.disabled = true;
-      btnCaptureTimer.disabled = true;
-      return;
-    }
-    captureState.captureTimerRemaining -= 1;
-    if (captureState.captureTimerRemaining <= 0) {
-      clearCaptureTimer();
-      setStatus(t("sess-taking-photo"));
-      captureFrameToBlob(onCaptureReady);
-      return;
-    }
-    btnCaptureTimer.textContent = t("sess-cancel-timer-btn", { sec: captureState.captureTimerRemaining });
-    setStatus(t("sess-timer-countdown", { sec: captureState.captureTimerRemaining }));
-  }, 1000);
-}
 
 /** Clear front thumbnail and restart capture from step 1. */
 export function retakeFrontPhoto() {
@@ -950,6 +456,7 @@ export function retakeFrontPhoto() {
   setStatus(t("sess-retake-front-status"));
   void startCamera();
 }
+
 
 /** Clear side thumbnail and restart from step 2 (or 1 if front missing). */
 export function retakeSidePhoto() {
