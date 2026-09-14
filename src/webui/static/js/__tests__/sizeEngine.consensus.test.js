@@ -68,12 +68,14 @@ function evalUa(garment, measures, sex = "female", confidences = {}) {
 // ---------------------------------------------------------------------------
 
 describe("unanimous", () => {
-  it("three measures landing on M → verdict=unanimous, code=38", () => {
-    // chest 88 → M (86–90 ord 2), waist 68 → M (66–70), hip 94 → M (92–96) — Continental код 38
+  it("three measures landing on M → verdict=unanimous, code=44 (UA)", () => {
+    // chest 88 → M (86–90 ord 2), waist 68 → M (66–70), hip 94 → M (92–96).
+    // UA women's size = half the bust girth = EU + 6, so M is 44 (EU 38). The UA grid
+    // listed bare EU numbers until 5a046da; this expectation used to say "38".
     const measures     = { chest_circumference: 88, waist_circumference: 68, hip_circumference: 94 };
     const result       = evalUa(dressGarment, measures);
     assert.equal(result.verdict, "unanimous");
-    assert.equal(result.code,    "38");
+    assert.equal(result.code,    "44");
     assert.equal(result.confidence, "high");
   });
 
@@ -90,12 +92,13 @@ describe("unanimous", () => {
 // ---------------------------------------------------------------------------
 
 describe("majority", () => {
-  it("M/M/L → verdict=majority, code=38, outlier is hip", () => {
-    // chest 88 → M (ordinal 2), waist 68 → M (ordinal 2), hip 99 → L (96–102, ordinal 3)
+  it("M/M/L → verdict=majority, code=44 (UA), outlier is hip", () => {
+    // chest 88 → M (ordinal 2), waist 68 → M (ordinal 2), hip 99 → L (96–102, ordinal 3).
+    // Majority M → UA 44 (= EU 38 + 6); see the unanimous case above.
     const measures = { chest_circumference: 88, waist_circumference: 68, hip_circumference: 99 };
     const result   = evalUa(dressGarment, measures);
     assert.equal(result.verdict, "majority");
-    assert.equal(result.code,    "38");
+    assert.equal(result.code,    "44");
     assert.equal(result.outlier?.mid, "hip_circumference");
   });
 

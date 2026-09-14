@@ -18,16 +18,20 @@ Every band in `tailoring_config.json` v2 traces back to this document.
 
 ## Women's Tops (Shirts, T-shirts, Blouses, Dresses, Jackets)
 
+> Regional labels follow `tailoring_config.json`: **UA = EU + 6** (Ukrainian size = half the bust girth,
+> e.g. 86–90 cm → 44), **US = XXS…XL** letters on the same ordinals. The UA column previously listed
+> EU + 2 and the US column XS…XXL; bands (cm) and EU labels are unchanged.
+
 ### Chest Circumference — ordinals 0–5
 
 | Ordinal | Label | Band (cm) | UA | EU | US |
 |---------|-------|-----------|-----|-----|-----|
-| 0 | XS | 78 – 82 | 36 | EU 34 | XS |
-| 1 | S | 82 – 86 | 38 | EU 36 | S |
-| 2 | M | 86 – 90 | 40 | EU 38 | M |
-| 3 | L | 90 – 94 | 42 | EU 40 | L |
-| 4 | XL | 94 – 100 | 44 | EU 42 | XL |
-| 5 | XXL | 100 – 116 | 46/48 | EU 44 | XXL |
+| 0 | XS | 78 – 82 | 40 | EU 34 | XXS |
+| 1 | S | 82 – 86 | 42 | EU 36 | XS |
+| 2 | M | 86 – 90 | 44 | EU 38 | S |
+| 3 | L | 90 – 94 | 46 | EU 40 | M |
+| 4 | XL | 94 – 100 | 48 | EU 42 | L |
+| 5 | XXL | 100 – 116 | 50 | EU 44 | XL |
 
 Brand divergence notes:
 - H&M M: 86–91, Zara M: 87–91, Uniqlo M: 86–90, Mango M: 86–91 → reconciled 86–90 (tight).
@@ -37,23 +41,23 @@ Brand divergence notes:
 
 | Ordinal | Label | Band (cm) | UA | EU | US |
 |---------|-------|-----------|-----|-----|-----|
-| 0 | XS | 58 – 62 | 36 | EU 34 | XS |
-| 1 | S | 62 – 66 | 38 | EU 36 | S |
-| 2 | M | 66 – 70 | 40 | EU 38 | M |
-| 3 | L | 70 – 76 | 42 | EU 40 | L |
-| 4 | XL | 76 – 84 | 44 | EU 42 | XL |
-| 5 | XXL | 84 – 96 | 46/48 | EU 44 | XXL |
+| 0 | XS | 58 – 62 | 40 | EU 34 | XXS |
+| 1 | S | 62 – 66 | 42 | EU 36 | XS |
+| 2 | M | 66 – 70 | 44 | EU 38 | S |
+| 3 | L | 70 – 76 | 46 | EU 40 | M |
+| 4 | XL | 76 – 84 | 48 | EU 42 | L |
+| 5 | XXL | 84 – 96 | 50 | EU 44 | XL |
 
 ### Hip Circumference (relevant for fitted tops, jackets, dresses) — ordinals 0–5
 
 | Ordinal | Label | Band (cm) | UA | EU | US |
 |---------|-------|-----------|-----|-----|-----|
-| 0 | XS | 84 – 88 | 36 | EU 34 | XS |
-| 1 | S | 88 – 92 | 38 | EU 36 | S |
-| 2 | M | 92 – 96 | 40 | EU 38 | M |
-| 3 | L | 96 – 102 | 42 | EU 40 | L |
-| 4 | XL | 102 – 110 | 44 | EU 42 | XL |
-| 5 | XXL | 110 – 124 | 46/48 | EU 44 | XXL |
+| 0 | XS | 84 – 88 | 40 | EU 34 | XXS |
+| 1 | S | 88 – 92 | 42 | EU 36 | XS |
+| 2 | M | 92 – 96 | 44 | EU 38 | S |
+| 3 | L | 96 – 102 | 46 | EU 40 | M |
+| 4 | XL | 102 – 110 | 48 | EU 42 | L |
+| 5 | XXL | 110 – 124 | 50 | EU 44 | XL |
 
 ---
 
@@ -71,12 +75,12 @@ Same band edges as women's tops hip column above.
 
 | Ordinal | Label | Band (cm) | UA | EU | US |
 |---------|-------|-----------|-----|-----|-----|
-| 0 | XS | 46 – 50 | 36 | EU 34 | XS |
-| 1 | S | 50 – 54 | 38 | EU 36 | S |
-| 2 | M | 54 – 58 | 40 | EU 38 | M |
-| 3 | L | 58 – 64 | 42 | EU 40 | L |
-| 4 | XL | 64 – 72 | 44 | EU 42 | XL |
-| 5 | XXL | 72 – 84 | 46 | EU 44 | XXL |
+| 0 | XS | 46 – 50 | 40 | EU 34 | XXS |
+| 1 | S | 50 – 54 | 42 | EU 36 | XS |
+| 2 | M | 54 – 58 | 44 | EU 38 | S |
+| 3 | L | 58 – 64 | 46 | EU 40 | M |
+| 4 | XL | 64 – 72 | 48 | EU 42 | L |
+| 5 | XXL | 72 – 84 | 50 | EU 44 | XL |
 
 Brand notes: Thigh bands derived from Zara and Uniqlo extended-fit guides; Nike activewear +2 cm per band for stretch (not applied here — use RTW values).
 
