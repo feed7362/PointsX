@@ -25,15 +25,30 @@
     },
     {
       "src": "/frame-editor.html",
-      "dest": "/src/webui/static/frame-editor.html"
+      "dest": "/src/webui/static/frame-editor.html",
+      "headers": {
+        "Permissions-Policy": "camera=(self)"
+      }
     },
     {
       "src": "/dataset.html",
-      "dest": "/src/webui/static/dataset.html"
+      "dest": "/src/webui/static/dataset.html",
+      "headers": {
+        "Permissions-Policy": "camera=(self)"
+      }
     },
     {
       "src": "/",
-      "dest": "/src/webui/static/index.html"
+      "dest": "/src/webui/static/index.html",
+      "headers": {
+        "Permissions-Policy": "camera=(self)"
+      }
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/keepalive",
+      "schedule": "0 6 * * *"
     }
   ]
 }

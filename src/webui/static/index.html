@@ -6,6 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FitMeasure AI — мірки</title>
   <link rel="stylesheet" href="/static/css/styles.css?v=auto-capture1" />
+  <!-- Vercel Web Analytics + Speed Insights (free tier; page views and Web Vitals only, no custom data). Skipped on local dev hosts. -->
+  <script>
+    if (!/^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.)/.test(location.hostname)) {
+      for (const src of ["/_vercel/insights/script.js", "/_vercel/speed-insights/script.js"]) {
+        const s = document.createElement("script");
+        s.defer = true;
+        s.src = src;
+        document.head.appendChild(s);
+      }
+    }
+  </script>
 </head>
 
 <body>
