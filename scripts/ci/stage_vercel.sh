@@ -15,6 +15,8 @@ rm -rf "$out"
 mkdir -p "$out"
 
 cp "$root/vercel.json" "$root/requirements.txt" "$root/.vercelignore" "$out/"
+# Pin the function runtime: requirements.txt has numpy<2, which has no wheels past 3.12.
+echo "3.12" > "$out/.python-version"
 cp -R "$root/api" "$out/api"
 mkdir -p "$out/src"
 cp -R "$root/src/pointsx" "$out/src/pointsx"
