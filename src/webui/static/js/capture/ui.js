@@ -7,7 +7,7 @@ import { getCaptureDom } from "./dom.js";
 import { speakPoseHint } from "./speech.js";
 import { resyncVisibleCaptureThumbs } from "./thumbLayout.js";
 
-import { t } from "./i18n.js";
+import { t } from "../i18n/index.js";
 
 export function setStatus(msg, isError) {
   const { statusEl } = getCaptureDom();

@@ -14,7 +14,9 @@ import { sizeAndPatternHandler, validateEnvelope } from "../patternEngine.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { setStatus, updateUiStep } from "./ui.js";
-import { t, translateGarment, translateBackendError } from "./i18n.js";
+import { t, translateGarment, translateBackendError } from "../i18n/index.js";
+import { ApiError, apiFetch } from "../api/client.js";
+import { requestMeasurement } from "../api/measure.js";
 import {
   envelopeToDatasetMeasurements,
   saveDatasetPrefill,
@@ -26,7 +28,7 @@ import {
 
 export async function loadTailoringCatalog() {
   if (captureState.tailoringCatalog) return captureState.tailoringCatalog;
-  const res = await fetch("/static/data/tailoring_config.json?v=3");
+  const res = await apiFetch("/static/data/tailoring_config.json?v=3");
   if (!res.ok) throw new Error(t("failed-load-config"));
   captureState.tailoringCatalog = await res.json();
   return captureState.tailoringCatalog;
@@ -48,25 +50,6 @@ export function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function formatMeasureHttpError(res, bodyText) {
-  const fallback = (bodyText && bodyText.trim()) || res.statusText;
-  try {
-    const j = JSON.parse(bodyText);
-    if (typeof j.detail === "string") return j.detail;
-    if (Array.isArray(j.detail)) {
-      const msgs = j.detail
-        .map((x) =>
-          typeof x === "object" && x !== null && typeof x.msg === "string" ? x.msg : ""
-        )
-        .filter(Boolean);
-      if (msgs.length) return msgs.join(" ");
-    }
-  } catch {
-    return fallback;
-  }
-  return fallback;
 }
 
 const MEASUREMENT_MANUAL_ORDER = [
@@ -727,7 +710,6 @@ export function attachMeasureHandler() {
     const fd = new FormData();
     fd.append("height_cm", String(heightCmNum));
     fd.append("sex",       sexSelect.value);
-    const measureUrl = useTestImages ? "/api/measure/mock" : "/api/measure";
     if (!useTestImages) {
       fd.append("pose_backend", "coco");
       const frontName =
@@ -743,12 +725,13 @@ export function attachMeasureHandler() {
     }
 
     try {
-      const res = await fetch(measureUrl, { method: "POST", body: fd });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(translateBackendError(formatMeasureHttpError(res, text)));
+      let data;
+      try {
+        data = await requestMeasurement(fd, { mock: useTestImages });
+      } catch (err) {
+        // Server detail texts are Ukrainian; show them in the UI language.
+        throw err instanceof ApiError ? new Error(translateBackendError(err.message)) : err;
       }
-      const data = await res.json();
       console.log("[FitMeasure AI] Full model output:", data);
       const measurements = orderMeasurementsManual(data.measurements ?? []);
       if (!measurements.length) {

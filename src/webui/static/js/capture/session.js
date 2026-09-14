@@ -2,7 +2,7 @@
  * MediaPipe pose runtime, camera, capture timers, and frame-to-blob pipeline.
  */
 
-import { t } from "./i18n.js";
+import { t } from "../i18n/index.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
 import { checkPoseForStep } from "./poseGate.js";

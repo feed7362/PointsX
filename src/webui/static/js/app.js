@@ -16,7 +16,7 @@ import * as overlay from "./capture/overlay.js";
 import * as ui from "./capture/ui.js";
 import * as tailoring from "./capture/tailoring.js";
 import { resyncVisibleCaptureThumbs } from "./capture/thumbLayout.js";
-import { initI18n, setLang, t } from "./capture/i18n.js";
+import { initI18n, setLang, t } from "./i18n/index.js";
 
 /** Render top reference canvases using the same drawing code as live overlay. */
 function renderReferenceGuides() {
