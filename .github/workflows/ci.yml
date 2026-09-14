@@ -86,6 +86,11 @@ jobs:
         run: find src/webui/static -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: vercel.json is valid JSON
         run: node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))"
+      - uses: astral-sh/setup-uv@v6
+      - name: .vercelignore keeps every deployable file
+        run: |
+          bash scripts/ci/stage_vercel.sh "$RUNNER_TEMP/web"
+          uv run --no-project --with pathspec python scripts/ci/check_vercelignore.py "$RUNNER_TEMP/web"
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
