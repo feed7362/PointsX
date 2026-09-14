@@ -201,3 +201,9 @@ src/webui/static/js/
   `{"detail": ...}`); сервіси не імпортують FastAPI і мають власні тести (`tests/test_services.py`).
   `app.py` 890 → ~590 рядків. Перевірено: pytest 51/51, `vercel_smoke`, `pointsx-eval` байт у байт,
   реальний старт lifespan з вагами.
+- Крок 4 (`refactor/webui-04-routers-factory`): `webui/bootstrap/{factory,lifespan,routers,middleware,exceptions}.py`,
+  `webui/api/{pages,health,measure,tts,dependencies}.py`, `webui/services/measurement.py`; `app.py` — 27 рядків
+  (`app = create_app()`). Перевірка «модель не завантажена» лишилась у сервісі, не в `Depends`, щоб 422 форми
+  спрацьовував раніше за 503 (контракт). Новий `tests/test_bootstrap.py` фіксує точний список маршрутів.
+  Перевірено: pytest 53/53, `vercel_smoke`, `pointsx-eval` байт у байт, реальний старт з вагами,
+  `/api/measure` на 3 реальних фото через HTTP — JSON старого `app.py` і нового застосунку ідентичний.
