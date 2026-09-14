@@ -187,3 +187,12 @@ src/webui/static/js/
 **Затверджено 2026-09-14:** кроки 1–4 (бекенд) зараз; фронтенд лишається vanilla, розбиття — пізніше;
 один PR на крок (гілки `refactor/webui-NN-*`, деплой лише після merge у `main`);
 `dataset/app.js` — після розмови з MaksShu. Рішення 1 і 2 — за рекомендацією.
+
+**Журнал:**
+
+- Крок 1 (`refactor/webui-01-contract-tests`): `tests/test_api_contract.py`, 21 тест контракту, зелені на старому `app.py`.
+- Крок 2 (`refactor/webui-02-config-errors-schemas`): `webui/config.py` (`Settings.from_env`, `get_settings`),
+  `webui/errors.py`, `webui/schemas/`; `envelope.py` імпортує схеми напряму (циклічний імпорт через `app.py` прибрано);
+  `app.py` 1042 → 890 рядків. Перевірено: pytest 45/45 (+ `tests/test_config.py`), `vercel_smoke` у venv лише з
+  `requirements.txt`, `pointsx-eval` на 17 суб'єктах байт у байт як до міграції, реальний старт lifespan з вагами
+  (`pipeline_ready`, `coco`).

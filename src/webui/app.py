@@ -56,114 +56,37 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 
-# ---------------------------------------------------------------------------
-# Inference endpoint routing
-# ---------------------------------------------------------------------------
-# When POINTSX_INFERENCE_ENDPOINT is set (e.g. on Vercel), /api/measure is
-# proxied to that URL (the HuggingFace Space).  Mock + TTS are always local.
-_INFERENCE_ENDPOINT: str | None = os.environ.get("POINTSX_INFERENCE_ENDPOINT", "").strip() or None
-_IS_VERCEL_PROXY_MODE = bool(os.environ.get("POINTSX_VERCEL")) and _INFERENCE_ENDPOINT is not None
+from webui.config import (
+    DISALLOWED_CONTENT_PREFIXES,
+    MAX_UPLOAD_BYTES,
+    STATIC_DIR,
+    Settings,
+    get_settings,
+)
+from webui.errors import pipeline_value_error_detail as _pipeline_value_error_detail
+from webui.errors import validation_errors_to_uk as _validation_errors_to_uk
+from webui.schemas import (
+    CaptureInfo,
+    CaptureQuality,
+    MeasurementEnvelope,
+    MeasurementItem,
+    PipelineInfo,
+    SubjectInfo,
+    TtsRequest,
+)
 
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
-# Dataset directory can be overridden via POINTSX_DATASET_DIR environment variable
-_DATASET_DIR_DEFAULT = Path(__file__).resolve().parents[2] / "dataset"
-DATASET_DIR = Path(os.environ.get("POINTSX_DATASET_DIR", str(_DATASET_DIR_DEFAULT)))
-
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
-DISALLOWED_CONTENT_PREFIXES = ("text/", "video/", "audio/")
-
-_TRUTHY = ("1", "true", "yes", "on")
+_SETTINGS = get_settings()
+# Proxy mode (Vercel): /api/measure is forwarded to the HF Space; mock + TTS stay local.
+_INFERENCE_ENDPOINT = _SETTINGS.inference_endpoint
+_IS_VERCEL_PROXY_MODE = _SETTINGS.proxy_mode
+DATASET_DIR = _SETTINGS.dataset_dir
 
 _dataset_lock = asyncio.Lock()
 
 _UPLOAD_LABEL_UK = {"front": "Анфас", "side": "Профіль"}
-
-_PIPELINE_VALUE_ERROR_UK = {
-    "No person detected in front image": (
-        "На знімку анфасу не виявлено людину. Переконайтеся, що фігура повністю в кадрі "
-        "та поза відповідає вимогам."
-    ),
-    "No person detected in side image": (
-        "На знімку профілю не виявлено людину. Переконайтеся, що фігура повністю в кадрі "
-        "та поза відповідає вимогам."
-    ),
-    "No body silhouette detected in front image": (
-        "На анфасі не вдалося виділити силует тіла. Спробуйте інше освітлення або фон."
-    ),
-    "No body silhouette detected in side image": (
-        "На профілі не вдалося виділити силует тіла. Спробуйте інше освітлення або фон."
-    ),
-    "No segmentation mask for front image": (
-        "На анфасі не вдалося виділити силует тіла. Спробуйте інше освітлення або фон."
-    ),
-    "No segmentation mask for side image": (
-        "На профілі не вдалося виділити силует тіла. Спробуйте інше освітлення або фон."
-    ),
-    "Cannot calibrate front view: insufficient visible keypoints": (
-        "Недостатньо видимих ключових точок на анфасі для калібровки за зростом. "
-        "Переконайтеся, що ступні та голова в кадрі."
-    ),
-    "Cannot calibrate side view: insufficient visible keypoints": (
-        "Недостатньо видимих ключових точок на профілі для калібровки за зростом. "
-        "Переконайтеся, що ступні та голова в кадрі."
-    ),
-    "Invalid sex for measurement pipeline": "Некоректне значення статі для пайплайну.",
-}
-
-
-def _env_flag(name: str) -> bool:
-    return (os.environ.get(name) or "").strip().lower() in _TRUTHY
-
-
-def _pipeline_value_error_detail(message: str) -> str:
-    return _PIPELINE_VALUE_ERROR_UK.get(
-        message.strip(),
-        f"Не вдалося обробити знімки: {message}",
-    )
-
-
-def _validation_errors_to_uk(errors: list[Any]) -> str:
-    if not errors:
-        return "Некоректні дані форми."
-    parts: list[str] = []
-    field_labels = {
-        "height_cm": "Зріст (см)",
-        "sex": "Стать",
-        "front": "Фото анфасу",
-        "side": "Фото профілю",
-        "pose_backend": "Модель пози",
-    }
-    for item in errors:
-        if not isinstance(item, dict):
-            continue
-        loc = tuple(item.get("loc") or ())
-        field_key = str(loc[-1]) if loc else "form"
-        label = field_labels.get(field_key, field_key)
-        err_type = str(item.get("type") or "")
-        msg_en = str(item.get("msg") or "")
-        ctx = item.get("ctx")
-        if not isinstance(ctx, dict):
-            ctx = {}
-
-        if err_type == "missing":
-            parts.append(f"{label}: значення не передано.")
-        elif err_type in ("float_parsing", "decimal_parsing", "int_parsing"):
-            parts.append(f"{label}: потрібне число.")
-        elif err_type == "greater_than_equal":
-            ge = ctx.get("ge")
-            parts.append(f"{label}: занадто мале значення (мінімум {ge}).")
-        elif err_type == "less_than_equal":
-            le = ctx.get("le")
-            parts.append(f"{label}: занадто велике значення (максимум {le}).")
-        elif err_type in ("literal_error", "enum"):
-            parts.append(f"{label}: недопустиме значення.")
-        else:
-            parts.append(f"{label}: {msg_en}")
-    return " ".join(parts) if parts else "Некоректні дані форми."
 
 
 def _build_visualization_only_envelope(
@@ -283,67 +206,6 @@ async def _save_capture_pair_to_dataset(
         return None, msg
 
 
-# ---------------------------------------------------------------------------
-# Pydantic models — v2 MeasurementEnvelope (kept here because envelope.py imports them)
-# ---------------------------------------------------------------------------
-
-class TtsRequest(BaseModel):
-    """Short Ukrainian phrase for pose hints / countdown (synthesized via edge-tts)."""
-
-    text: str = Field(..., min_length=1, max_length=600)
-
-
-class MeasurementItem(BaseModel):
-    id: str
-    label_uk: str
-    value_cm: float = Field(..., description="Body measurement in centimetres, one decimal")
-    uncertainty_cm: float = Field(..., ge=0.0, description="1σ estimate from the pipeline")
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    source: Literal["front", "side", "fused", "manual"] = "fused"
-    quality_flags: list[str] = Field(default_factory=list)
-
-
-class PipelineInfo(BaseModel):
-    source: Literal["mock", "mediapipe", "regression"] = "regression"
-    model_version: str = "regression-0.1"
-    unit_system: Literal["metric"] = "metric"
-    pose_backend: Literal["custom", "coco"] | None = None
-
-
-class SubjectInfo(BaseModel):
-    height_cm: float = Field(..., ge=100, le=250)
-    sex: Literal["male", "female", "other"]
-    age_band: Literal["adult", "teen", "child"] | None = None
-    posture_flags: list[str] = Field(default_factory=list)
-
-
-class CaptureQuality(BaseModel):
-    quality: float = Field(..., ge=0.0, le=1.0)
-    pose_ok: bool = True
-    occlusions: list[str] = Field(default_factory=list)
-
-
-class CaptureInfo(BaseModel):
-    front: CaptureQuality
-    side: CaptureQuality
-
-
-class MeasurementEnvelope(BaseModel):
-    """Schema v2 — consumed by the frontend sizing + pattern engine."""
-    schema_id: str = Field("pointsx.measurement.envelope", alias="schema")
-    schema_version: int = 2
-    request_id: str
-    created_at: str
-    pipeline: PipelineInfo
-    subject: SubjectInfo
-    capture: CaptureInfo
-    measurements: list[MeasurementItem]
-    derived: dict[str, Any] = Field(default_factory=dict)
-    warnings: list[str] = Field(default_factory=list)
-
-    model_config = {"populate_by_name": True}
-
-
 def build_mock_measurement_envelope(
     height_cm: float,
     sex: Literal["male", "female", "other"],
@@ -415,11 +277,6 @@ def build_mock_measurement_envelope(
 # ---------------------------------------------------------------------------
 # Pipeline lifespan — load models once at startup
 # ---------------------------------------------------------------------------
-
-def _resolve_path(env_var: str, default: str) -> str:
-    raw = os.environ.get(env_var, default).strip()
-    return raw or default
-
 
 def _prefetch_weights(paths: list[str | None]) -> None:
     """Make sure each weight file exists locally before the models load.
@@ -523,22 +380,14 @@ async def lifespan(app: FastAPI):
         yield
         return
 
-    pose_custom = _resolve_path("POINTSX_POSE_MODEL_CUSTOM", "models/pose-cus.pt")
-    pose_coco = _resolve_path("POINTSX_POSE_MODEL_COCO", "models/yolo26-pose.pt")
-    legacy_pose = os.environ.get("POINTSX_POSE_MODEL")
-    if legacy_pose is not None and str(legacy_pose).strip():
-        pose_custom = str(legacy_pose).strip()
+    cfg = Settings.from_env()
+    pose_custom = cfg.pose_custom_path
+    if cfg.pose_custom_from_legacy_env:
         logger.info("POINTSX_POSE_MODEL set — using as custom pose path (legacy override).")
-    seg_path = _resolve_path("POINTSX_SEG_MODEL", "models/yolo12l-person-seg-extended.pt")
-    # Regressor is opt-in: it produced outliers on real photos (negative-cm
-    # hips/thighs on some subjects), and the per-sex correction tables in
-    # envelope.py were fitted against the Ramanujan ellipse output.
-    reg_path = (
-        _resolve_path("POINTSX_REGRESSION_MODEL", "models/reg.pt")
-        if _env_flag("POINTSX_USE_REGRESSOR")
-        else None
-    )
-    device    = _resolve_path("POINTSX_DEVICE", "auto")
+    pose_coco = cfg.pose_coco_path
+    seg_path = cfg.seg_model_path
+    reg_path = cfg.regression_model_path
+    device = cfg.device
 
     _prefetch_weights([pose_coco, seg_path, reg_path])
 
@@ -570,7 +419,7 @@ async def lifespan(app: FastAPI):
 
         # Warm up each model with a dummy forward pass so the very first
         # /api/measure request isn't ~2× slower than the warm rate.
-        if not _env_flag("POINTSX_WARMUP_DISABLE"):
+        if not cfg.warmup_disable:
             try:
                 timings = app.state.pipeline.warmup()
                 pretty = ", ".join(f"{k}={v:.2f}s" for k, v in timings.items())
@@ -606,13 +455,13 @@ app = FastAPI(title="FitMeasure AI WebUI", version="0.3.0", lifespan=lifespan)
 
 # On Vercel, static files are served directly via rewrite rules — skip the mount.
 # The HF Space image does not ship static/ (API-only), so the mount is conditional too.
-if STATIC_DIR.is_dir() and not os.environ.get("POINTSX_VERCEL"):
+if STATIC_DIR.is_dir() and not _SETTINGS.vercel:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 else:
     logger.info("Static mount skipped (dir present=%s) — API-only.", STATIC_DIR.is_dir())
 
 # CORS_ALLOW_ORIGINS: comma-separated list; ``*`` allows any origin.
-_cors_origins = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
+_cors_origins = list(_SETTINGS.cors_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

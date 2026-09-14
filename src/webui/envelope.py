@@ -13,6 +13,14 @@ from typing import TYPE_CHECKING, Any, Literal
 from pointsx.circumference import ramanujan_ellipse_circumference
 from pointsx.keypoints import KP, distance, is_valid, midpoint
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints
+from webui.schemas import (
+    CaptureInfo,
+    CaptureQuality,
+    MeasurementEnvelope,
+    MeasurementItem,
+    PipelineInfo,
+    SubjectInfo,
+)
 
 if TYPE_CHECKING:
     from webui.inference import InferenceResult
@@ -206,24 +214,6 @@ _PLAUSIBLE_RANGE_CM: dict[str, tuple[float, float]] = {
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models — re-imported from app to avoid duplication
-# ---------------------------------------------------------------------------
-
-# Imports at function-call time to avoid circular imports (app imports envelope,
-# envelope would import app)
-def _envelope_models():  # pragma: no cover - tiny indirection
-    from webui.app import (
-        CaptureInfo,
-        CaptureQuality,
-        MeasurementEnvelope,
-        MeasurementItem,
-        PipelineInfo,
-        SubjectInfo,
-    )
-    return MeasurementEnvelope, MeasurementItem, PipelineInfo, SubjectInfo, CaptureInfo, CaptureQuality
-
-
-# ---------------------------------------------------------------------------
 # Derivation helpers
 # ---------------------------------------------------------------------------
 
@@ -414,14 +404,6 @@ def body_to_envelope(
             substitutes _SEX_CIRCUMFERENCE_SCALES_PCT for this call. Used by
             ``pointsx-eval --fit-offsets`` to A/B-test newly fitted scales.
     """
-    (
-        MeasurementEnvelope,
-        MeasurementItem,
-        PipelineInfo,
-        SubjectInfo,
-        CaptureInfo,
-        CaptureQuality,
-    ) = _envelope_models()
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
