@@ -726,6 +726,44 @@ async def health(request: Request) -> JSONResponse:
     })
 
 
+@app.get("/api/keepalive")
+async def keepalive(request: Request) -> JSONResponse:
+    """Ping the HF Space so the free tier never sleeps (called by the Vercel cron in vercel.json).
+
+    When the CRON_SECRET env var is set (Vercel sends it as a Bearer token on cron
+    calls), other callers get 401. A timeout still counts: the request itself
+    wakes a sleeping Space, which then needs a few minutes to boot.
+    """
+    secret = (os.environ.get("CRON_SECRET") or "").strip()
+    if secret and request.headers.get("authorization") != f"Bearer {secret}":
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    if not _IS_VERCEL_PROXY_MODE:
+        return JSONResponse({"target": "self", "ok": True})
+
+    import httpx
+
+    url = f"{_INFERENCE_ENDPOINT.rstrip('/')}/api/health"  # type: ignore[union-attr]
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            upstream = await client.get(url)
+    except httpx.TimeoutException:
+        return JSONResponse({"target": url, "waking": True}, status_code=202)
+    except httpx.RequestError as exc:
+        logger.error("Keepalive ping to %s failed: %s", url, exc)
+        return JSONResponse({"target": url, "error": str(exc)}, status_code=502)
+
+    ready = False
+    if upstream.status_code == 200:
+        try:
+            ready = bool(upstream.json().get("pipeline_ready"))
+        except ValueError:
+            pass
+    return JSONResponse(
+        {"target": url, "status": upstream.status_code, "pipeline_ready": ready},
+        status_code=200 if ready else 502,
+    )
+
+
 async def _proxy_measure_to_hf(
     height_cm: float,
     sex: str,

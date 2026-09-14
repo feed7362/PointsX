@@ -50,6 +50,17 @@ with TestClient(app) as client:
                           files={"front": jpeg, "side": jpeg})
     check("measure proxied (502 on unreachable upstream)", proxied.status_code == 502, proxied.status_code)
 
+    keep = client.get("/api/keepalive")
+    check("keepalive pings upstream (502 when unreachable)", keep.status_code == 502, keep.status_code)
+    os.environ["CRON_SECRET"] = "ci-test-secret"
+    try:
+        denied = client.get("/api/keepalive")
+        allowed = client.get("/api/keepalive", headers={"Authorization": "Bearer ci-test-secret"})
+    finally:
+        del os.environ["CRON_SECRET"]
+    check("keepalive rejects callers without CRON_SECRET", denied.status_code == 401, denied.status_code)
+    check("keepalive accepts the cron bearer", allowed.status_code == 502, allowed.status_code)
+
 heavy = sorted(m for m in ("torch", "cv2", "ultralytics") if m in sys.modules)
 check("no heavy modules after requests", not heavy, heavy)
 

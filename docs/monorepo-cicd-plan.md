@@ -260,6 +260,19 @@ Smoke Space не робить справжній `/api/measure`: для цьог
 
 Перший запуск (2026-09-13) не стартував: `workflow_run`/`workflow_dispatch` GitHub читає лише з гілки за замовчуванням, а нею досі є `master`. Тому деплой викликається з `ci.yml` напряму (`workflow_call`); ручний запуск через `workflow_dispatch` запрацює після зміни гілки за замовчуванням на `main` (Settings → General → Default branch).
 
+**Vercel, 2026-09-14.** Git-інтеграція проєкту `fitmeasure-ai` не працювала з 2026-06-28 (жоден push у `vercel` не деплоївся).
+Перепідключено до `feed7362/PointsX`, Production Branch = `vercel`; `3086d51` піднято в Production — живий сайт тепер з `main`.
+Опційно: Deploy Hook для гілки `vercel` → секрет `VERCEL_DEPLOY_HOOK`, деплой-job викликає його після push.
+
+**Моніторинг і keep-alive (безкоштовно на Hobby):**
+
+- Web Analytics + Speed Insights: скрипти `/_vercel/insights` і `/_vercel/speed-insights` у трьох HTML (не на localhost).
+  Лише перегляди сторінок і Web Vitals; custom events — Pro. Увімкнути в дашборді: Analytics → Enable, Speed Insights → Enable.
+  В аналітику не йдуть фото, мірки, id заявок.
+- Keep-alive Space: Vercel cron раз на добу (ліміт Hobby) → `GET /api/keepalive` (з `CRON_SECRET`, якщо задано) пінгує `/api/health` Space;
+  плюс `.github/workflows/keepalive.yml` кожні 12 год запускає `scripts/ci/space_smoke.py` (будить і перевіряє, що міряє).
+- `Permissions-Policy: camera=(self)` тепер ставиться й на статичних HTML через `headers` у маршрутах `vercel.json`.
+
 ### Фаза 4 — прибирання
 
 15. Видалити віддалені `demo`, `ui-and-size-charts` (їхні коміти недосяжні з `main` — перед видаленням

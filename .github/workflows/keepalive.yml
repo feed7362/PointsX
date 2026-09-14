@@ -1,0 +1,23 @@
+name: keepalive
+
+# Keeps the free HF Space awake (it sleeps after ~48 h without traffic) and
+# checks it can still measure. Complements the daily Vercel cron in vercel.json.
+# Note: GitHub disables scheduled workflows after 60 days without repo activity.
+on:
+  schedule:
+    - cron: "17 */12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping-space:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+      - name: wake + smoke the Space
+        run: python3 scripts/ci/space_smoke.py https://secret0123-pointx-backend.hf.space
