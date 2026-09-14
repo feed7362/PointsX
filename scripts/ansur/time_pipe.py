@@ -6,7 +6,7 @@ sys.path.insert(0, "src")
 import cv2
 
 t0=time.perf_counter()
-from webui.inference import WebuiPipeline
+from webui.infrastructure.inference import WebuiPipeline
 
 print(f"import {time.perf_counter()-t0:.1f}s")
 rows=list(csv.DictReader(open("supabase-dump/subjects.csv",encoding="utf-8")))

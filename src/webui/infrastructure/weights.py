@@ -30,7 +30,7 @@ def prefetch_weights(paths: list[str | None]) -> None:
 
         # First: HF Storage Bucket mounted at LOCAL_DATA_DIR/models/.
         try:
-            from webui import storage as _storage_check
+            from webui.infrastructure import storage as _storage_check
             bucket_path = _storage_check.local_model_path(p.name)
             if bucket_path is not None:
                 p.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +73,7 @@ def prefetch_weights(paths: list[str | None]) -> None:
                 )
 
         # Fallback: S3 bucket (when archival is configured).
-        from webui import storage as _storage
+        from webui.infrastructure import storage as _storage
         if not _storage.is_enabled():
             return
         models_prefix = (os.environ.get("MODELS_S3_KEY_PREFIX") or "models/").lstrip("/")

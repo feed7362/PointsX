@@ -17,7 +17,7 @@ from pointsx.silhouette import front_thigh_y_level, hip_search_y_range
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from webui.inference import InferenceResult
+    from webui.infrastructure.inference import InferenceResult
 
 __all__ = ["pipeline_visualizations_b64"]
 

@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("/api/tts")
 async def tts_synthesize(body: TtsRequest) -> Response:
     """Synthesize speech (MP3) using a lightweight neural Edge voice."""
-    from webui import tts as tts_mod
+    from webui.infrastructure import tts_edge as tts_mod
 
     if tts_mod.tts_disabled():
         raise AppError(503, "Синтез мовлення вимкнено на сервері.")

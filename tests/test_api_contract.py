@@ -79,7 +79,7 @@ def _inference_result(body_index: int = 1):
     from pointsx.circumference import estimate_circumferences
     from pointsx.measurements import extract_measurements
     from pointsx.postprocess import validate_measurements
-    from webui.inference import InferenceResult
+    from webui.infrastructure.inference import InferenceResult
 
     b = gen.BODIES[body_index]
     fkp, fmask = gen.front_view(b)

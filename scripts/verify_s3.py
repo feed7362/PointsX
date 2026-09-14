@@ -2,7 +2,7 @@
 
 Runs the exact operations the archival path uses — PutObject with an explicit
 ContentLength, GetObject, then DeleteObject — through the same client config as
-`webui.storage`, so a pass here means archiving will work in production.
+`webui.infrastructure.storage`, so a pass here means archiving will work in production.
 
 Usage:
     cd Q:/Projects/KHNU/PointsX
@@ -89,7 +89,7 @@ def main() -> int:
         aws_access_key_id=cfg["key_id"],
         aws_secret_access_key=cfg["secret"],
         region_name=cfg["region"],
-        # Mirrors webui.storage exactly, so this is a true rehearsal.
+        # Mirrors webui.infrastructure.storage exactly, so this is a true rehearsal.
         config=BotoConfig(
             signature_version="s3v4",
             retries={"max_attempts": 5, "mode": "adaptive"},

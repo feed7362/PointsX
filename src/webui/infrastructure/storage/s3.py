@@ -1,35 +1,4 @@
-"""S3-compatible archival for demo / scientific data collection.
-
-Works with any S3-compatible object store: Cloudflare R2, Backblaze B2,
-AWS S3, MinIO, Wasabi, iDrive e2, Scaleway, etc. The provider's full
-endpoint URL is supplied via ``S3_ENDPOINT``; no provider-specific code.
-
-When configured (env vars set), every ``/api/measure`` call archives:
-
-  • front photo            → ``measurements/<request_id>/front.<ext>``
-  • side photo             → ``measurements/<request_id>/side.<ext>``
-  • measurement envelope   → ``measurements/<request_id>/envelope.json``
-
-Required environment variables:
-
-  S3_ENDPOINT            full URL incl. https://
-                         R2 example:    https://<acct>.r2.cloudflarestorage.com
-                         B2 example:    https://s3.<region>.backblazeb2.com
-                         AWS example:   https://s3.amazonaws.com
-                         MinIO example: https://minio.example.com
-  S3_ACCESS_KEY_ID
-  S3_SECRET_ACCESS_KEY
-  S3_BUCKET
-
-Optional:
-
-  S3_REGION              defaults to ``auto`` (R2 expects this; AWS / B2
-                         want the actual region like ``us-east-1``)
-  S3_PREFIX              prepended to every object key (default: empty)
-
-If any of the required vars are missing the storage layer is silently
-disabled — the measurement endpoint still works, without archiving.
-"""
+"""S3-compatible object storage (R2, B2, AWS, MinIO, ElasticLake, Supabase S3, ...)."""
 from __future__ import annotations
 
 import json
@@ -37,10 +6,9 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from pathlib import Path
+from webui.infrastructure.storage.common import _extension_for, _sanitise_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -235,116 +203,10 @@ class _LazyClient:
 _lazy = _LazyClient()
 
 
-# ── Supabase Storage REST backend ───────────────────────────────────────────
-# Preferred over the S3-compatible protocol because it reuses the credentials
-# the dataset flow ALREADY uses (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY).
-#
-# Supabase exposes two storage APIs with SEPARATE credential systems:
-#   * Storage REST  — Authorization: Bearer <service_role JWT>   <- this one
-#   * S3-compatible — AWS SigV4 with keys from Storage -> S3 Access Keys
-# A project API key is rejected by the S3 protocol with a bare 403, which is
-# what the archive hit. Using REST removes the second credential entirely.
-
-
-# Same scheme as the dataset flow: libsodium sealed box (X25519), i.e.
-# crypto_box_seal. Encrypting needs ONLY the public key, so this container can
-# seal photos but can never open them — the private key stays offline. That
-# makes the archive E2E-encrypted at rest exactly like dataset submissions, and
-# as a side effect every object becomes application/octet-stream, which is what
-# the MIME-restricted dataset bucket accepts.
-ENC_ALGO = "libsodium-sealedbox-x25519"
-_DEFAULT_DATASET_PUBLIC_KEY = "HxB6+jdtcSdOHKc6e/YmIH4MlQUjlJtrkwGY7sF3WW8="
-
-
-def _dataset_public_key() -> str | None:
-    """Base64 X25519 public key used to seal archived photos."""
-    if (os.environ.get("POINTSX_ARCHIVE_ENCRYPT") or "").strip().lower() in ("0", "false", "no", "off"):
-        return None
-    return (os.environ.get("DATASET_PUBLIC_KEY") or _DEFAULT_DATASET_PUBLIC_KEY).strip() or None
-
-
-def _seal(body: bytes, public_key_b64: str) -> bytes:
-    """Encrypt with a libsodium sealed box. Raises if PyNaCl is unavailable."""
-    import base64
-
-    from nacl.public import PublicKey, SealedBox
-
-    return SealedBox(PublicKey(base64.b64decode(public_key_b64))).encrypt(body)
-
-
-@dataclass(frozen=True)
-class _SupabaseConfig:
-    url: str          # https://<ref>.supabase.co
-    service_key: str
-    bucket: str
-    prefix: str
-
-
-def _supabase_config() -> _SupabaseConfig | None:
-    url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
-    key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-    bucket = (
-        os.environ.get("SUPABASE_STORAGE_BUCKET")
-        or os.environ.get("STORAGE_BUCKET")
-        or ""
-    ).strip()
-    if not (url and key and bucket):
-        return None
-    prefix = (os.environ.get("S3_PREFIX") or os.environ.get("SUPABASE_PREFIX") or "").strip()
-    return _SupabaseConfig(url=url, service_key=key, bucket=bucket, prefix=prefix.strip("/"))
-
-
-def _supabase_put(cfg: _SupabaseConfig, key: str, body: bytes, content_type: str) -> None:
-    """Upload one object via the Storage REST API. Raises on non-2xx."""
-    import urllib.error
-    import urllib.request
-
-    path = f"{cfg.prefix}/{key}" if cfg.prefix else key
-    url = f"{cfg.url}/storage/v1/object/{cfg.bucket}/{path.lstrip('/')}"
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={
-            # supabase-js sends the key in BOTH headers, and the gateway needs
-            # `apikey` for the new-format keys (sb_secret_...). Sending only
-            # Authorization makes it parse the value as a legacy JWT and fail
-            # with "Invalid Compact JWS".
-            "apikey": cfg.service_key,
-            "Authorization": f"Bearer {cfg.service_key}",
-            "Content-Type": content_type or "application/octet-stream",
-            "Content-Length": str(len(body)),
-            # Overwrite instead of failing when a request_id is retried.
-            "x-upsert": "true",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            if resp.status // 100 != 2:
-                raise RuntimeError(f"HTTP {resp.status}")
-    except urllib.error.HTTPError as exc:  # noqa: PERF203
-        detail = ""
-        try:
-            detail = exc.read().decode("utf-8", "replace")[:300]
-        except Exception:  # noqa: BLE001
-            pass
-        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-
-
-def is_enabled() -> bool:
-    """True when any archival backend is configured (Supabase REST or S3)."""
-    return _supabase_config() is not None or _lazy.config is not None
-
-
 def _key(request_id: str, name: str) -> str:
     cfg = _lazy.config
     prefix = (cfg.prefix + "/") if (cfg and cfg.prefix) else ""
     return f"{prefix}measurements/{request_id}/{name}"
-
-
-def _sanitise_request_id(request_id: str) -> str:
-    rid = "".join(c if (c.isalnum() or c in "-_.") else "_" for c in request_id)[:96]
-    return rid or "anon"
 
 
 def download_to_path(key: str, local_path) -> bool:
@@ -392,119 +254,6 @@ def download_to_path(key: str, local_path) -> bool:
         full_key, target, target.stat().st_size,
     )
     return True
-
-
-# ── Local-filesystem archival (HF Storage Bucket mounted at /data) ─────────
-# HF Storage Buckets attached to a Space appear at /data inside the container
-# (read-write). When LOCAL_DATA_DIR is set, archive_measurement writes
-# directly to disk under that path instead of (or in addition to) S3.
-# Same layout as S3: <LOCAL_DATA_DIR>/measurements/<uuid>/{front.jpg,...}.
-
-def _local_data_dir() -> "Path | None":
-    from pathlib import Path as _Path
-    raw = (os.environ.get("LOCAL_DATA_DIR") or "").strip()
-    if not raw:
-        return None
-    p = _Path(raw)
-    try:
-        p.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        logger.warning("LOCAL_DATA_DIR=%s not writable: %s", raw, exc)
-        return None
-    return p
-
-
-def archive_measurement_local(
-    request_id: str,
-    *,
-    front_bytes: bytes,
-    front_content_type: str,
-    side_bytes: bytes,
-    side_content_type: str,
-    envelope_json: dict | str,
-    metadata: dict[str, str] | None = None,
-) -> bool:
-    """Write photos + envelope to the local data directory (HF bucket mount).
-
-    Mirrors the bucket key layout used by archive_measurement so analysis
-    scripts can treat both stores interchangeably.
-    """
-    base = _local_data_dir()
-    if base is None:
-        return False
-    rid = _sanitise_request_id(request_id)
-    folder = base / "measurements" / rid
-    try:
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"front.{_extension_for(front_content_type)}").write_bytes(front_bytes)
-        (folder / f"side.{_extension_for(side_content_type)}").write_bytes(side_bytes)
-        json_body = (
-            envelope_json
-            if isinstance(envelope_json, str)
-            else json.dumps(envelope_json, ensure_ascii=False)
-        )
-        (folder / "envelope.json").write_text(json_body, encoding="utf-8")
-        if metadata:
-            (folder / "metadata.json").write_text(
-                json.dumps(metadata, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-    except OSError as exc:
-        logger.warning(
-            "Local archive FAILED — request_id=%s base=%s err=%s",
-            rid, base, exc,
-        )
-        return False
-    logger.warning(
-        "Local archive OK — request_id=%s folder=%s",
-        rid, folder,
-    )
-    return True
-
-
-def local_model_path(name: str) -> "Path | None":
-    """Look up a model file inside the bucket / LOCAL_DATA_DIR.
-
-    Checks (in order) — first non-empty hit wins:
-      <LOCAL_DATA_DIR>/models/<name>     ← preferred layout
-      <LOCAL_DATA_DIR>/<name>            ← bucket-root layout (HF dashboard
-                                            uploads land here unless you
-                                            create a folder explicitly)
-    Returns None when nothing matches; a WARN line is emitted either way
-    so the operator can tell from the Logs tab what was checked.
-    """
-    base = _local_data_dir()
-    if base is None:
-        logger.warning(
-            "local_model_path(%s): LOCAL_DATA_DIR is unset / unwritable — "
-            "bucket lookup skipped.",
-            name,
-        )
-        return None
-    candidates = [base / "models" / name, base / name]
-    for candidate in candidates:
-        if candidate.is_file() and candidate.stat().st_size > 0:
-            logger.warning(
-                "local_model_path FOUND — name=%s → %s (size=%d bytes)",
-                name, candidate, candidate.stat().st_size,
-            )
-            return candidate
-    logger.warning(
-        "local_model_path MISS — name=%s tried=%s",
-        name, [str(c) for c in candidates],
-    )
-    return None
-
-
-def _extension_for(content_type: str) -> str:
-    ct = (content_type or "").lower().strip()
-    if "jpeg" in ct or "jpg" in ct:
-        return "jpg"
-    if "png" in ct:
-        return "png"
-    if "webp" in ct:
-        return "webp"
-    return "bin"
 
 
 # Error codes that are TRANSIENT on our provider but that boto3 will not retry
@@ -600,7 +349,8 @@ def _put_with_retry(client, **kwargs) -> None:
             time.sleep(delay)
 
 
-def archive_measurement(
+
+def archive_to_s3(
     request_id: str,
     *,
     front_bytes: bytes,
@@ -610,57 +360,7 @@ def archive_measurement(
     envelope_json: dict[str, Any] | str,
     metadata: dict[str, str] | None = None,
 ) -> bool:
-    """Upload the photos + envelope to object storage under a per-request prefix.
-
-    Returns True on success, False on any failure (logged but never raised —
-    the measurement response must not be blocked by storage hiccups).
-
-    Prefers the Supabase Storage REST API when SUPABASE_URL +
-    SUPABASE_SERVICE_ROLE_KEY are configured, since that reuses the credentials
-    the dataset flow already works with. Falls back to the S3-compatible client.
-    """
-    sb = _supabase_config()
-    if sb is not None:
-        rid = _sanitise_request_id(request_id)
-        json_body = (
-            envelope_json
-            if isinstance(envelope_json, str)
-            else json.dumps(envelope_json, ensure_ascii=False)
-        )
-        pub = _dataset_public_key()
-        try:
-            if pub:
-                # Sealed, so every object is an opaque blob: same encryption as
-                # dataset submissions, and octet-stream passes the bucket's MIME
-                # whitelist. Decrypt with scripts/decrypt_dataset.py.
-                uploads = [
-                    (f"measurements/{rid}/front.bin", _seal(front_bytes, pub)),
-                    (f"measurements/{rid}/side.bin", _seal(side_bytes, pub)),
-                    (f"measurements/{rid}/envelope.json.bin",
-                     _seal(json_body.encode("utf-8"), pub)),
-                ]
-                ctype = "application/octet-stream"
-            else:
-                uploads = [
-                    (f"measurements/{rid}/front.{_extension_for(front_content_type)}", front_bytes),
-                    (f"measurements/{rid}/side.{_extension_for(side_content_type)}", side_bytes),
-                    (f"measurements/{rid}/envelope.json", json_body.encode("utf-8")),
-                ]
-                ctype = ""
-            for key, body in uploads:
-                _supabase_put(sb, key, body, ctype or (
-                    "application/json" if key.endswith(".json") else "image/jpeg"))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Supabase Storage archive FAILED for request_id=%s: %s", rid, exc,
-            )
-            return False
-        logger.warning(
-            "Supabase Storage archive OK — request_id=%s bucket=%s prefix=%s encrypted=%s",
-            rid, sb.bucket, sb.prefix or "(none)", bool(pub),
-        )
-        return True
-
+    """Upload photos + envelope with the S3 client; False when unconfigured or on failure."""
     client = _lazy.client()
     cfg = _lazy.config
     if client is None or cfg is None:

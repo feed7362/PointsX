@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     prefetch_weights([pose_coco, seg_path, reg_path])
 
     try:
-        from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
+        from webui.infrastructure.inference import WebuiPipeline  # local import to avoid heavy deps at module load
 
         app.state.pipeline = WebuiPipeline(
             pose_custom_path=pose_custom,
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
     # Probe storage on startup so the operator immediately knows whether
     # archival is configured.
     try:
-        from webui import storage as _storage_probe
+        from webui.infrastructure import storage as _storage_probe
 
         state = "ENABLED" if _storage_probe.is_enabled() else "DISABLED"
         logger.warning("Storage probe: archival is %s on startup", state)

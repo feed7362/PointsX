@@ -43,7 +43,7 @@ from pointsx.circumference import estimate_circumferences
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements
 from webui.envelope import CANONICAL_MEASUREMENTS, DISPLAY_MEASUREMENT_IDS, body_to_envelope
-from webui.inference import InferenceResult, WebuiPipeline
+from webui.infrastructure.inference import InferenceResult, WebuiPipeline
 
 logger = logging.getLogger(__name__)
 

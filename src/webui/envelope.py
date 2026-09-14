@@ -23,7 +23,7 @@ from webui.schemas import (
 )
 
 if TYPE_CHECKING:
-    from webui.inference import InferenceResult
+    from webui.infrastructure.inference import InferenceResult
 
 
 # ---------------------------------------------------------------------------

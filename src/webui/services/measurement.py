@@ -126,7 +126,7 @@ def archive_measurement(
     Failures are logged and never affect the response.
     """
     try:
-        from webui import storage
+        from webui.infrastructure import storage
         args = dict(
             request_id=request_id,
             front_bytes=front.data,

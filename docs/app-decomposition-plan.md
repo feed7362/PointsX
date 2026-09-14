@@ -207,3 +207,9 @@ src/webui/static/js/
   спрацьовував раніше за 503 (контракт). Новий `tests/test_bootstrap.py` фіксує точний список маршрутів.
   Перевірено: pytest 53/53, `vercel_smoke`, `pointsx-eval` байт у байт, реальний старт з вагами,
   `/api/measure` на 3 реальних фото через HTTP — JSON старого `app.py` і нового застосунку ідентичний.
+- Крок 5 (`refactor/webui-05-infrastructure`): `storage.py` (714 рядків) → `webui/infrastructure/storage/`
+  {`s3`, `supabase`, `local`, `crypto`, `common`} + `__init__` з публічним API (диспетчер Supabase → S3);
+  `inference.py` → `infrastructure/inference.py`, `tts.py` → `infrastructure/tts_edge.py` (`git mv`, імпортери оновлено,
+  шимів немає). Спершу `tests/test_storage.py` (11 тестів: конфіг і префікси env, локальний архів, Supabase plain/sealed,
+  S3 через fake boto3 з ретраєм) зафіксовано на старому модулі — зелені й після розбиття.
+  Перевірено: pytest 64/64, `vercel_smoke`, `pointsx-eval` байт у байт, реальний старт з вагами.

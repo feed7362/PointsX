@@ -174,7 +174,7 @@ def side_view(b: BodySpec) -> tuple[Keypoints, SilhouetteMask]:
 def snapshot() -> dict:
     """Run the geometry pipeline on every synthetic body and return a JSON-able dump."""
     from webui.envelope import body_to_envelope
-    from webui.inference import InferenceResult
+    from webui.infrastructure.inference import InferenceResult
 
     def rnd(values):
         return [None if v is None else round(float(v), 3) for v in values]

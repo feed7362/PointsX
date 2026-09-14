@@ -53,7 +53,7 @@ GATE_TAU = 0.05
 
 def extract(subjects_csv: Path, models: dict[str, Path]) -> list[dict]:
     """Run the real pipeline once per subject → widths + ellipse + GT."""
-    from webui.inference import WebuiPipeline
+    from webui.infrastructure.inference import WebuiPipeline
     import cv2
 
     pipe = WebuiPipeline(
