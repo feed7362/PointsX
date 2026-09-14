@@ -196,3 +196,8 @@ src/webui/static/js/
   `app.py` 1042 → 890 рядків. Перевірено: pytest 45/45 (+ `tests/test_config.py`), `vercel_smoke` у venv лише з
   `requirements.txt`, `pointsx-eval` на 17 суб'єктах байт у байт як до міграції, реальний старт lifespan з вагами
   (`pipeline_ready`, `coco`).
+- Крок 3 (`refactor/webui-03-services`): `webui/services/{uploads,dataset_capture,mock,proxy}.py`,
+  `webui/infrastructure/weights.py`, `AppError` у `webui/errors.py` з одним обробником у `app.py` (та сама форма
+  `{"detail": ...}`); сервіси не імпортують FastAPI і мають власні тести (`tests/test_services.py`).
+  `app.py` 890 → ~590 рядків. Перевірено: pytest 51/51, `vercel_smoke`, `pointsx-eval` байт у байт,
+  реальний старт lifespan з вагами.

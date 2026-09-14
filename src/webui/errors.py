@@ -7,6 +7,20 @@ from __future__ import annotations
 
 from typing import Any
 
+
+class AppError(Exception):
+    """Error raised by services; the app turns it into ``{"detail": detail}`` with ``status_code``.
+
+    Keeps FastAPI out of the service layer while producing exactly the response
+    shape of ``HTTPException`` that the frontend already reads.
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 PIPELINE_VALUE_ERROR_UK = {
     "No person detected in front image": (
         "На знімку анфасу не виявлено людину. Переконайтеся, що фігура повністю в кадрі "

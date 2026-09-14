@@ -48,7 +48,6 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -58,23 +57,26 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from webui.config import (
-    DISALLOWED_CONTENT_PREFIXES,
-    MAX_UPLOAD_BYTES,
     STATIC_DIR,
     Settings,
     get_settings,
 )
+from webui.errors import AppError
 from webui.errors import pipeline_value_error_detail as _pipeline_value_error_detail
 from webui.errors import validation_errors_to_uk as _validation_errors_to_uk
+from webui.infrastructure.weights import prefetch_weights
 from webui.schemas import (
     CaptureInfo,
     CaptureQuality,
     MeasurementEnvelope,
-    MeasurementItem,
     PipelineInfo,
     SubjectInfo,
     TtsRequest,
 )
+from webui.services.dataset_capture import save_capture_pair
+from webui.services.mock import build_mock_measurement_envelope
+from webui.services.proxy import forward_measure, ping_space_health
+from webui.services.uploads import decode_upload
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +85,6 @@ _SETTINGS = get_settings()
 _INFERENCE_ENDPOINT = _SETTINGS.inference_endpoint
 _IS_VERCEL_PROXY_MODE = _SETTINGS.proxy_mode
 DATASET_DIR = _SETTINGS.dataset_dir
-
-_dataset_lock = asyncio.Lock()
-
-_UPLOAD_LABEL_UK = {"front": "Анфас", "side": "Профіль"}
-
 
 def _build_visualization_only_envelope(
     *,
@@ -134,229 +131,9 @@ def _build_visualization_only_envelope(
     )
 
 
-def _looks_like_raster_image(data: bytes) -> bool:
-    if len(data) < 12:
-        return False
-    if data[:2] == b"\xff\xd8":
-        return True
-    if data[:8] == b"\x89PNG\r\n\x1a\n":
-        return True
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return True
-    return False
-
-
-def _detect_image_extension(data: bytes) -> str:
-    """Map raw image magic bytes to a filesystem extension."""
-    if len(data) >= 2 and data[:2] == b"\xff\xd8":
-        return "jpg"
-    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
-        return "png"
-    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "webp"
-    return "bin"
-
-
-def _dataset_pair_stem_exists(directory: Path, stem: str) -> bool:
-    """True if any ``a{stem}.*`` or ``p{stem}.*`` file already exists."""
-    for prefix in ("a", "p"):
-        if any(directory.glob(f"{prefix}{stem}.*")):
-            return True
-    return False
-
-
-def _unique_dataset_stem(directory: Path) -> str:
-    """UTC timestamp stem for a capture pair; suffix ``_N`` if a collision exists."""
-    now = datetime.now(timezone.utc)
-    base = now.strftime("%Y%m%d_%H%M%S_") + f"{now.microsecond // 1000:03d}"
-    stem = base
-    n = 0
-    while directory.is_dir() and _dataset_pair_stem_exists(directory, stem):
-        n += 1
-        stem = f"{base}_{n}"
-    return stem
-
-
-async def _save_capture_pair_to_dataset(
-    front_bytes: bytes,
-    side_bytes: bytes,
-) -> tuple[str | None, str | None]:
-    """Persist the (front, side) image pair as ``a{timestamp}.ext`` / ``p{timestamp}.ext``.
-
-    On failure, logs and returns a Ukrainian warning string for the API
-    ``warnings`` list (measurement flow still succeeds).
-    """
-    try:
-        async with _dataset_lock:
-            DATASET_DIR.mkdir(parents=True, exist_ok=True)
-            stem = _unique_dataset_stem(DATASET_DIR)
-            front_path = DATASET_DIR / f"a{stem}.{_detect_image_extension(front_bytes)}"
-            side_path = DATASET_DIR / f"p{stem}.{_detect_image_extension(side_bytes)}"
-            front_path.write_bytes(front_bytes)
-            side_path.write_bytes(side_bytes)
-            logger.info("Saved capture pair to dataset: %s, %s", front_path, side_path)
-            return stem, None
-    except Exception as exc:  # noqa: BLE001 — best-effort persistence
-        logger.exception("Failed to save capture pair to dataset folder %s", DATASET_DIR)
-        detail = str(exc).strip() or type(exc).__name__
-        msg = (
-            "Не вдалося зберегти знімки у папку датасету "
-            f"({DATASET_DIR}): {detail}"
-        )
-        return None, msg
-
-
-def build_mock_measurement_envelope(
-    height_cm: float,
-    sex: Literal["male", "female", "other"],
-) -> MeasurementEnvelope:
-    """Deterministic demo envelope for the «без фото» UI button (no ML)."""
-    from webui.envelope import CANONICAL_MEASUREMENTS
-
-    h_scale = height_cm / 175.0
-    if sex == "female":
-        sex_scale = 0.94
-    elif sex == "male":
-        sex_scale = 1.0
-    else:
-        sex_scale = 0.97
-
-    base_cm: dict[str, float] = {
-        "chest_circumference": 102.0,
-        "waist_circumference": 86.0,
-        "hip_circumference": 100.0,
-        "neck_circumference": 39.0,
-        "neck_base_height": 148.0,
-        "shoulder_slope_width": 46.0,
-        "back_width_scapular": 38.0,
-        "chest_width_front": 34.0,
-        "back_length_to_waist": 44.0,
-        "front_length_to_waist": 42.0,
-        "arm_length_shoulder_to_wrist": 60.0,
-        "upper_arm_circumference": 30.0,
-        "wrist_circumference": 17.0,
-        "leg_length_inner_seam": 78.0,
-        "leg_length_outer_seam": 102.0,
-        "thigh_circumference": 58.0,
-        "calf_circumference": 38.0,
-        "ankle_circumference": 24.0,
-    }
-
-    measurements: list[MeasurementItem] = []
-    for mid, label_uk, src in CANONICAL_MEASUREMENTS:
-        raw = base_cm.get(mid, 50.0) * h_scale * sex_scale
-        val = round(max(1.0, raw), 1)
-        measurements.append(
-            MeasurementItem(
-                id=mid,
-                label_uk=label_uk,
-                value_cm=val,
-                uncertainty_cm=round(max(0.5, val * 0.04), 1),
-                confidence=0.55,
-                source=src,
-                quality_flags=["mock"],
-            )
-        )
-
-    capture = CaptureInfo(
-        front=CaptureQuality(quality=0.55, pose_ok=True, occlusions=[]),
-        side=CaptureQuality(quality=0.55, pose_ok=True, occlusions=[]),
-    )
-    return MeasurementEnvelope(
-        request_id=str(uuid.uuid4()),
-        created_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        pipeline=PipelineInfo(source="mock", model_version="mock-0.1", unit_system="metric"),
-        subject=SubjectInfo(height_cm=height_cm, sex=sex, age_band="adult", posture_flags=[]),
-        capture=capture,
-        measurements=measurements,
-        derived={},
-        warnings=["Тестовий режим: зображення й моделі не використовувалися."],
-    )
-
-
 # ---------------------------------------------------------------------------
 # Pipeline lifespan — load models once at startup
 # ---------------------------------------------------------------------------
-
-def _prefetch_weights(paths: list[str | None]) -> None:
-    """Make sure each weight file exists locally before the models load.
-
-    Sources in priority order (idempotent — files already on disk stay, so
-    warm restarts download nothing):
-      1. LOCAL_DATA_DIR/models/<name>   ← HF Storage Bucket mounted at /data
-      2. HF Hub model repo (env: HF_MODELS_REPO)
-      3. S3 bucket under MODELS_S3_KEY_PREFIX (when archival is configured)
-    """
-    hf_repo = (os.environ.get("HF_MODELS_REPO") or "").strip()
-    hf_revision = (os.environ.get("HF_MODELS_REVISION") or "main").strip()
-    hf_token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None)
-
-    def _pull(local: str | None) -> None:
-        if not local:
-            return
-        p = Path(local)
-        if p.is_file() and p.stat().st_size > 0:
-            return
-
-        # First: HF Storage Bucket mounted at LOCAL_DATA_DIR/models/.
-        try:
-            from webui import storage as _storage_check
-            bucket_path = _storage_check.local_model_path(p.name)
-            if bucket_path is not None:
-                p.parent.mkdir(parents=True, exist_ok=True)
-                # Symlink if possible (saves disk + matches mount semantics),
-                # else copy. Falls back to copy on Windows without privilege.
-                try:
-                    if p.exists() or p.is_symlink():
-                        p.unlink()
-                    p.symlink_to(bucket_path)
-                    logger.warning("Bucket-mount linked — file=%s → %s", p.name, bucket_path)
-                except (OSError, NotImplementedError):
-                    import shutil as _sh
-                    _sh.copy2(bucket_path, p)
-                    logger.warning("Bucket-mount copied — file=%s ← %s", p.name, bucket_path)
-                return
-        except Exception:  # noqa: BLE001
-            pass
-
-        # Second: HF Hub model repo (free, unlimited public).
-        if hf_repo:
-            try:
-                from huggingface_hub import hf_hub_download
-                p.parent.mkdir(parents=True, exist_ok=True)
-                downloaded = hf_hub_download(
-                    repo_id=hf_repo,
-                    filename=p.name,
-                    revision=hf_revision,
-                    token=hf_token,
-                    local_dir=str(p.parent),
-                )
-                logger.warning(
-                    "HF Hub download OK — repo=%s file=%s → %s (size=%d bytes)",
-                    hf_repo, p.name, downloaded, Path(downloaded).stat().st_size,
-                )
-                return
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "HF Hub download FAILED — repo=%s file=%s err=%s. Will try S3 next.",
-                    hf_repo, p.name, exc,
-                )
-
-        # Fallback: S3 bucket (when archival is configured).
-        from webui import storage as _storage
-        if not _storage.is_enabled():
-            return
-        models_prefix = (os.environ.get("MODELS_S3_KEY_PREFIX") or "models/").lstrip("/")
-        if not models_prefix.endswith("/"):
-            models_prefix += "/"
-        _storage.download_to_path(models_prefix + p.name, local)
-
-    try:
-        for path in paths:
-            _pull(path)
-    except Exception:  # noqa: BLE001
-        logger.exception("Weight pre-fetch raised — pipeline will try local paths.")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -389,7 +166,7 @@ async def lifespan(app: FastAPI):
     reg_path = cfg.regression_model_path
     device = cfg.device
 
-    _prefetch_weights([pose_coco, seg_path, reg_path])
+    prefetch_weights([pose_coco, seg_path, reg_path])
 
     try:
         from webui.inference import WebuiPipeline  # local import to avoid heavy deps at module load
@@ -488,44 +265,17 @@ async def request_validation_exception_handler(
     return JSONResponse(status_code=422, content={"detail": message})
 
 
+@app.exception_handler(AppError)
+async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 async def _validate_and_decode(
     upload: UploadFile, label: str
 ) -> tuple[Any, bytes]:
-    """Validate upload bytes and decode to a BGR ndarray (cv2 convention).
-
-    Returns the decoded image alongside the raw bytes so callers can persist
-    the original payload (e.g. into a dataset folder) without re-reading the
-    upload stream.
-    """
-    uk = _UPLOAD_LABEL_UK.get(label, label)
+    """Read an upload and decode it; returns ``(bgr_image, raw_bytes)`` (validation: services.uploads)."""
     data = await upload.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail=f"{uk}: файл порожній.")
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{uk}: файл завеликий (ліміт {MAX_UPLOAD_BYTES // (1024 * 1024)} МБ).",
-        )
-    ct = upload.content_type or ""
-    if any(ct.startswith(p) for p in DISALLOWED_CONTENT_PREFIXES):
-        raise HTTPException(
-            status_code=400,
-            detail=f"{uk}: недопустимий тип вмісту ({ct!r}). Очікується зображення.",
-        )
-    if not _looks_like_raster_image(data):
-        raise HTTPException(
-            status_code=400,
-            detail=f"{uk}: очікується JPEG, PNG або WebP.",
-        )
-
-    import cv2
-    import numpy as np
-
-    arr = np.frombuffer(data, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if img is None or img.size == 0:
-        raise HTTPException(status_code=400, detail=f"{uk}: не вдалося розпізнати зображення.")
-    return img, data
+    return decode_upload(data, upload.content_type, label), data
 
 
 @app.get("/")
@@ -589,29 +339,8 @@ async def keepalive(request: Request) -> JSONResponse:
     if not _IS_VERCEL_PROXY_MODE:
         return JSONResponse({"target": "self", "ok": True})
 
-    import httpx
-
-    url = f"{_INFERENCE_ENDPOINT.rstrip('/')}/api/health"  # type: ignore[union-attr]
-    try:
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            upstream = await client.get(url)
-    except httpx.TimeoutException:
-        return JSONResponse({"target": url, "waking": True}, status_code=202)
-    except httpx.RequestError as exc:
-        logger.error("Keepalive ping to %s failed: %s", url, exc)
-        return JSONResponse({"target": url, "error": str(exc)}, status_code=502)
-
-    ready = False
-    if upstream.status_code == 200:
-        try:
-            ready = bool(upstream.json().get("pipeline_ready"))
-        except ValueError:
-            pass
-    return JSONResponse(
-        {"target": url, "status": upstream.status_code, "pipeline_ready": ready},
-        status_code=200 if ready else 502,
-    )
-
+    body, status = await ping_space_health(_INFERENCE_ENDPOINT)  # type: ignore[arg-type]
+    return JSONResponse(body, status_code=status)
 
 async def _proxy_measure_to_hf(
     height_cm: float,
@@ -620,46 +349,18 @@ async def _proxy_measure_to_hf(
     front: UploadFile,
     side: UploadFile,
 ) -> Response:
-    """Forward the parsed multipart /api/measure request parameters to the HF Space backend.
-
-    The upstream response (JSON or error) is returned verbatim to the client.
-    Uses httpx with a generous timeout for heavy CPU inference.
-    """
-    import httpx
-
-    target_url = f"{_INFERENCE_ENDPOINT.rstrip('/')}/api/measure"  # type: ignore[union-attr]
-    front_bytes = await front.read()
-    side_bytes = await side.read()
-
-    files = {
-        "front": (front.filename or "front.jpg", front_bytes, front.content_type or "image/jpeg"),
-        "side": (side.filename or "side.jpg", side_bytes, side.content_type or "image/jpeg"),
-    }
-    data = {
-        "height_cm": str(height_cm),
-        "sex": sex,
-        "pose_backend": pose_backend,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            upstream = await client.post(target_url, data=data, files=files)
-        return Response(
-            content=upstream.content,
-            status_code=upstream.status_code,
-            media_type=upstream.headers.get("content-type", "application/json"),
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="Час очікування відповіді від сервера інференсу вичерпано. Спробуйте ще раз.",
-        )
-    except httpx.RequestError as exc:
-        logger.error("Proxy request to HF Space failed: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Не вдалося зʼєднатися з сервером інференсу: {exc}",
-        )
+    """Forward /api/measure to the HF Space; the upstream response is returned verbatim."""
+    front_part = (front.filename or "front.jpg", await front.read(), front.content_type or "image/jpeg")
+    side_part = (side.filename or "side.jpg", await side.read(), side.content_type or "image/jpeg")
+    status, content, media_type = await forward_measure(
+        _INFERENCE_ENDPOINT,  # type: ignore[arg-type]
+        height_cm=height_cm,
+        sex=sex,
+        pose_backend=pose_backend,
+        front=front_part,
+        side=side_part,
+    )
+    return Response(content=content, status_code=status, media_type=media_type)
 
 
 def _with_warning(envelope: MeasurementEnvelope, warning: str | None) -> MeasurementEnvelope:
@@ -736,7 +437,7 @@ async def measure(
         front_img = downscale_for_inference(front_img)
         side_img = downscale_for_inference(side_img)
 
-    _, dataset_save_warning = await _save_capture_pair_to_dataset(front_bytes, side_bytes)
+    _, dataset_save_warning = await save_capture_pair(DATASET_DIR, front_bytes, side_bytes)
 
     # One request_id per call, used for both the envelope and the archive prefix.
     request_id = str(uuid.uuid4())
