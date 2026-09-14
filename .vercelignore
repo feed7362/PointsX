@@ -6,16 +6,8 @@
 .cursor
 .claude
 
-# Large data/training artifacts
-dataset
-notebooks
-image
-screen
-tests
-deploy
-old_weights
-
-# Large data (exclude root folders only, not JS subdirectories)
+# Large data — ANCHORED to the repo root. An unanchored `dataset` also matched
+# src/webui/static/js/dataset/ and 404'd the whole dataset page in production.
 /dataset
 /dataset_manual
 /notebooks
