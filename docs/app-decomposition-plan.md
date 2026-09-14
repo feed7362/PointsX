@@ -213,3 +213,8 @@ src/webui/static/js/
   шимів немає). Спершу `tests/test_storage.py` (11 тестів: конфіг і префікси env, локальний архів, Supabase plain/sealed,
   S3 через fake boto3 з ретраєм) зафіксовано на старому модулі — зелені й після розбиття.
   Перевірено: pytest 64/64, `vercel_smoke`, `pointsx-eval` байт у байт, реальний старт з вагами.
+- Крок 6 (`refactor/webui-06-envelope`): `envelope.py` → пакет `webui/envelope/` {`catalog`, `corrections`, `derive`,
+  `build`}; нарізка за діапазонами рядків з перевірками-якорями, тож таблиці корекцій і коментарі з історією підгонки
+  перенесені дослівно; `webui.envelope` імпортується як раніше (`__init__` реекспортує). Перевірено: pytest 64/64,
+  `vercel_smoke`, `pointsx-eval` байт у байт, хеші оверлеїв і envelope на синтетичних тілах = базові,
+  `/api/measure` з оверлеями на 3 реальних фото = базові (значення й PNG).

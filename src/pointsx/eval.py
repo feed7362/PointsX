@@ -497,7 +497,7 @@ def _fit_median_scales_pct(rows: list[ErrorRow]) -> dict[str, dict[str, float]]:
 
 
 def _print_fitted_offsets(fitted: dict[str, dict[str, float]]) -> None:
-    print("\n=== Fitted percent scales (paste into envelope.py "
+    print("\n=== Fitted percent scales (paste into src/webui/envelope/corrections.py "
           "_SEX_CIRCUMFERENCE_SCALES_PCT) ===")
     if not fitted:
         print("  (no cells had enough data to fit)")
