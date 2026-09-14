@@ -1,6 +1,6 @@
 # PointsX
 
-Body measurement extraction from 2D photos using YOLO11 pose estimation + segmentation.
+Body measurement extraction from 2D photos using YOLO pose estimation + segmentation (FitMeasure AI).
 
 **Input:** Front + side view photos + known height (cm)
 **Output:** Body measurements (widths, lengths, circumferences) in cm
@@ -48,6 +48,31 @@ data/LV-MHP-v2/       # Real dataset: 15k train + 5k val images
 notebooks/            # Jupyter: exploration, training, synthetic generation
 runs/                 # Training outputs (auto-generated)
 ```
+
+## Monorepo layout & deploy (since 2026-09-13)
+
+One repo (`feed7362/PointsX`, default branch `main`) replaces PointsX + Pointx-backend + Pointx-frontend
+(the latter two imported with history via `git subtree`, then archived). Plan/log: `docs/monorepo-cicd-plan.md`,
+merge decisions: `docs/migration-phase0-report.md`.
+
+```
+src/pointsx/          measurement core (shared by CLI, webui, eval)
+src/webui/            FastAPI app + envelope + static UI — one app, two deploy modes
+api/index.py          Vercel entry (POINTSX_VERCEL=1 → proxy mode: /api/measure forwarded to the Space)
+apps/backend/         HF Space packaging: Dockerfile, Space README card, .dockerignore, .gitattributes
+scripts/ci/           stage_hf_space.sh, stage_vercel.sh, vercel_smoke.py, space_smoke.py, check_vercelignore.py
+tests/                unit tests + geometry snapshot gate (procedural bodies, no real photos)
+.github/workflows/    ci.yml (lint, test, vercel-smoke, docker, web → deploy), deploy.yml, keepalive.yml
+```
+
+- Push to `main` → `ci` → on green `deploy`: web tree committed on top of the `vercel` branch (Vercel builds it),
+  Space tree committed on top of the HF Space git (`HF_TOKEN` secret) + smoke test. Nothing is force-pushed.
+- `vercel` is a **generated deploy branch**, never a dev branch. Manual `git push origin <commit>:vercel` still deploys
+  (hotfix path) but must also land on `main`, or the next deploy overlays it.
+- Vercel function has no torch/cv2: keep heavy imports lazy on the path `api/index.py` imports (`vercel-smoke` enforces).
+- `.vercelignore` patterns must be root-anchored (`/dataset`), CI fails if a deployable file would be dropped.
+- Accuracy constants in `webui/envelope.py` are fitted against the ellipse; regressor only with `POINTSX_USE_REGRESSOR=1`.
+- Input images are capped at 1280 px (`pointsx.pipeline.downscale_for_inference`) at every entry point.
 
 ## Commands
 
@@ -100,8 +125,10 @@ python -m pointsx.synthetic.pipeline --n-bodies 500 --blender-exe /path/to/blend
 
 ## Models
 
-- `yolo11n-pose.pt` — YOLO11 nano pose (16 keypoints, finetuned on LV-MHP-v2)
-- `yolo11n-seg.pt` — YOLO11 nano segmentation (COCO pre-trained)
+- `yolo26-pose.pt` — COCO-17 pose mapped to 16 points (default `coco` backend in prod)
+- `pose-cus.pt` — optional custom 16-point pose (LV-MHP-v2 finetune), `custom` backend
+- `yolo12l-person-seg-extended.pt` — person segmentation
+- Missing configured weights raise at load (no silent fallback to other model families)
 - `CircumferenceRegressor` — MLP: Linear(28→64)→ReLU→BN→Dropout(0.2)→Linear(64→32)→ReLU→BN→Linear(32→6)
 
 ## Notes

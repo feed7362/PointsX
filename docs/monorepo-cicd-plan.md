@@ -282,6 +282,21 @@ Smoke Space не робить справжній `/api/measure`: для цьог
 17. Прибрати `.DS_Store`, `__pycache__`, розібратися з 23 брудними файлами.
 18. Оновити `.claude/CLAUDE.md` під нову структуру.
 
+**Стан (2026-09-14):**
+
+- Кроки 15: теги `archive/master`, `archive/demo`, `archive/ui-and-size-charts` запушено, віддалені гілки видалено (2026-09-13).
+  На GitHub лишились лише `main` (гілка за замовчуванням) і згенерована `vercel`.
+- Крок 16: в `Pointx-backend` і `Pointx-frontend` запушено README з позначкою «архівовано, переїхало в PointsX».
+  Обидві гілки `main` (`f5ce97b`, `1391e3a`) уже в історії монорепозиторію; локальні клони без незбережених змін.
+  **Архівація (Settings → Danger Zone → Archive this repository) — дія власника.**
+- Крок 17: з `main` прибрано `.DS_Store` (+ `.gitignore`). Тимчасових `__pycache__`/`.pyc` у git немає.
+  Лишаються на рішення власника: застарілі інструкції доби двох репозиторіїв (`START.md`, `RUN-LOCAL.md`, `RUN-WEBUI.md`,
+  `DATASET_COLLECTION.md`, `deploy/`, `run-local.sh`) і `deploy-vercel.sh` (ручний деплой через Vercel CLI; тепер
+  ручний шлях — `git push` у `vercel`).
+- Крок 18: `.claude/CLAUDE.md` — розділ про структуру монорепозиторію й деплой, актуальні ваги моделей.
+- Локальна тека `Q:/Projects/KHNU/Pointx-backend` має remote `origin` = HF Space: не пушити звідти — Space тепер
+  оновлює лише CI (push буде відхилено як non-fast-forward, але краще видалити клон після архівації).
+
 ---
 
 ## 6. Ризики

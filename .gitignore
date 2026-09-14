@@ -32,3 +32,6 @@ dataset.zip
 # eval artifacts (regenerable): cached BodyM masks + run outputs
 eval/.cache/
 eval/reports/
+
+# macOS
+.DS_Store
