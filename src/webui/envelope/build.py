@@ -19,6 +19,7 @@ from webui.envelope.derive import (
     _derive_neck_base_height,
     _derive_upper_arm,
 )
+from webui.envelope.priors import PRIOR_IDS, predict_prior
 from webui.schemas import (
     CaptureInfo,
     CaptureQuality,
@@ -43,17 +44,26 @@ def _value_for_id(
     side_kp: Keypoints,
     cal: CalibrationInfo,
     chest_circ_cm: float | None,
+    *,
+    height_cm: float,
+    sex: str,
+    chest_for_prior: float | None,
 ) -> tuple[float | None, list[str]]:
     """Return (value_cm, quality_flags) for a single canonical id.
 
-    `chest_circ_cm` is precomputed once because two other IDs depend on it.
+    `chest_circ_cm` is precomputed once because other IDs depend on it; `chest_for_prior` is the
+    same value after the per-sex correction, i.e. what the user sees.
     """
     flags: list[str] = []
+
+    # Population priors (ANSUR II) for what the silhouette cannot resolve -----
+    if mid in PRIOR_IDS:
+        flags.append("prior")
+        return predict_prior(mid, sex, height_cm, chest_for_prior), flags
 
     # Direct mappings -------------------------------------------------------
     if mid == "waist_circumference":           return bm.waist_circumference_cm, flags
     if mid == "hip_circumference":             return bm.hip_circumference_cm, flags
-    if mid == "neck_circumference":            return bm.neck_circumference_cm, flags
     if mid == "thigh_circumference":           return bm.thigh_circumference_cm, flags
     if mid == "calf_circumference":            return bm.calf_circumference_cm, flags
     if mid == "wrist_circumference":           return bm.wrist_circumference_cm, flags
@@ -67,9 +77,6 @@ def _value_for_id(
     if mid == "chest_circumference":
         flags.append("derived")
         return chest_circ_cm, flags
-    if mid == "back_width_scapular":
-        flags.append("proxy")
-        return bm.torso_width_side_cm, flags
     if mid == "back_length_to_waist":
         flags.append("derived")
         return _derive_back_length(bm, side_kp, cal.px_per_cm_side), flags
@@ -121,12 +128,16 @@ def body_to_envelope(
         sex_scales_pct = scales_table.get(sex, {})
     else:
         sex_scales_pct = {}
+    chest_for_prior = chest_circ_cm
+    if chest_for_prior is not None and "chest_circumference" in sex_scales_pct:
+        chest_for_prior *= 1.0 + float(sex_scales_pct["chest_circumference"]) / 100.0
 
     items = []
     out_of_range: list[str] = []
     for mid, label_uk, source in CANONICAL_MEASUREMENTS:
         value, flags = _value_for_id(
             mid, bm, result.front_kp, result.side_kp, result.cal, chest_circ_cm,
+            height_cm=subject_height_cm, sex=sex, chest_for_prior=chest_for_prior,
         )
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.

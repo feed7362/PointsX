@@ -35,3 +35,6 @@ eval/reports/
 
 # macOS
 .DS_Store
+
+# ANSUR II raw CSVs (public domain, downloaded locally; see scripts/ansur/README.md)
+scripts/ansur/*.csv
