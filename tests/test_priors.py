@@ -18,6 +18,8 @@ from webui.envelope.priors import PRIOR_IDS, predict_prior  # noqa: E402
     ("neck_circumference", "male", 176.0, 106.0, 42.0, 45.0),    # ANSUR M mean 43.5
     ("back_width_scapular", "female", 163.0, 95.0, 36.0, 38.5),  # ANSUR F interscye mean 37.3
     ("back_width_scapular", "male", 176.0, 106.0, 41.5, 44.5),   # ANSUR M mean 43.1
+    ("upper_arm_circumference", "female", 163.0, 95.0, 29.5, 32.0),  # ANSUR F flexed biceps 30.6
+    ("upper_arm_circumference", "male", 176.0, 106.0, 34.5, 37.0),   # ANSUR M 35.8
 ])
 def test_average_body_gets_population_mean(mid, sex, height, chest, lo, hi):
     assert lo <= predict_prior(mid, sex, height, chest) <= hi
@@ -42,4 +44,4 @@ def test_height_only_fallback_without_chest():
 def test_unknown_id_or_bad_height():
     assert predict_prior("waist_circumference", "female", 163.0, 95.0) is None
     assert predict_prior("neck_circumference", "female", 0.0, 95.0) is None
-    assert PRIOR_IDS == {"neck_circumference", "back_width_scapular"}
+    assert PRIOR_IDS == {"neck_circumference", "back_width_scapular", "upper_arm_circumference"}

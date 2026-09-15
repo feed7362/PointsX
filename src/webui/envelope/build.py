@@ -17,7 +17,6 @@ from webui.envelope.derive import (
     _derive_chest_circumference,
     _derive_front_length,
     _derive_neck_base_height,
-    _derive_upper_arm,
 )
 from webui.envelope.priors import PRIOR_IDS, predict_prior
 from webui.schemas import (
@@ -88,9 +87,6 @@ def _value_for_id(
         return _derive_neck_base_height(front_kp, cal.px_per_cm_front), flags
 
     # Anthropometric approximations -----------------------------------------
-    if mid == "upper_arm_circumference":
-        flags.append("approximation")
-        return _derive_upper_arm(chest_circ_cm), flags
     if mid == "ankle_circumference":
         flags.append("approximation")
         return _derive_ankle(bm.calf_circumference_cm), flags

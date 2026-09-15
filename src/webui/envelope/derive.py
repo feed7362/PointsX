@@ -6,8 +6,7 @@ from pointsx.keypoints import KP, distance, is_valid, midpoint
 from pointsx.schemas import BodyMeasurements, Keypoints
 
 # Anthropometric ratios used when a measurement isn't directly observable
-_UPPER_ARM_TO_CHEST_RATIO = 0.34   # adult average upper-arm girth ≈ 33-35% of chest girth
-_ANKLE_TO_CALF_RATIO      = 0.62
+_ANKLE_TO_CALF_RATIO = 0.62
 
 
 # ---------------------------------------------------------------------------
@@ -107,12 +106,6 @@ def _derive_front_length(
 def _derive_neck_base_height(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
     # Vertical span from upper neck to mid-ankles ≈ standing height minus head.
     return _kp_to_midpoint_cm(front_kp, KP.UPPER_NECK, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, px_per_cm_front)
-
-
-def _derive_upper_arm(chest_circ: float | None) -> float | None:
-    if chest_circ is None or chest_circ <= 0:
-        return None
-    return chest_circ * _UPPER_ARM_TO_CHEST_RATIO
 
 
 def _derive_ankle(calf_circ: float | None) -> float | None:

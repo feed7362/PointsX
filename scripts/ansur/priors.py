@@ -17,6 +17,8 @@ from _common import FILES, col, load
 TARGETS = {
     "neck_circumference": "neckcircumferencebase",  # corpus GT matches the base girth (F 36.4 vs 37.1)
     "back_width_scapular": "interscyei",           # across the back between posterior axillary folds
+    # ANSUR has only the FLEXED biceps girth; corpus GT (relaxed) sits ~1.3 cm lower at equal chest.
+    "upper_arm_circumference": "bicepscircumferenceflexed",
 }
 FEATURE_SETS = {
     "mean": [],
