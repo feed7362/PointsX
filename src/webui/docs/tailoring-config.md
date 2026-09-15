@@ -8,9 +8,11 @@ It is consumed by frontend sizing and pattern-generation logic.
 ## File and Version
 
 - Config file: `src/webui/static/data/tailoring_config.json`
-- Current version: `5` (top-level `version`)
+- Current version: `6` (top-level `version`)
 
 When updating semantics, increment `version` and keep migration notes with the change.
+
+**UA women's labels (2026-07-29, labels only, no version bump):** `ua_women_*` codes are Ukrainian sizes, UA = EU + 6 (bust 86–90 → `44`, EU 38). Before commit `5a046da` they duplicated the EU numbers without the `EU` prefix (`34`…`44`). Bands and ordinals did not change.
 
 **v5 note:** Restored regional `code` strings on all **`eu_*`** and **`us_*`** grids from the canonical `EU …` / letter labels (reference: legacy `tailoring_config` v2). **`min_cm` / `max_cm` bands** stay at current project values (e.g. men v4 boundaries). **`ua_*`** grids unchanged.
 

@@ -554,7 +554,7 @@ function checkProfilePose(lm) {
   return { ok: true };
 }
 
-import { t } from "./i18n.js";
+import { t } from "../i18n/index.js";
 
 function translatePoseReason(reason) {
   if (!reason) return reason;

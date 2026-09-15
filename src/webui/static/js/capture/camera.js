@@ -1,4 +1,4 @@
-import { t } from "./i18n.js";
+import { t } from "../i18n/index.js";
 
 /** @returns {string | null} Ukrainian/English message when camera API cannot be used. */
 export function cameraUnavailableReason() {

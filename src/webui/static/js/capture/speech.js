@@ -3,9 +3,10 @@
  * Prefer server neural voice (edge-tts via ``/api/tts``, MP3 playback), fallback to SpeechSynthesis.
  */
 
+import { fetchTtsMp3 as fetchTtsMp3Blob } from "../api/tts.js";
+import { t } from "../i18n/index.js";
 import { captureState } from "./state.js";
 import { getCaptureDom } from "./dom.js";
-import { t } from "./i18n.js";
 
 const POSE_VOICE_MIN_INTERVAL_MS = 1800;
 const POSE_VOICE_REPEAT_MS = 9000;
@@ -15,30 +16,6 @@ let speakGeneration = 0;
 
 /** @type {HTMLAudioElement | null} */
 let activeAudio = null;
-
-const audioBlobCache = new Map();
-const AUDIO_CACHE_MAX = 48;
-
-/** Session-level kill switch — once the server returns 503 (or fetch fails at the
- * network level) we stop calling /api/tts for the rest of the page lifetime and go
- * straight to the browser fallback. Timeouts (AbortError) do NOT trip it: the warmup
- * request can time out on a Vercel cold start while the endpoint is healthy. */
-let serverTtsDisabledForSession = false;
-
-/** Same-origin TTS endpoint (avoids bad resolution from import maps / subpaths). */
-function ttsEndpointUrl() {
-  if (typeof window === "undefined" || !window.location?.origin) return "/api/tts";
-  return `${window.location.origin}/api/tts`;
-}
-
-const TTS_FETCH_TIMEOUT_MS = 8000;
-
-function trimAudioBlobCache() {
-  while (audioBlobCache.size > AUDIO_CACHE_MAX) {
-    const k = audioBlobCache.keys().next().value;
-    audioBlobCache.delete(k);
-  }
-}
 
 function stopActiveAudio() {
   if (!activeAudio) return;
@@ -50,42 +27,6 @@ function stopActiveAudio() {
     /* ignore */
   }
   activeAudio = null;
-}
-
-async function fetchTtsMp3Blob(text) {
-  if (serverTtsDisabledForSession) throw new Error("tts:disabled-this-session");
-  const cached = audioBlobCache.get(text);
-  if (cached) return cached;
-  const ac = new AbortController();
-  const to = window.setTimeout(() => ac.abort(), TTS_FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(ttsEndpointUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text }),
-      signal: ac.signal,
-    });
-    if (!res.ok) {
-      // 503 = backend has POINTSX_TTS_DISABLE=1 or edge-tts is blocked. Stop trying.
-      if (res.status === 503) serverTtsDisabledForSession = true;
-      throw new Error(`tts:${res.status}`);
-    }
-    const blob = await res.blob();
-    if (blob.size < 32) throw new Error("tts:empty");
-    const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-    const mp3 = head[0] === 0xff && (head[1] & 0xe0) === 0xe0;
-    const id3 = head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33;
-    if (!mp3 && !id3) throw new Error("tts:not-audio");
-    audioBlobCache.set(text, blob);
-    trimAudioBlobCache();
-    return blob;
-  } catch (err) {
-    // Network-level failure (CORS, DNS, blocked host) — disable for the session.
-    if (err?.name === "TypeError") serverTtsDisabledForSession = true;
-    throw err;
-  } finally {
-    window.clearTimeout(to);
-  }
 }
 
 /**
@@ -108,7 +49,7 @@ export function primeVoiceAfterUserGesture() {
   }
 
   // Warm up the server TTS function with a short text so the cold start happens now,
-  // not during the first real spoken message. Result lands in audioBlobCache automatically.
+  // not during the first real spoken message. The MP3 lands in the api/tts.js cache.
   void fetchTtsMp3Blob(t("countdown-ready")).catch(() => {
     /* warmup failure is silent — fallback voice will be used if needed */
   });

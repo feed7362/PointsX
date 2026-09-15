@@ -87,7 +87,7 @@ def _ensure_yolo_weights(path: Path) -> Path | None:
 def _mirror_to_local_data_dir(src: Path) -> None:
     """Copy `src` to LOCAL_DATA_DIR/<basename> (best-effort, never raises).
 
-    The bucket-mount lookup in webui/storage.py looks under both
+    The bucket-mount lookup in webui/infrastructure/storage/ looks under both
     /data/models/ and /data/. We write to /data/ root so the file is
     immediately discoverable on the next restart.
     """
