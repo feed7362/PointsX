@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-EXPECTED_ROUTES = [
+EXPECTED_ROUTES = sorted([
     ("GET", "/"),
     ("GET", "/dataset.html"),
     ("GET", "/api/health"),
@@ -16,17 +16,14 @@ EXPECTED_ROUTES = [
     ("POST", "/api/measure"),
     ("POST", "/api/measure/mock"),
     ("POST", "/api/tts"),
-]
+])
 
 
 def _api_routes(app):
-    out = []
-    for route in app.routes:
-        methods = getattr(route, "methods", None)
-        if not methods or route.path.startswith(("/docs", "/redoc", "/openapi")):
-            continue
-        out.extend((m, route.path) for m in sorted(methods - {"HEAD"}))
-    return out
+    # Read the OpenAPI schema, not app.routes: FastAPI >= 0.141 keeps included routers as lazy
+    # _IncludedRouter entries, so app.routes no longer lists the endpoints themselves.
+    paths = app.openapi()["paths"]
+    return sorted((method.upper(), path) for path, ops in paths.items() for method in ops)
 
 
 def test_routes_are_exactly_the_public_api(monkeypatch):
