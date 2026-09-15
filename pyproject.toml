@@ -20,6 +20,8 @@ dependencies = [
     "scipy>=1.17.1",
     "smplx>=0.1.28",
     "fastapi>=0.115.0",
+    # Imported directly by webui (schemas); was only pulled in through fastapi.
+    "pydantic>=2.0",
     "uvicorn[standard]>=0.32.0",
     # smpl-anthropometry is not on PyPI — install manually:
     # pip install git+https://github.com/DavidBoja/SMPL-Anthropometry.git
@@ -44,6 +46,14 @@ dependencies = [
     "httpx>=0.27.0",
     "supabase>=2.31.0",
 ]
+
+[project.optional-dependencies]
+# Synthetic SMPL-X pipeline (vendored anthropometry). Blender (bpy, mathutils) is external, not pip-installable.
+synthetic = ["trimesh>=4.0"]
+
+[dependency-groups]
+# Installed by `uv sync` by default: tests, lint, and the .vercelignore CI guard.
+dev = ["pytest>=8.0", "ruff>=0.6", "pathspec>=0.12"]
 
 [project.scripts]
 pointsx = "pointsx.cli:main"
