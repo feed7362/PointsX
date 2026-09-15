@@ -20,6 +20,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "dataset-viewer"))
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from pointsx.gt_sanity import check_gt  # noqa: E402
 
 _key = REPO_ROOT / "keys" / "dataset_private_key.txt"
 if _key.is_file():
@@ -134,6 +137,17 @@ def main() -> int:
                 row[canonical] = v
             else:
                 n_implausible += 1
+
+        gt = {c: row[c] for c in GT_MAP.values() if c in row}
+        check = check_gt(float(height), gt)
+        if check.exclude_subject:
+            print(f"[skip] {sid[:8]}: GT not plausible as a whole — {'; '.join(check.reasons)}",
+                  file=sys.stderr)
+            n_skipped += 1
+            continue
+        for mid, why in check.dropped.items():
+            print(f"[drop] {sid[:8]}: {why}", file=sys.stderr)
+            del row[mid]
 
         n_gt = sum(1 for c in GT_MAP.values() if c in row)
         if n_gt < MIN_VALID_GT:

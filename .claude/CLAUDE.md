@@ -113,6 +113,21 @@ tests/                unit + HTTP contract + geometry snapshot gate (procedural 
 5. When the module graph changes, bump the `?v=` cache-buster on the entry `<script>` in `index.html` / `dataset.html`.
 6. JS tests: `node --test 'src/webui/static/js/__tests__/*.test.js'` (CI `web` job).
 
+### Accuracy changes: re-measure every time
+
+Any change that can move a measurement (GT corpus or gate, pose/seg models or versions, calibration, rows,
+widths, ellipse, envelope corrections/derivations) is followed by
+`.venv/Scripts/python scripts/eval_track.py run --label "<what changed>"` before commit.
+
+- It runs both benchmarks (app GT on real photos; BodyM perfect silhouettes testA + testB), appends to
+  `runs/eval/ledger.jsonl` and compares with the previous entry. Exit 1 = regression.
+- Read the detection map it prints: BodyM sees only the ellipse math for chest/waist/hip/thigh. "BodyM
+  unchanged" after a pose, row or envelope change means blind, not safe.
+- If the scored set changed (GT gate, new subjects), full-set MAE is not comparable; use the intersection
+  deltas it prints.
+- Correction constants: report leave-one-out, never in-sample MAE (see `envelope/corrections.py`).
+- Ledger and reports stay local (per-subject errors on real people). Only aggregates go into docs/commits.
+
 ### Refactor checklist (behaviour must not change)
 
 - `pytest` (contract, services, storage, config, bootstrap, geometry snapshot) green.

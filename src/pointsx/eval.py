@@ -42,6 +42,7 @@ import numpy as np
 from pointsx.circumference import estimate_circumferences
 from pointsx.postprocess import validate_measurements
 from pointsx.schemas import BodyMeasurements
+from pointsx.gt_sanity import check_gt
 from webui.envelope import CANONICAL_MEASUREMENTS, DISPLAY_MEASUREMENT_IDS, body_to_envelope
 from webui.infrastructure.inference import InferenceResult, WebuiPipeline
 
@@ -152,8 +153,17 @@ def _read_subjects(csv_path: Path) -> list[SubjectRow]:
                     except ValueError:
                         logger.warning("Subject %s: bad %s=%r",
                                        raw.get("subject_id"), col, v)
+            subject_id = str(raw.get("subject_id") or front.stem)
+            check = check_gt(float(raw["height_cm"]), gt)
+            if check.exclude_subject:
+                logger.warning("Subject %s excluded, GT not plausible as a whole: %s",
+                               subject_id, "; ".join(check.reasons))
+                continue
+            for mid, why in check.dropped.items():
+                logger.warning("Subject %s: GT %s dropped (%s)", subject_id, mid, why)
+                gt.pop(mid)
             rows.append(SubjectRow(
-                subject_id=str(raw.get("subject_id") or front.stem),
+                subject_id=subject_id,
                 front=front, side=side,
                 height_cm=float(raw["height_cm"]),
                 sex=str(raw.get("sex") or "other").lower(),
