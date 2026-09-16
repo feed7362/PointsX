@@ -7,7 +7,8 @@ widths (no extra ML required).
 
     catalog.py      ids, labels, display subset, default confidence, plausible ranges
     corrections.py  per-sex circumference and length bias corrections (with provenance)
-    derive.py       chest, back/front length, neck base, upper arm, ankle
+    derive.py       chest, back/front length, neck base, ankle
+    priors.py       neck, back width, upper arm from height, sex and chest (ANSUR II linear models)
     build.py        body_to_envelope
 """
 from webui.envelope.build import body_to_envelope

@@ -10,73 +10,74 @@ from __future__ import annotations
 # only apply to these four IDs (chest/waist/hip/thigh) — other measurements
 # are not bias-corrected here.
 #
-# Fit fresh values via ``pointsx-eval --fit-offsets`` and paste the printed dict back here when new
-# ground-truth subjects arrive. Refitted 2026-07-20 on the app GT corpus (n=11
-# real subjects with tape measurements, 8 F / 3 M), AFTER the thigh-width
-# extraction fix. Method: median(gt / predicted), the L1-optimal multiplicative
-# correction, rounded to 0.5 %.
+# Refitted 2026-09-16 on the app GT corpus after the cross-measurement GT gate
+# (pointsx/gt_sanity.py): n=16 (12 F / 4 M). Method: median(gt / predicted),
+# the L1-optimal multiplicative correction, rounded to 0.5 %, via
+# ``scripts/refit_corrections.py runs/eval/raw_gated.csv`` on a
+# ``pointsx-eval --no-sex-offsets`` report (raw predictions, replayed exactly).
 #
-# Male chest is deliberately absent (see the inline note on the female cell):
-# its fitted +3.9 % improves in-sample but worsens leave-one-out — n=3
-# overfitting. Leave-one-out MAE over the four circumferences: 6.50 cm with
-# this table, 6.81 cm correcting all four, 11.0 cm with no correction at all.
+# A cell is kept only if (a) the bootstrap 95 % CI of the fitted ratio excludes
+# 1.0 and (b) leave-one-out (LOO) MAE beats no-correction by > 0.2 cm.
+# Numbers below are LOO (held-out), never in-sample:
 #
-# CAVEAT: the male cells rest on n=3 subjects — treat them as provisional and
-# refit once the corpus has ~8+ male subjects.
+#   cell             n   none   LOO    fitted   CI(ratio)
+#   F chest         11   5.08   4.34   -2.5 %   [0.933, 0.997]
+#   F waist         12  20.10   4.20  -20.0 %   [0.765, 0.832]
+#   F hip           12   6.18   4.00   -5.5 %   [0.929, 0.978]
+#   F thigh         12  10.52   3.60  -17.0 %   [0.817, 0.900]
+#   M chest          4   3.73     —    +3.0 %   [0.963, 1.049]  EXCLUDED: CI spans 1.0
+#   M waist          4  12.73   3.75  -13.0 %   [0.840, 0.929]
+#   M hip            4  10.15   4.00   -7.5 %   [0.845, 0.955]
+#   M thigh          4  12.33   3.29  -18.0 %   [0.762, 0.891]
+#
+# Male chest stays absent for the same reason as in the July fit (n=3 then, n=4
+# now): the CI spans 1.0. CAVEAT: the male cells rest on n=4 (LOO on 3) —
+# provisional until the corpus has ~8+ male subjects.
+#
+# Previous table (2026-07-20, n=11, 8 F / 3 M): F chest -4.5, waist -17.5,
+# hip -5.0, thigh -17.0; M waist -15.5, hip -10.5, thigh -23.5. Replayed on the
+# gated corpus it scored 3.73 cm on the 159 corrected observations, partly
+# in-sample (8 of the 12 F were in its fit set); this table scores 3.69 held-out.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
-    "female": {  # n=8
-        # Chest RESTORED 2026-07-20 after a real-world report of ~10 cm
-        # over-measurement. It had been gated to zero because its bootstrap CI
-        # spans 1.0 — but "not significant" means UNCERTAIN, not "use zero": the
-        # fitted point estimate is still the best single guess, and dropping it
-        # measured worse (MAE 5.9 uncorrected vs 5.0 here; LOOCV 5.9 vs 5.6).
-        # Male chest is deliberately still absent: its fitted +3.9 % improves
-        # in-sample (4.6) but WORSENS leave-one-out (6.3) — n=3 overfitting.
-        "chest_circumference":  -4.5,
-        # Waist refitted 2026-07-29 for the new FRONT anchor (fixed 0.25 of the
-        # pelvis->neck span instead of the narrowest row). MAE 5.98 -> 4.45.
-        "waist_circumference": -17.5,   # %
-        "hip_circumference":    -5.0,
+    "female": {  # n=12
+        "chest_circumference":  -2.5,
+        "waist_circumference": -20.0,   # %
+        "hip_circumference":    -5.5,
         "thigh_circumference": -17.0,
     },
-    "male": {  # n=3 — provisional
-        "waist_circumference": -15.5,
-        "hip_circumference":   -10.5,
-        "thigh_circumference": -23.5,
+    "male": {  # n=4 — provisional
+        "waist_circumference": -13.0,
+        "hip_circumference":    -7.5,
+        "thigh_circumference": -18.0,
     },
     # "other" averages male and female so an unknown-sex subject is biased
-    # toward neither extreme.
+    # toward neither extreme (male chest counts as 0).
     "other": {
-        "waist_circumference": -14.0,
-        "hip_circumference":    -8.0,
-        "thigh_circumference": -20.0,
+        "chest_circumference":  -1.0,
+        "waist_circumference": -16.5,
+        "hip_circumference":    -6.5,
+        "thigh_circumference": -17.5,
     },
 }
 
 # Sex-INDEPENDENT bias corrections for the non-circumference measurements.
-# Fitted 2026-07-20 on the same n=11 app GT corpus, median(gt / predicted).
+# Refitted 2026-09-16 on the same gated corpus (n=16), same method and gate.
+# Sex-independent on purpose: 12 F / 4 M is too thin for per-sex length fits.
 #
-# Why these were the biggest remaining errors: the per-sex table above only ever
-# covered the four circumferences, so lengths and heights carried their full
-# systematic bias uncorrected. They were the WORST measurements in the pipeline
-# (inner seam MAE 10.7 cm with bias +10.7 — i.e. essentially pure offset, no
-# scatter), simply because nothing corrected them.
+#   cell                    n   none   LOO   fitted   CI(ratio)
+#   leg_length_inner_seam  16   7.60   4.25  -8.0 %   [0.884, 0.942]
+#   leg_length_outer_seam  16   4.28   3.28  -2.5 %   [0.942, 0.994]
+#   neck_base_height       16   6.35   3.05  +4.5 %   [1.027, 1.057]
+#   back_length_to_waist   16   3.48   2.06  +8.0 %   [1.043, 1.135]  NEW (July: CI spanned 1.0 at n=11)
+#   chest_width_front      16   4.66     —   +2.5 %   [0.986, 1.173]  EXCLUDED: CI spans 1.0
+#   front_length_to_waist  16   3.87     —   +5.5 %   [0.957, 1.129]  EXCLUDED: CI spans 1.0
 #
-# Sex-INDEPENDENT on purpose: splitting these by sex measured WORSE in
-# leave-one-out (5.45 vs 5.39 cm overall) — 8 female / 3 male is too thin to
-# support per-sex length fits, so the split fits noise.
-#
-# Only measurements passing BOTH gates are listed: (a) the bootstrap 95 % CI on
-# the fitted ratio excludes 1.0, and (b) leave-one-out MAE improves by >0.2 cm.
-# Deliberately EXCLUDED by those gates:
-#   chest_width_front     +8.9 % but CI [-1.0, +25.0] spans zero, LOOCV -0.3
-#   back_length_to_waist  +6.8 % but CI [-0.7, +13.6] spans zero, LOOCV +0.7
-#
-# Leave-one-out overall MAE: 6.18 cm before -> 5.23 cm with this table.
+# Previous (2026-07-20): inner -9.5, outer -2.5, neck_base +4.0.
 _LENGTH_SCALES_PCT: dict[str, float] = {
-    "leg_length_inner_seam":  -9.5,   # %   MAE 10.7 -> 6.8
-    "leg_length_outer_seam":  -2.5,   #     MAE  8.7 -> 7.7
-    "neck_base_height":       +4.0,   #     MAE  6.3 -> 2.8
+    "leg_length_inner_seam":  -8.0,   # %
+    "leg_length_outer_seam":  -2.5,
+    "neck_base_height":       +4.5,
+    "back_length_to_waist":   +8.0,
 }
 
 # Set of IDs eligible for the multiplicative bias correction. Anything outside
