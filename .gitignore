@@ -38,3 +38,4 @@ eval/reports/
 
 # ANSUR II raw CSVs (public domain, downloaded locally; see scripts/ansur/README.md)
 scripts/ansur/*.csv
+scripts/ansur/girth_coefs.json

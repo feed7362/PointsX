@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, Literal
 from pointsx.schemas import BodyMeasurements, CalibrationInfo, Keypoints
 from webui.envelope.catalog import CANONICAL_MEASUREMENTS, _DEFAULT_CONFIDENCE, _PLAUSIBLE_RANGE_CM
 from webui.envelope.corrections import (
-    _GIRTH_SHIFT_PCT,
     _LENGTH_SCALES_PCT,
     _SEX_CIRCUMFERENCE_SCALES_PCT,
     _SEX_SCALE_TARGET_IDS,
@@ -19,7 +18,6 @@ from webui.envelope.derive import (
     _derive_front_length,
     _derive_neck_base_height,
 )
-from webui.envelope.girth import GIRTH_IDS, girth_model_enabled, predict_girths
 from webui.envelope.priors import PRIOR_IDS, predict_prior
 from webui.schemas import (
     CaptureInfo,
@@ -49,7 +47,6 @@ def _value_for_id(
     height_cm: float,
     sex: str,
     chest_for_prior: float | None,
-    girths: dict[str, float],
 ) -> tuple[float | None, list[str]]:
     """Return (value_cm, quality_flags) for a single canonical id.
 
@@ -57,12 +54,6 @@ def _value_for_id(
     same value after the per-sex correction, i.e. what the user sees.
     """
     flags: list[str] = []
-
-    # ANSUR girth model (fusion of the six torso widths) when enabled and widths are complete
-    for site, gid in GIRTH_IDS.items():
-        if mid == gid and site in girths:
-            flags.append("girth_model")
-            return girths[site], flags
 
     # Population priors (ANSUR II) for what the silhouette cannot resolve -----
     if mid in PRIOR_IDS:
@@ -113,7 +104,6 @@ def body_to_envelope(
     *,
     apply_sex_offsets: bool = True,
     sex_offsets_override: dict[str, dict[str, float]] | None = None,
-    girth_model: bool | None = None,
 ) -> Any:
     """Build a MeasurementEnvelope from a WebuiPipeline InferenceResult.
 
@@ -124,22 +114,17 @@ def body_to_envelope(
         sex_offsets_override: percent-scale dict ``{sex: {mid: pct}}`` that
             substitutes _SEX_CIRCUMFERENCE_SCALES_PCT for this call. Used by
             ``pointsx-eval --fit-offsets`` to A/B-test newly fitted scales.
-        girth_model: use the ANSUR girth model for chest/waist/hip/thigh (with its own
-            domain-shift table) instead of ellipse + _SEX_CIRCUMFERENCE_SCALES_PCT.
-            None = read POINTSX_GIRTH_MODEL. Falls back to the ellipse path when a width is missing.
     """
 
     bm = result.body
     chest_circ_cm = _derive_chest_circumference(bm)
-    girths = predict_girths(bm, sex, subject_height_cm) if girth_model_enabled(girth_model) else {}
 
     if apply_sex_offsets:
-        default_table = _GIRTH_SHIFT_PCT if girths else _SEX_CIRCUMFERENCE_SCALES_PCT
-        scales_table = sex_offsets_override or default_table
+        scales_table = sex_offsets_override or _SEX_CIRCUMFERENCE_SCALES_PCT
         sex_scales_pct = scales_table.get(sex, {})
     else:
         sex_scales_pct = {}
-    chest_for_prior = girths.get("chest", chest_circ_cm)
+    chest_for_prior = chest_circ_cm
     if chest_for_prior is not None and "chest_circumference" in sex_scales_pct:
         chest_for_prior *= 1.0 + float(sex_scales_pct["chest_circumference"]) / 100.0
 
@@ -148,7 +133,7 @@ def body_to_envelope(
     for mid, label_uk, source in CANONICAL_MEASUREMENTS:
         value, flags = _value_for_id(
             mid, bm, result.front_kp, result.side_kp, result.cal, chest_circ_cm,
-            height_cm=subject_height_cm, sex=sex, chest_for_prior=chest_for_prior, girths=girths,
+            height_cm=subject_height_cm, sex=sex, chest_for_prior=chest_for_prior,
         )
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.
