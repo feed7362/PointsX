@@ -30,7 +30,11 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from webui.envelope.corrections import _LENGTH_SCALES_PCT, _SEX_CIRCUMFERENCE_SCALES_PCT  # noqa: E402
+from webui.envelope.corrections import (  # noqa: E402
+    _GIRTH_SHIFT_PCT,
+    _LENGTH_SCALES_PCT,
+    _SEX_CIRCUMFERENCE_SCALES_PCT,
+)
 
 CIRC_IDS = ["chest_circumference", "waist_circumference", "hip_circumference", "thigh_circumference"]
 LENGTH_IDS = ["leg_length_inner_seam", "leg_length_outer_seam", "neck_base_height",
@@ -111,7 +115,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("report", type=Path)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--table", choices=("ellipse", "girth"), default="ellipse",
+                    help="which circumference table the report was produced against (girth = POINTSX_GIRTH_MODEL=1)")
     args = ap.parse_args()
+    circ_table = _GIRTH_SHIFT_PCT if args.table == "girth" else _SEX_CIRCUMFERENCE_SCALES_PCT
     rng = random.Random(args.seed)
     rows = read_raw(args.report)
 
@@ -124,7 +131,7 @@ def main() -> int:
             by_len_cell[mid][subj] = (pred, gt)
 
     hdr = f"{'cell':44}{'n':>3} {'none':>6} {'current':>8} {'refit-LOO':>10} {'refit-in':>9}  {'cur%':>6} {'fit%':>6}  CI(ratio)      keep"
-    print("=== per-sex circumference scales (_SEX_CIRCUMFERENCE_SCALES_PCT) ===")
+    print(f"=== per-sex circumference scales ({'_GIRTH_SHIFT_PCT' if args.table == 'girth' else '_SEX_CIRCUMFERENCE_SCALES_PCT'}) ===")
     print(hdr)
     totals: dict[str, list[float]] = defaultdict(list)
     fitted_sex: dict[str, dict[str, float]] = defaultdict(dict)
@@ -133,7 +140,7 @@ def main() -> int:
             cell = by_sex_cell.get((sex, mid))
             if not cell:
                 continue
-            cur_pct = _SEX_CIRCUMFERENCE_SCALES_PCT.get(sex, {}).get(mid, 0.0)
+            cur_pct = circ_table.get(sex, {}).get(mid, 0.0)
             r = evaluate_cell(cell, cur_pct, rng)
             if r["keep"]:
                 fitted_sex[sex][mid] = r["fit_pct"]

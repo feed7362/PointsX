@@ -80,6 +80,41 @@ _LENGTH_SCALES_PCT: dict[str, float] = {
     "back_length_to_waist":   +8.0,
 }
 
+# Domain shift for the ANSUR girth model (envelope/girth.py, POINTSX_GIRTH_MODEL=1): the model is
+# fitted on caliper widths on skin, the pipeline feeds silhouette widths in clothes, so its output is
+# scaled per sex and site exactly like the ellipse table above (same method, gate and LOO
+# reporting via scripts/refit_corrections.py --table girth).
+#
+# Fitted 2026-09-16 on the gated corpus (n=16, 12 F / 4 M). LOO MAE, girth model vs
+# ellipse+_SEX_CIRCUMFERENCE_SCALES_PCT on the same observations:
+#   F chest 4.06 vs 4.34, waist 4.32 vs 4.20, hip 4.71 vs 4.00, thigh 3.44 vs 3.60
+#   M chest 2.75 vs 3.73, waist 3.52 vs 3.75, hip 2.82 vs 4.00, thigh 4.94 vs 3.29
+#   all circumferences 3.98 vs 3.94 — a wash, so the model stays OFF by default.
+# Raw model output is 14-26 cm high: the pipeline's widths over-read by a different
+# amount per width (waist worst), which one output scale per site cannot undo, and the
+# fused model feeds the waist width into every site. Revisit with width ground truth
+# (input-side calibration) — not fittable on 16 people.
+_GIRTH_SHIFT_PCT: dict[str, dict[str, float]] = {
+    "female": {  # n=12
+        "chest_circumference": -15.0,
+        "waist_circumference": -24.5,
+        "hip_circumference":   -12.5,
+        "thigh_circumference": -20.5,
+    },
+    "male": {  # n=4 — provisional
+        "chest_circumference": -18.0,
+        "waist_circumference": -18.5,
+        "hip_circumference":   -13.5,
+        "thigh_circumference": -26.5,
+    },
+    "other": {
+        "chest_circumference": -16.5,
+        "waist_circumference": -21.5,
+        "hip_circumference":   -13.0,
+        "thigh_circumference": -23.5,
+    },
+}
+
 # Set of IDs eligible for the multiplicative bias correction. Anything outside
 # this set is left untouched by the sex-scale logic.
 _SEX_SCALE_TARGET_IDS: set[str] = {
