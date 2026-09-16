@@ -100,6 +100,13 @@ WAIST_FRONT_PELVIS_NECK_FRACTION = 0.25
 # search finds nothing (measurements.py).
 WAIST_SIDE_SEARCH_TOP_FRACTION = 0.4
 
+# SIDE-view chest row as a fraction of the pelvis->upper-neck span (ANSUR II chest height:
+# 0.593 F / 0.633 M of trochanterion->cervicale). None = midpoint of upper neck and elbow.
+# A/B 2026-09-16 on app GT (0.61): chest MAE 4.05 -> 4.01, bias +1.0 -> +1.9, one subject's
+# chest dropped out of range — no gain over the elbow midpoint, which already sits ~0.74 H vs
+# ANSUR 0.72-0.735 H. ANSUR also confirms the other rows (waist 0.244 F / 0.252 M vs our 0.25).
+CHEST_SIDE_PELVIS_NECK_FRACTION: float | None = None
+
 
 def measure_width_at_y(mask: np.ndarray, y: float, margin: int = 3) -> float | None:
     """Measure horizontal width of the silhouette at a given y-coordinate.
@@ -446,7 +453,11 @@ def extract_all_widths(
     # - side: continuous silhouette width at midpoint between upper_neck and elbow
     if is_valid(f_conf, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER):
         front["torso"] = distance(f_pts, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
-    if is_valid(s_conf, KP.UPPER_NECK) and (is_valid(s_conf, KP.RIGHT_ELBOW) or is_valid(s_conf, KP.LEFT_ELBOW)):
+    if CHEST_SIDE_PELVIS_NECK_FRACTION is not None and is_valid(s_conf, KP.PELVIS, KP.UPPER_NECK):
+        y_pelvis_c = float(s_pts[KP.PELVIS, 1])
+        y_torso_side = y_pelvis_c + CHEST_SIDE_PELVIS_NECK_FRACTION * (float(s_pts[KP.UPPER_NECK, 1]) - y_pelvis_c)
+        side["torso"] = _continuous_width_at_y(s_mask, y_torso_side, margin=3, x_band=s_band)
+    elif is_valid(s_conf, KP.UPPER_NECK) and (is_valid(s_conf, KP.RIGHT_ELBOW) or is_valid(s_conf, KP.LEFT_ELBOW)):
         elbow_y = (
             float(s_pts[KP.RIGHT_ELBOW, 1])
             if is_valid(s_conf, KP.RIGHT_ELBOW)
