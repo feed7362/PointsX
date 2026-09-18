@@ -19,6 +19,7 @@ cp "$root/apps/backend/Dockerfile" \
    "$root/apps/backend/.dockerignore" \
    "$root/apps/backend/.gitattributes" \
    "$root/pyproject.toml" \
+   "$root/uv.lock" \
    "$out/"
 
 cp -R "$root/src" "$out/src"

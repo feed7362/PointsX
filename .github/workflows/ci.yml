@@ -37,12 +37,11 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
-      - name: install (CPU torch)
-        run: |
-          uv venv --python "$PYTHON_VERSION"
-          uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          uv pip install -e . pytest
+          cache-dependency-glob: uv.lock
+      # Exactly the locked versions (torch = CPU index via [tool.uv.sources]); the dev group
+      # brings pytest. A new package version reaches CI only through a `uv lock` commit.
+      - name: install (uv.lock, frozen)
+        run: uv sync --frozen --python "$PYTHON_VERSION"
       - name: pytest (unit + geometry snapshot)
         run: .venv/bin/python -m pytest -q
 

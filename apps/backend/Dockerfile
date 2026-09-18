@@ -51,15 +51,20 @@ ENV PATH="/home/user/.local/bin:${PATH}" \
 
 WORKDIR /home/user/app
 
-# Deps first (build-cache stays warm across source edits).
-COPY --chown=user pyproject.toml README.md /home/user/app/
+# Dependencies come from uv.lock: exactly the versions the accuracy ledger was measured on
+# (torch/torchvision resolve to the CPU wheel index via [tool.uv.sources] in pyproject.toml,
+# ~1.5 GB smaller than the CUDA wheels). Upgrades happen only through a deliberate
+# `uv lock --upgrade` commit, re-measured with scripts/eval_track.py.
+# Deps layer first so the build cache stays warm across source edits.
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never
+COPY --chown=user pyproject.toml uv.lock README.md /home/user/app/
+RUN uv sync --frozen --no-dev --no-install-project --no-cache
 COPY --chown=user src /home/user/app/src
-
-# CPU-only torch wheels (saves ~1.5 GB vs the default cuda wheels).
-RUN pip install --no-cache-dir --user \
-        --index-url https://download.pytorch.org/whl/cpu \
-        torch torchvision \
-    && pip install --no-cache-dir --user .
+RUN uv sync --frozen --no-dev --no-editable --no-cache
+ENV PATH="/home/user/app/.venv/bin:${PATH}"
 
 # Pre-create the models/ directory with the right ownership so the boot
 # script can write the downloaded weights into it without permission errors.

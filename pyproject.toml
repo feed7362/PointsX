@@ -60,6 +60,18 @@ pointsx = "pointsx.cli:main"
 pointsx-web = "webui.__main__:main"
 pointsx-eval = "pointsx.eval:main"
 
+# torch/torchvision come from the CPU wheel index on every platform: the lock is what the HF Space
+# image and CI install (`uv sync --frozen`), and the free Space has no GPU. For a CUDA training
+# environment, create a separate venv outside the lock (`pip install torch --index-url .../cu126`).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

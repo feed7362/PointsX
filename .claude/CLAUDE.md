@@ -81,6 +81,9 @@ tests/                unit + HTTP contract + geometry snapshot gate (procedural 
 - `.vercelignore` patterns must be root-anchored (`/dataset`), CI fails if a deployable file would be dropped.
 - Accuracy constants in `webui/envelope/corrections.py` are fitted against the ellipse; regressor only with
   `POINTSX_USE_REGRESSOR=1`. Refit with `pointsx-eval --fit-offsets` and keep the provenance comments with the numbers.
+- Production installs from `uv.lock`: the Space image and the CI `test` job run `uv sync --frozen`; torch/torchvision
+  resolve to the CPU wheel index (`[tool.uv.sources]`). A package upgrade is a deliberate `uv lock --upgrade` commit
+  and counts as an accuracy change (re-measure; the 2026-09-15 torch/ultralytics bump moved subjects by ±0.5 cm).
 - Input images are capped at 1280 px (`pointsx.pipeline.downscale_for_inference`) at every entry point.
 
 ## Web app layering rules
@@ -119,6 +122,7 @@ Any change that can move a measurement (GT corpus or gate, pose/seg models or ve
 widths, ellipse, envelope corrections/derivations) is followed by
 `.venv/Scripts/python scripts/eval_track.py run --label "<what changed>"` before commit.
 
+- Dependency upgrades (`uv lock --upgrade`) count too: production installs the lock.
 - It runs both benchmarks (app GT on real photos; BodyM perfect silhouettes testA + testB), appends to
   `runs/eval/ledger.jsonl` and compares with the previous entry. Exit 1 = regression.
 - Read the detection map it prints: BodyM sees only the ellipse math for chest/waist/hip/thigh. "BodyM
