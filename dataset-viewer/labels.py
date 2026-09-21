@@ -10,6 +10,7 @@ MEASUREMENT_LABELS: dict[str, str] = {
     "arm_circumference_bicep": "Upper arm circumference (bicep)",
     "thigh_circumference": "Thigh circumference (upper leg)",
     "shoulder_width": "Shoulder width",
+    "shoulder_slope_width": "Shoulder slope (neck base to shoulder point)",
     "back_width": "Back width",
     "chest_width": "Chest width",
     "front_length_to_waist": "Front length to waist",

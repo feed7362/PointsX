@@ -38,6 +38,7 @@ MAP: dict[str, tuple[str | None, str]] = {
     "thigh_circumference":         ("thigh_circumference", ""),
     "shoulder_width":              (None, "SKIPPED — form measures full shoulder width (~52cm); "
                                           "canonical shoulder_slope_width is the SLOPE (~15cm)"),
+    "shoulder_slope_width":        ("shoulder_slope_width", ""),  # form field since 2026-09-21
     "back_width":                  ("back_width_scapular", ""),
     "chest_width":                 ("chest_width_front", ""),
     "front_length_to_waist":       ("front_length_to_waist", ""),

@@ -168,7 +168,7 @@ async function insertSubmission(submission) {
  * @param {number} params.ageYears
  * @param {number} params.heightCm
  * @param {string} params.sex - 'male' | 'female' | 'other'
- * @param {Object} params.measurements - Object with 16 measurement keys
+ * @param {Object} params.measurements - Object with 17 measurement keys
  * @returns {Promise<{id: string, frontPath: string, sidePath: string}>}
  */
 export async function uploadAndInsert({

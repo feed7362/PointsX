@@ -54,6 +54,9 @@ const datasetDom = {
 // Two-stage submission state
 let pendingConfirm = false;
 
+// Shared with the main page so the debug choice follows the user between pages.
+const DEBUG_UPLOAD_POSE_LS = 'pointsx.debugSkipUploadPoseGate';
+
 const THUMB_PLACEHOLDER_SILHOUETTE = {
   strokeStyle: 'rgba(113, 168, 255, 0.5)',
   fillStyle: 'rgba(118, 170, 255, 0.07)',
@@ -323,6 +326,24 @@ function validateConsents() {
 }
 
 /**
+ * Height must satisfy the DB CHECK constraint on dataset_submissions.height_cm
+ * (100–250, same band as the input's min/max; the DB constraint is the source of
+ * truth — widen both together). Checked here, before the photos
+ * are encrypted and uploaded: a bad height otherwise leaves two orphan blobs in
+ * storage and surfaces as a raw "violates check constraint" 400.
+ */
+function validateHeight() {
+  const h = parseFloat(datasetDom.heightInput.value);
+  if (!Number.isFinite(h) || h < 100 || h > 250) {
+    setStatus(t('err-height-range'), true);
+    datasetDom.heightInput.focus({ preventScroll: true });
+    datasetDom.heightInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  }
+  return true;
+}
+
+/**
  * Validate photos captured
  */
 function validatePhotos() {
@@ -351,6 +372,7 @@ async function handleDatasetSubmit() {
   
   // Stage 1: Basic validation
   if (!validateConsents()) return;
+  if (!validateHeight()) return;
   if (!validatePhotos()) return;
   
   const analysis = analyzeMeasurements(datasetDom.measurementsContainer);
@@ -595,6 +617,29 @@ async function init() {
     });
   }
   
+  // The "skip pose check on upload" checkbox exists in dataset.html but was never
+  // wired here (only index.html did), so it silently did nothing. Same behaviour
+  // and localStorage key as the main page: an escape hatch when MediaPipe fails
+  // to load or a real photo is wrongly rejected by the pose gate.
+  const dbgUpload = dom.debugSkipUploadPose;
+  if (dbgUpload) {
+    try {
+      dbgUpload.checked = localStorage.getItem(DEBUG_UPLOAD_POSE_LS) === '1';
+    } catch {
+      dbgUpload.checked = false;
+    }
+    captureState.debugSkipUploadPoseGate = dbgUpload.checked;
+    dbgUpload.addEventListener('change', () => {
+      captureState.debugSkipUploadPoseGate = dbgUpload.checked;
+      try {
+        if (dbgUpload.checked) localStorage.setItem(DEBUG_UPLOAD_POSE_LS, '1');
+        else localStorage.removeItem(DEBUG_UPLOAD_POSE_LS);
+      } catch {
+        /* ignore quota / private mode */
+      }
+    });
+  }
+
   // Wire upload inputs (query directly as they're not in getCaptureDom())
   const uploadFront = document.getElementById('upload-front');
   const uploadSide = document.getElementById('upload-side');

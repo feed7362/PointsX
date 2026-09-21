@@ -33,6 +33,8 @@ if _key.is_file():
 #   shoulder_width  -> the form measures full shoulder width (~52 cm) while the
 #                      canonical `shoulder_slope_width` is the shoulder SLOPE
 #                      (~15 cm) — different definitions, would fake a huge error.
+#                      The form has a dedicated `shoulder_slope_width` field since
+#                      2026-09-21; that one IS mapped (older rows lack the key).
 #   sleeve_length   -> garment sleeve length, measured differently from the
 #                      canonical `arm_length_shoulder_to_wrist` body length.
 GT_MAP: dict[str, str] = {
@@ -45,6 +47,7 @@ GT_MAP: dict[str, str] = {
     "neck_base_height_from_floor": "neck_base_height",
     "chest_width": "chest_width_front",
     "back_width": "back_width_scapular",
+    "shoulder_slope_width": "shoulder_slope_width",
     "front_length_to_waist": "front_length_to_waist",
     "back_length_to_waist": "back_length_to_waist",
     "outer_seam": "leg_length_outer_seam",
@@ -66,6 +69,7 @@ GT_RANGES: dict[str, tuple[float, float]] = {
     "neck_base_height": (110, 180),
     "chest_width_front": (20, 55),
     "back_width_scapular": (25, 60),
+    "shoulder_slope_width": (8, 25),
     "front_length_to_waist": (25, 60),
     "back_length_to_waist": (25, 60),
     "leg_length_outer_seam": (70, 130),

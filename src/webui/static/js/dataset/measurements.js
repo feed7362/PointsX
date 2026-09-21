@@ -1,12 +1,12 @@
 /**
  * Dataset measurement definitions and validation
  * 
- * Defines the 16 manual measurements users must enter, with plausible ranges
+ * Defines the 17 manual measurements users must enter, with plausible ranges
  * for outlier detection (yellow field warnings).
  */
 
 /**
- * 16 manual measurement definitions
+ * 17 manual measurement definitions
  * 
  * Each measurement has:
  * - id: JSON key for storage
@@ -77,6 +77,16 @@ export const MEASUREMENTS = [
     unit: 'cm',
     plausibleMin: 30,
     plausibleMax: 55
+  },
+  {
+    // Shoulder slope (Шп): neck-base point -> shoulder point, one side. Same id and
+    // 8–25 cm band as the envelope's `shoulder_slope_width` so this is the only form
+    // field with a direct GT counterpart for it (shoulder_width is the full width).
+    id: 'shoulder_slope_width',
+    labelKey: 'dataset-measure-shoulder-slope-width',
+    unit: 'cm',
+    plausibleMin: 8,
+    plausibleMax: 25
   },
   {
     id: 'back_width',
@@ -302,7 +312,7 @@ export function markOutlierFields(container, outlierIds) {
  * Validate all measurements are filled
  * 
  * @param {Object} values - {id: value} map
- * @returns {boolean} - true if all 16 measurements present and numeric
+ * @returns {boolean} - true if all 17 measurements present and numeric
  */
 export function areAllMeasurementsFilled(values) {
   if (Object.keys(values).length !== MEASUREMENTS.length) {

@@ -15,7 +15,8 @@ export const ENVELOPE_TO_DATASET = {
   hip_circumference: "hip_circumference",
   neck_circumference: "neck_circumference",
   neck_base_height: "neck_base_height_from_floor",
-  shoulder_slope_width: "shoulder_width",
+  // shoulder_width (full width) has no envelope counterpart — left for manual entry.
+  shoulder_slope_width: "shoulder_slope_width",
   back_width_scapular: "back_width",
   chest_width_front: "chest_width",
   back_length_to_waist: "back_length_to_waist",
