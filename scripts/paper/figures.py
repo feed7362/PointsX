@@ -84,6 +84,7 @@ UK = {
     "neck_base_height": "Висота основи шиї",
     "chest_width_front": "Ширина грудей спереду",
     "back_width_scapular": "Ширина спини",
+    "shoulder_slope_width": "Ширина плечового ската",
     "front_length_to_waist": "Довжина переду до талії",
     "back_length_to_waist": "Довжина спини до талії",
     "leg_length_outer_seam": "Зовнішня довжина ноги",
@@ -133,7 +134,8 @@ def fig_mae(rows):
         items.append((mid, mae, bias, lo, hi, len(errs)))
     items.sort(key=lambda t: t[1])
 
-    fig, axes = plt.subplots(1, 2, figsize=(10.2, 5.4), gridspec_kw={"width_ratios": [1.55, 1]})
+    n_subj = len({r["subject"] for r in rows})
+    fig, axes = plt.subplots(1, 2, figsize=(10.2, 5.8), gridspec_kw={"width_ratios": [1.55, 1]})
     y = np.arange(len(items))
     labels = [f"{UK.get(m, m)}" for m, *_ in items]
 
@@ -146,7 +148,7 @@ def fig_mae(rows):
     for i, t in enumerate(items):
         ax.text(t[4] + 0.12, i, f(t[1]), va="center", fontsize=9.5, color=INK)
     ax.set_yticks(y, labels)
-    ax.set_xlabel("MAE, см  (95 % ДІ, бутстреп по 16 суб'єктах)")
+    ax.set_xlabel(f"MAE, см  (95 % ДІ, бутстреп по {n_subj} суб'єктах)")
     ax.set_xlim(0, max(t[4] for t in items) + 0.9)
     ax.grid(axis="y", visible=False)
     ax.set_title("а) Середня абсолютна похибка", fontsize=11.5, loc="left")
@@ -223,7 +225,7 @@ def fig_ablation():
     for yy, v in zip(y, vals):
         ax.text(v + 0.09, yy, f(v), va="center", fontsize=10, color=INK)
     ax.set_yticks(y, names)
-    ax.set_xlabel("MAE, см (еталонні ручні мірки, 16 суб'єктів)")
+    ax.set_xlabel("MAE, см (корпус етапу розробки: 16 суб'єктів)")
     comma_axis(ax, "x", 0)
     ax.set_xlim(0, max(vals) + 0.8)
     ax.grid(axis="y", visible=False)
