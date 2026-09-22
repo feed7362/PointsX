@@ -222,6 +222,8 @@ para(f"Точність оцінювалася за еталонними мір�
 
 para(f"Таблиця 3.1 – Похибки визначення антропометричних параметрів "
      f"({len(_all)} спостережень, {_n_people} осіб, {_n_pairs} пар фото)", center=True)
+table(["Параметр", "MAE, см", "95 % ДІ для MAE", "Bias, см", "n"],
+      T31, [6.0, 2.3, 3.6, 2.4, 1.6], head_size=11)
 _fixed = [r for r in _rows if r["mid"] != "shoulder_slope_width"]
 _slope_people = len({r["person"] for r in _rows if r["mid"] == "shoulder_slope_width"})
 para("Найточніше визначаються лінійні параметри з чітко вираженими анатомічними межами: "
@@ -394,5 +396,15 @@ para("За точністю метод поступається рішенням
      "спеціалізованого обладнання, працює за 2,16 с на двоядерному безкоштовному "
      "хостингу і покриває 18 антропометричних параметрів замість трьох-чотирьох. За окремими обхватами результат зіставний з наведеними роботами: обхват грудей 4,03 см проти 4,62 см у [15], обхват талії 5,20 см проти 5,00 см у [15].")
 
+# A caption without its table is invisible in the source and obvious in the output,
+# so fail the build rather than ship one. (It happened once: moving the data block
+# took the table() call with it and only the caption survived.)
+_caps = [p.text.strip() for p in doc.paragraphs if p.text.strip().startswith("Таблиця")]
+if len(_caps) != len(doc.tables):
+    raise SystemExit(
+        f"{len(_caps)} підписів таблиць, але {len(doc.tables)} таблиць:\n  "
+        + "\n  ".join(_caps))
+
 doc.save(str(OUT))
-print("saved:", OUT, OUT.stat().st_size, "bytes")
+print(f"saved: {OUT} ({OUT.stat().st_size} bytes) — "
+      f"{len(doc.tables)} таблиць, {len(doc.inline_shapes)} рисунків")
