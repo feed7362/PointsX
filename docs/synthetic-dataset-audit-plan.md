@@ -148,7 +148,7 @@ bound of 0.18). Cost: 13 ms to build a body, 0.6 s to measure it -> ~1 h for 5 0
 ANSUR target vector (bisection; the mappings above are monotone), then gate 1a is satisfied by
 construction rather than by luck.
 
-## 9. Step 3 clothing (2026-09-22): garments from the body, draped, and gate 2 passes
+## 9. Step 3 clothing (2026-09-22): IN PROGRESS, gate 2 NOT passed
 
 No garment assets were bought or downloaded — each one is the body's own surface pushed outward by
 an ease allowance (`scripts/synthetic/make_garment.py`), so the licence question never arises and
@@ -161,20 +161,46 @@ garment's height). Without the pin gravity simply pulled the clothes off: the fi
 chest over-read of 1.000x (no garment there at all) and 3.30x at the hip (trousers heaped at the
 ankles). Fabric stiffness jitters 5-25 per render.
 
-**Gate 2 — does synthetic clothing over-read like real clothing?** Front-view silhouette width,
-clothed / body, against the app corpus's suit-vs-own-clothes pairs:
+### Two attempts, and where it actually stands
 
-| site | synthetic ease 2 cm | synthetic ease 6 cm | real, own clothes |
+**v1, offset shell** (body surface pushed out by a fixed ease). Gate-2 ratios matched real clothing
+(chest 1.071x, waist 1.204x, hip 1.119x at 2 cm ease, against real 1.03 / 1.20-1.25 / 1.07). But
+rendered it was plainly an inflated body: an offset shell is the body's shape plus a constant, so it
+follows every curve and can never BRIDGE a concavity. That is the shrink-wrap the 2026-07 review
+rejected; a segmenter trained on it learns "shrink the outline by 7 %", not "find the body". The
+matching numbers were a false pass. Replaced.
+
+**v2, hanging tube** (current). Garment radius at height z = max(body radius above z, within the
+piece) + ease, lofted as elliptical rings, trousers split into two legs below the crotch. This
+bridges by construction and renders as recognisable clothing with folds. Gate 2, measured on the
+silhouette run containing the body axis:
+
+| site | ease 2 cm | ease 6 cm | real |
 |---|---|---|---|
-| chest | 1.071x | 1.213x | 1.03x |
-| waist | **1.204x** | 1.401x | **1.20-1.25x** |
-| hip | 1.119x | 1.393x | 1.07x |
+| chest | 1.000x | 1.000x | 1.03x |
+| waist | 1.108x | 1.355x | 1.20-1.25x |
+| hip | **3.356x** | **3.712x** | 1.07x |
+| thigh | 1.427x | 1.781x | 1.12x |
 
-Ease ~2 cm reproduces the real profile, with the waist landing inside the measured band; 6 cm is a
-genuinely loose regime for the other end of the distribution. This is the gate the deleted dataset
-never passed — its masks stripped the clothing, teaching that the silhouette IS the body.
+**Not passing.** Waist brackets the real band (ease ~4 would land on it), but chest shows no
+over-read at all and hip is 3x. Both are unexplained after several iterations: the ring radii are
+already limb-filtered (0.105 of stature) and use a 92nd percentile rather than the extremes, and the
+hip ratio does not change when the metric takes the axis-containing run instead of the widest one.
 
-Remaining before the pilot: sleeves (the top is sleeveless, so the arm/torso overlap that T6 proved
-geometry cannot resolve is not yet represented), per-site ease rather than one uniform value (real
-clothing is looser at the waist than at the hip), and a garment-vs-body collision check on a wider
-range of body shapes.
+**Cloth simulation: implemented, OFF by default.** `blender_render.py` can drape the garment against
+the body with pinning at the top edge (without a pin, gravity simply pulls the clothes off: the
+first run gave a chest over-read of 1.000x and 3.30x at the hip with the trousers heaped at the
+ankles). But the solver is unstable on these garments — the trousers start intersecting the body at
+the crotch and the collision response blows them into a single 418 px billow where the geometry
+alone gives two clean 112 px legs. The bridging property comes from the tube rule, not the solver,
+so the geometry is usable without it; wrinkles are not.
+
+### Before a pilot can be generated
+
+- [ ] Explain and fix chest 1.000x and hip 3.36x. Render one body and step through the rings.
+- [ ] Calibrate ease per site against the suit-vs-own pairs (real clothing is looser at the waist
+      than the hip, so one uniform value cannot reproduce both).
+- [ ] Sleeves — the top is sleeveless, so the arm/torso overlap that closed T6 is not represented,
+      and that is now one of the two jobs the segmenter has to do.
+- [ ] Re-enable cloth simulation: start the garment clear of the body, raise collision quality.
+- [ ] Only then: pilot 500 and the segmenter (step 4).

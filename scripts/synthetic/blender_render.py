@@ -172,8 +172,15 @@ def main() -> int:
     ap.add_argument("--body", required=True, type=Path)
     ap.add_argument("--garment", type=Path, default=None, action="append", dest="garments",
                     help="garment OBJ; repeat for several pieces (top, trousers)")
-    ap.add_argument("--cloth-frames", type=int, default=25,
-                    help="cloth simulation steps; 0 renders the garment shell undraped")
+    ap.add_argument("--cloth-frames", type=int, default=0,
+                    help="cloth simulation steps. DEFAULT OFF: the solver is unstable on these "
+                         "garments — the trousers start intersecting the body at the crotch and the "
+                         "collision response blows them into a 418 px billow where the geometry "
+                         "alone gives two clean 112 px legs. The hanging-tube rule in "
+                         "make_garment.py already bridges concavities, which is the property the "
+                         "data needs; simulation would only add wrinkles. Fix the instability "
+                         "(start the garment clear of the body, raise collision quality) before "
+                         "turning this back on.")
     ap.add_argument("--stiffness", type=float, default=None,
                     help="fabric tension stiffness; default jitters 5-25 per render")
     ap.add_argument("--out", required=True, type=Path)
@@ -205,6 +212,15 @@ def main() -> int:
             if args.cloth_frames > 0:
                 stiffness = args.stiffness if args.stiffness is not None else rng.uniform(5.0, 25.0)
                 drape(piece, body, args.cloth_frames, stiffness)
+            cloth_mat = bpy.data.materials.new("cloth")
+            cloth_mat.use_nodes = True
+            bsdf = cloth_mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                bsdf.inputs["Base Color"].default_value = (*[rng.uniform(0.05, 0.6) for _ in range(3)], 1.0)
+                if "Roughness" in bsdf.inputs:
+                    bsdf.inputs["Roughness"].default_value = rng.uniform(0.6, 0.95)
+            piece.data.materials.clear()
+            piece.data.materials.append(cloth_mat)
             pieces.append(piece)
         add_light(rng, hdri)
         cam = place_camera(z0, z1, angle, random.Random(args.seed))      # same camera for both passes
