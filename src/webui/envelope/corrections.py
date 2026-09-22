@@ -85,10 +85,13 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
 # neck_base_height was +14.0 % until 2026-09-22, when the measurement itself was repaired to span
 # neck -> floor instead of neck -> ankle keypoint (T4): its raw MAE fell 18.72 -> 4.58 cm and the
 # constant collapsed to +3.0 %. That is what a correct fix looks like here.
-# STILL A FUDGE, same class, not yet repaired: chest_width_front (+16 %), back_length_to_waist
-# (+17.5 %) and front_length_to_waist (+15.5 %) are straight-line keypoint spans compared against a
-# tape laid over the body's curve, so they under-read by construction. Fix the definitions and refit,
-# the way neck, back width and upper arm were fixed with ANSUR priors.
+# The other three are a DIFFERENT case and were checked on 2026-09-22 rather than assumed:
+# chest_width_front (+16 %), back_length_to_waist (+17.5 %) and front_length_to_waist (+15.5 %) are
+# straight-line keypoint spans scored against a tape laid over the body's curve. A constant ratio is
+# the right model for that, and each is already at the ground truth's own noise floor — LOO 3.15 /
+# 1.92 / 2.26 cm against a spread across people of sd 6.0 / 1.8 / 3.2 cm. No pipeline change to them
+# can be validated on this corpus; chest_width_front's sd of 6.0 cm says the volunteers measured
+# "chest width" inconsistently, so that one needs a measuring protocol, not code.
 _LENGTH_SCALES_PCT: dict[str, float] = {
     "leg_length_inner_seam":  +4.5,
     "leg_length_outer_seam":  +4.5,
