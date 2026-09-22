@@ -147,3 +147,34 @@ bound of 0.18). Cost: 13 ms to build a body, 0.6 s to measure it -> ~1 h for 5 0
 **Still open before rendering (step 3):** solve phenotype + `measure-*` values per body to hit an
 ANSUR target vector (bisection; the mappings above are monotone), then gate 1a is satisfied by
 construction rather than by luck.
+
+## 9. Step 3 clothing (2026-09-22): garments from the body, draped, and gate 2 passes
+
+No garment assets were bought or downloaded — each one is the body's own surface pushed outward by
+an ease allowance (`scripts/synthetic/make_garment.py`), so the licence question never arises and
+the garment fits the body it was made for. Ease is the axis the product cares about: how much room
+the garment has over the body.
+
+The shell alone is the shrink-wrap the 2026-07 review rejected, so `blender_render.py` now drapes it
+with Blender's cloth solver against the body as a collider, and PINS the top edge (4 % of the
+garment's height). Without the pin gravity simply pulled the clothes off: the first run rendered a
+chest over-read of 1.000x (no garment there at all) and 3.30x at the hip (trousers heaped at the
+ankles). Fabric stiffness jitters 5-25 per render.
+
+**Gate 2 — does synthetic clothing over-read like real clothing?** Front-view silhouette width,
+clothed / body, against the app corpus's suit-vs-own-clothes pairs:
+
+| site | synthetic ease 2 cm | synthetic ease 6 cm | real, own clothes |
+|---|---|---|---|
+| chest | 1.071x | 1.213x | 1.03x |
+| waist | **1.204x** | 1.401x | **1.20-1.25x** |
+| hip | 1.119x | 1.393x | 1.07x |
+
+Ease ~2 cm reproduces the real profile, with the waist landing inside the measured band; 6 cm is a
+genuinely loose regime for the other end of the distribution. This is the gate the deleted dataset
+never passed — its masks stripped the clothing, teaching that the silhouette IS the body.
+
+Remaining before the pilot: sleeves (the top is sleeveless, so the arm/torso overlap that T6 proved
+geometry cannot resolve is not yet represented), per-site ease rather than one uniform value (real
+clothing is looser at the waist than at the hip), and a garment-vs-body collision check on a wider
+range of body shapes.

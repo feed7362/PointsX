@@ -25,6 +25,8 @@ import bpy  # noqa: F401  (provided by Blender)
 from mathutils import Vector
 
 RES = 1024
+# Share of the garment's height held in place at the top edge, so it hangs rather than falls off.
+PIN_BAND = 0.04
 VIEWS = {"front": 0.0, "side": math.pi / 2}
 
 
@@ -114,6 +116,51 @@ def flat_material(rgba):
     return mat
 
 
+def drape(garment, body, frames: int, stiffness: float) -> None:
+    """Settle the garment shell onto the body with Blender's cloth solver.
+
+    An offset shell alone is the shrink-wrap the 2026-07 review rejected: it follows every curve of
+    the body, so a model trained on it would learn that the silhouette IS the body — the opposite of
+    the real failure. Simulating gravity against the body as a collider is what makes a loose
+    garment bridge the waist and hang off the hip, which is the effect we need in the data.
+    """
+    bpy.context.view_layer.objects.active = body
+    body.modifiers.new("collision", type="COLLISION")
+    body.collision.thickness_outer = 0.004
+
+    # Pin the top edge — the shoulders of a top, the waistband of trousers. Without it gravity just
+    # drags the shell off the body: the first run left the chest uncovered (1.000x over-read) and the
+    # trousers heaped around the ankles (3.30x at the hip).
+    zs = [(garment.matrix_world @ v.co).z for v in garment.data.vertices]
+    z_hi, z_lo = max(zs), min(zs)
+    pinned = [i for i, z in enumerate(zs) if z >= z_hi - PIN_BAND * (z_hi - z_lo)]
+    group = garment.vertex_groups.new(name="pin")
+    group.add(pinned, 1.0, "REPLACE")
+
+    bpy.context.view_layer.objects.active = garment
+    mod = garment.modifiers.new("cloth", type="CLOTH")
+    st = mod.settings
+    st.vertex_group_mass = "pin"
+    st.quality = 5
+    st.mass = 0.25
+    st.tension_stiffness = stiffness
+    st.compression_stiffness = stiffness
+    st.shear_stiffness = stiffness * 0.5
+    st.bending_stiffness = max(0.05, stiffness * 0.02)
+    st.use_pressure = False
+    mod.collision_settings.use_self_collision = False
+    mod.collision_settings.distance_min = 0.004
+
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = frames
+    for frame in range(1, frames + 1):
+        scene.frame_set(frame)
+    # Freeze the settled shape so the mask passes below see the same geometry as the RGB pass.
+    bpy.context.view_layer.objects.active = garment
+    bpy.ops.object.modifier_apply(modifier="cloth")
+
+
 def render_to(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     bpy.context.scene.render.filepath = str(path)
@@ -123,20 +170,26 @@ def render_to(path: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--body", required=True, type=Path)
-    ap.add_argument("--garment", type=Path, default=None)
+    ap.add_argument("--garment", type=Path, default=None, action="append", dest="garments",
+                    help="garment OBJ; repeat for several pieces (top, trousers)")
+    ap.add_argument("--cloth-frames", type=int, default=25,
+                    help="cloth simulation steps; 0 renders the garment shell undraped")
+    ap.add_argument("--stiffness", type=float, default=None,
+                    help="fabric tension stiffness; default jitters 5-25 per render")
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--hdri-dir", type=Path, default=None)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--samples", type=int, default=16)
     args = ap.parse_args(argv_after_dashdash())
     # Blender's working directory is its own install dir, so relative paths from the caller break.
-    for name in ("body", "garment", "out", "hdri_dir"):
+    for name in ("body", "out", "hdri_dir"):
         if getattr(args, name) is not None:
             setattr(args, name, Path(getattr(args, name)).resolve())
+    args.garments = [Path(g).resolve() for g in (args.garments or [])]
     rng = random.Random(args.seed)
 
-    meta = {"body": args.body.name, "garment": args.garment.name if args.garment else None,
-            "seed": args.seed, "views": {}}
+    meta = {"body": args.body.name, "garments": [g.name for g in (args.garments or [])],
+            "cloth_frames": args.cloth_frames, "seed": args.seed, "views": {}}
     hdris = sorted(args.hdri_dir.glob("*.hdr")) if args.hdri_dir else []
     hdri = rng.choice(hdris) if hdris else None
 
@@ -146,7 +199,13 @@ def main() -> int:
             bpy.context.scene.eevee.taa_render_samples = args.samples
         body = import_obj(args.body)
         z0, z1 = body_dimensions(body)
-        garment = import_obj(args.garment) if args.garment else None
+        pieces = []
+        for g in (args.garments or []):
+            piece = import_obj(g)
+            if args.cloth_frames > 0:
+                stiffness = args.stiffness if args.stiffness is not None else rng.uniform(5.0, 25.0)
+                drape(piece, body, args.cloth_frames, stiffness)
+            pieces.append(piece)
         add_light(rng, hdri)
         cam = place_camera(z0, z1, angle, random.Random(args.seed))      # same camera for both passes
         meta["views"][view] = cam
@@ -156,14 +215,14 @@ def main() -> int:
 
         # 2. clothed silhouette: everything white on transparent
         white = flat_material((1, 1, 1, 1))
-        for o in [body] + ([garment] if garment else []):
+        for o in [body, *pieces]:
             o.data.materials.clear(); o.data.materials.append(white)
         bpy.context.scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.0
         render_to(args.out / f"{args.body.stem}_{view}_mask_clothed.png")
 
-        # 3. body silhouette: the same frame with the garment hidden — this pair is the whole point
-        if garment:
-            garment.hide_render = True
+        # 3. body silhouette: the same frame with the garments hidden — this pair is the whole point
+        for piece in pieces:
+            piece.hide_render = True
         render_to(args.out / f"{args.body.stem}_{view}_mask_body.png")
 
     (args.out / f"{args.body.stem}_meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
