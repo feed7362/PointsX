@@ -48,10 +48,20 @@ W("")
 md([[UK.get(m, m), f(mae), f"[{f(lo)}; {f(hi)}]", f(bias, sign=True), str(n)] for m, mae, bias, lo, hi, n in items],
    ["Параметр", "MAE, см", "95 % ДІ для MAE", "Bias, см", "n"])
 allerr = [r["err"] for r in rows]
+# A single micro-average over a ragged matrix is not comparable between corpus
+# versions: it moves when a measurement is added for part of the corpus, or when the
+# mix of easy/hard subjects changes. Report the fixed-set number beside it.
+_fixed = [r for r in rows if r["mid"] != "shoulder_slope_width"]
 W(f"**Загалом: MAE = {f(st.fmean(abs(e) for e in allerr))} см, "
   f"bias = {f(st.fmean(allerr), sign=True)} см, n = {len(allerr)} спостережень "
   f"({n_people} осіб, {n_pairs} пар фото).**")
 W("")
+W(f"На фіксованому наборі з 13 мірок, спільному для всього корпусу (без ширини плечового "
+  f"ската, яку почали збирати лише 2026-09-21 і яка є у 10 осіб із {n_people}): "
+  f"**MAE = {f(st.fmean(abs(r['err']) for r in _fixed))} см** (n = {len(_fixed)}). "
+  f"Саме це число слід порівнювати з попередніми версіями корпусу — загальна MAE по всіх "
+  f"клітинках зсувається щоразу, коли до частини корпусу додають нову мірку.")
+
 
 # ── Table 3.2 — ablation ────────────────────────────────────────────────────
 led = [json.loads(line) for line in open(REPO / "runs/eval/ledger.jsonl", encoding="utf-8")]
