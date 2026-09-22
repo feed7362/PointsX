@@ -144,7 +144,7 @@ class WebuiPipeline:
         )
 
         with tm("calibrate"):
-            cal = calibrate(front_kp, side_kp, height_cm)
+            cal = calibrate(front_kp, side_kp, height_cm, front_mask=front_mask, side_mask=side_mask)
         with tm("extract"):
             bm = extract_measurements(front_kp, side_kp, front_mask, side_mask, cal)
         with tm("circumferences"):

@@ -39,45 +39,61 @@ from __future__ import annotations
 # gated corpus it scored 3.73 cm on the 159 corrected observations, partly
 # in-sample (8 of the 12 F were in its fit set); this table scores 3.69 held-out.
 _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
-    "female": {  # n=12
-        "chest_circumference":  -2.5,
-        "waist_circumference": -20.0,   # %
-        "hip_circumference":    -5.5,
-        "thigh_circumference": -17.0,
-    },
-    "male": {  # n=4 — provisional
-        "waist_circumference": -13.0,
-        "hip_circumference":    -7.5,
-        "thigh_circumference": -18.0,
-    },
-    # "other" averages male and female so an unknown-sex subject is biased
-    # toward neither extreme (male chest counts as 0).
-    "other": {
-        "chest_circumference":  -1.0,
+    # Refitted 2026-09-22 AFTER the calibration fix (pointsx/calibration.py: px_per_cm now comes
+    # from the silhouette's head-to-floor extent, not the head_top->ankle keypoint span, which is
+    # ~10 % short of stature and inflated every width by 7.5-13.7 %). The old table existed largely
+    # to cancel that inflation, which is why it over-corrected on tight clothing.
+    # Corpus: 43 photo pairs / 26 people. Method and gate unchanged (median(gt/pred), bootstrap CI
+    # excludes 1.0, LOO gain > 0.2 cm); numbers below are LOO, never in-sample.
+    #   cell        n   none    LOO   fitted   CI(ratio)
+    #   F chest    34   5.49   4.19   +5.0 %   [1.017, 1.075]
+    #   F waist    38  13.98   5.48  -16.5 %   [0.798, 0.856]
+    #   F hip      38   6.77   6.10   +4.5 %   [1.021, 1.060]
+    #   F thigh    38   5.73   3.92   -8.0 %   [0.903, 0.949]
+    #   M chest     4  11.35   3.14  +13.0 %   [1.051, 1.160]
+    #   M thigh     4   6.28   2.28   -9.0 %   [0.838, 0.950]
+    #   M waist     4   4.55     —     -3.5 %  [0.900, 1.027]  EXCLUDED: CI spans 1.0
+    #   M hip       4   5.43     —     +3.0 %  [0.903, 1.051]  EXCLUDED: CI spans 1.0
+    # Male waist and hip now need NO correction — the constant they used to carry was the scale bug.
+    "female": {  # n=38 pairs
+        "chest_circumference":  +5.0,
         "waist_circumference": -16.5,
-        "hip_circumference":    -6.5,
-        "thigh_circumference": -17.5,
+        "hip_circumference":    +4.5,
+        "thigh_circumference":  -8.0,
+    },
+    "male": {  # n=4 pairs — provisional
+        "chest_circumference": +13.0,
+        "thigh_circumference":  -9.0,
+    },
+    "other": {
+        "chest_circumference":  +9.0,
+        "waist_circumference":  -8.0,
+        "hip_circumference":    +2.0,
+        "thigh_circumference":  -8.5,
     },
 }
 
-# Sex-INDEPENDENT bias corrections for the non-circumference measurements.
-# Refitted 2026-09-16 on the same gated corpus (n=16), same method and gate.
-# Sex-independent on purpose: 12 F / 4 M is too thin for per-sex length fits.
+# Sex-INDEPENDENT corrections for the non-circumference measurements, same corpus and gate.
+#   cell                    n   none    LOO   fitted   CI(ratio)
+#   leg_length_inner_seam  42   3.57   2.61   +4.5 %   [1.027, 1.059]
+#   leg_length_outer_seam  40   5.12   3.29   +4.5 %   [1.033, 1.055]
+#   neck_base_height       42  18.72   2.94  +14.0 %   [1.132, 1.152]
+#   chest_width_front      42   5.65   3.15  +16.0 %   [1.135, 1.219]
+#   back_length_to_waist   38   5.57   1.92  +17.5 %   [1.148, 1.193]
+#   front_length_to_waist  42   6.00   2.26  +15.5 %   [1.136, 1.176]
 #
-#   cell                    n   none   LOO   fitted   CI(ratio)
-#   leg_length_inner_seam  16   7.60   4.25  -8.0 %   [0.884, 0.942]
-#   leg_length_outer_seam  16   4.28   3.28  -2.5 %   [0.942, 0.994]
-#   neck_base_height       16   6.35   3.05  +4.5 %   [1.027, 1.057]
-#   back_length_to_waist   16   3.48   2.06  +8.0 %   [1.043, 1.135]  NEW (July: CI spanned 1.0 at n=11)
-#   chest_width_front      16   4.66     —   +2.5 %   [0.986, 1.173]  EXCLUDED: CI spans 1.0
-#   front_length_to_waist  16   3.87     —   +5.5 %   [0.957, 1.129]  EXCLUDED: CI spans 1.0
-#
-# Previous (2026-07-20): inner -9.5, outer -2.5, neck_base +4.0.
+# CAVEAT — these are large and they encode a known defect, not anatomy: every vertical derivation
+# measures to the ANKLE KEYPOINT rather than the floor, so it under-reads by the ankle height. The
+# old too-small px_per_cm used to cancel it; with calibration fixed the gap is visible. The right
+# repair is to measure those spans from the silhouette's floor line and refit again — see T4 in
+# runs/tasks-2026-09-22.md. Until then these constants keep the output honest.
 _LENGTH_SCALES_PCT: dict[str, float] = {
-    "leg_length_inner_seam":  -8.0,   # %
-    "leg_length_outer_seam":  -2.5,
-    "neck_base_height":       +4.5,
-    "back_length_to_waist":   +8.0,
+    "leg_length_inner_seam":  +4.5,
+    "leg_length_outer_seam":  +4.5,
+    "neck_base_height":      +14.0,
+    "chest_width_front":     +16.0,
+    "back_length_to_waist":  +17.5,
+    "front_length_to_waist": +15.5,
 }
 
 # Set of IDs eligible for the multiplicative bias correction. Anything outside

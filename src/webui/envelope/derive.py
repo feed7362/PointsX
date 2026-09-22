@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pointsx.circumference import ramanujan_ellipse_circumference
 from pointsx.keypoints import KP, distance, is_valid, midpoint
-from pointsx.schemas import BodyMeasurements, Keypoints
+from pointsx.schemas import BodyMeasurements, Keypoints, SilhouetteMask
 
 # Anthropometric ratios used when a measurement isn't directly observable
 _ANKLE_TO_CALF_RATIO = 0.62
@@ -103,8 +103,28 @@ def _derive_front_length(
     return _kp_to_midpoint_cm(front_kp, KP.UPPER_NECK, KP.LEFT_HIP, KP.RIGHT_HIP, px_per_cm_front)
 
 
-def _derive_neck_base_height(front_kp: Keypoints, px_per_cm_front: float) -> float | None:
-    # Vertical span from upper neck to mid-ankles ≈ standing height minus head.
+def _derive_neck_base_height(
+    front_kp: Keypoints, px_per_cm_front: float, front_mask: SilhouetteMask | None = None,
+) -> float | None:
+    """Height of the neck base above the FLOOR, which is what the tape measures.
+
+    The ankle keypoint sits above the sole, so the old neck->ankles span under-read by the ankle
+    height; the pre-2026-09-22 calibration was ~10 % short of stature and happened to cancel it,
+    and once calibration was fixed the gap showed up as a -18.7 cm raw bias on the app corpus.
+    The silhouette's lowest row is the floor, the same anchor calibration now uses.
+
+    Args:
+        front_kp: Front-view keypoints.
+        px_per_cm_front: Scale for the front view.
+        front_mask: Front silhouette; without it this falls back to the ankle keypoints.
+    """
+    if px_per_cm_front <= 0 or not is_valid(front_kp.confidence, KP.UPPER_NECK):
+        return None
+    if front_mask is not None and getattr(front_mask, "mask", None) is not None:
+        import numpy as np
+        rows = np.where(front_mask.mask.any(axis=1))[0]
+        if len(rows) >= 2:
+            return float(rows[-1] - float(front_kp.points[KP.UPPER_NECK, 1])) / px_per_cm_front
     return _kp_to_midpoint_cm(front_kp, KP.UPPER_NECK, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, px_per_cm_front)
 
 

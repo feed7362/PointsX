@@ -47,6 +47,7 @@ def _value_for_id(
     height_cm: float,
     sex: str,
     chest_for_prior: float | None,
+    front_mask: Any | None = None,
 ) -> tuple[float | None, list[str]]:
     """Return (value_cm, quality_flags) for a single canonical id.
 
@@ -84,7 +85,7 @@ def _value_for_id(
         return _derive_front_length(bm, front_kp, cal.px_per_cm_front), flags
     if mid == "neck_base_height":
         flags.append("derived")
-        return _derive_neck_base_height(front_kp, cal.px_per_cm_front), flags
+        return _derive_neck_base_height(front_kp, cal.px_per_cm_front, front_mask), flags
 
     # Anthropometric approximations -----------------------------------------
     if mid == "ankle_circumference":
@@ -134,6 +135,7 @@ def body_to_envelope(
         value, flags = _value_for_id(
             mid, bm, result.front_kp, result.side_kp, result.cal, chest_circ_cm,
             height_cm=subject_height_cm, sex=sex, chest_for_prior=chest_for_prior,
+            front_mask=getattr(result, "front_mask", None),
         )
         if value is None:
             # Skip — frontend size engine tolerates missing measurements.

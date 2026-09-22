@@ -122,7 +122,7 @@ class MeasurementPipeline:
             raise ValueError("No segmentation mask for side image")
 
         logger.info("Calibrating...")
-        cal = calibrate(front_kp, side_kp, height_cm)
+        cal = calibrate(front_kp, side_kp, height_cm, front_mask=front_mask, side_mask=side_mask)
 
         logger.info("Extracting measurements...")
         measurements = extract_measurements(
