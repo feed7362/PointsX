@@ -271,8 +271,16 @@ def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | N
     # refitted on the new behaviour, the app corpus got worse (raw 6.22 -> 6.27 cm, refit LOO
     # 3.53 -> 3.68) and the waist bias slid -0.2 -> -0.8: real torsos are deeper than the synthetic
     # A-pose bodies, so a tighter band shaves the silhouette more often than it saves it.
-    # The arm merging is still a real failure mode; excluding it needs the wrist/elbow keypoints
-    # rather than a blanket narrowing — see T6 in runs/tasks-2026-09-22.md.
+    # The keypoint-targeted version was then tried too (T6): a PER-ROW band that cut back to just
+    # short of a wrist/elbow only at the rows where one actually sits, never closer to the spine than
+    # 9 % of body height. It fixed the bench even better (hip worst 14.7 -> 6.2 cm, MAE 3.75 -> 2.69)
+    # and still lost on real photos: raw 6.22 -> 6.32, refit LOO 3.53 -> 3.69. Reverted.
+    #
+    # Two independent geometric attacks, both correct against exact ground truth, both worse on real
+    # photos. The likely reason is that on a real side view the arm genuinely overlaps the torso
+    # rather than sitting beside it, so any cut removes real body. This looks like the limit of what
+    # geometry on a raw silhouette can do: separating arm from torso needs a segmenter that knows
+    # body parts, which is what the synthetic body-under-clothing work is for.
     body_h_px: float | None = None
     head_y = pts[KP.HEAD_TOP, 1] if is_valid(conf, KP.HEAD_TOP) else None
     ankle_y = mean_valid_y(side_kp, KP.LEFT_ANKLE, KP.RIGHT_ANKLE)
