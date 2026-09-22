@@ -77,20 +77,22 @@ _SEX_CIRCUMFERENCE_SCALES_PCT: dict[str, dict[str, float]] = {
 #   cell                    n   none    LOO   fitted   CI(ratio)
 #   leg_length_inner_seam  42   3.57   2.61   +4.5 %   [1.027, 1.059]
 #   leg_length_outer_seam  40   5.12   3.29   +4.5 %   [1.033, 1.055]
-#   neck_base_height       42  18.72   2.94  +14.0 %   [1.132, 1.152]
+#   neck_base_height       42   4.58   2.63   +3.0 %   [1.023, 1.033]  (was 18.72 / +14.0 % before T4)
 #   chest_width_front      42   5.65   3.15  +16.0 %   [1.135, 1.219]
 #   back_length_to_waist   38   5.57   1.92  +17.5 %   [1.148, 1.193]
 #   front_length_to_waist  42   6.00   2.26  +15.5 %   [1.136, 1.176]
 #
-# CAVEAT — these are large and they encode a known defect, not anatomy: every vertical derivation
-# measures to the ANKLE KEYPOINT rather than the floor, so it under-reads by the ankle height. The
-# old too-small px_per_cm used to cancel it; with calibration fixed the gap is visible. The right
-# repair is to measure those spans from the silhouette's floor line and refit again — see T4 in
-# runs/tasks-2026-09-22.md. Until then these constants keep the output honest.
+# neck_base_height was +14.0 % until 2026-09-22, when the measurement itself was repaired to span
+# neck -> floor instead of neck -> ankle keypoint (T4): its raw MAE fell 18.72 -> 4.58 cm and the
+# constant collapsed to +3.0 %. That is what a correct fix looks like here.
+# STILL A FUDGE, same class, not yet repaired: chest_width_front (+16 %), back_length_to_waist
+# (+17.5 %) and front_length_to_waist (+15.5 %) are straight-line keypoint spans compared against a
+# tape laid over the body's curve, so they under-read by construction. Fix the definitions and refit,
+# the way neck, back width and upper arm were fixed with ANSUR priors.
 _LENGTH_SCALES_PCT: dict[str, float] = {
     "leg_length_inner_seam":  +4.5,
     "leg_length_outer_seam":  +4.5,
-    "neck_base_height":      +14.0,
+    "neck_base_height":       +3.0,
     "chest_width_front":     +16.0,
     "back_length_to_waist":  +17.5,
     "front_length_to_waist": +15.5,
