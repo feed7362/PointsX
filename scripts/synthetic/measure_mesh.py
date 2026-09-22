@@ -123,7 +123,12 @@ def measure_mesh(vertices: np.ndarray, faces: np.ndarray, sex: str) -> dict[str,
         comp = _pick(_slice_components(mesh, h[site]), axis_x, where)
         if comp is not None and len(comp) >= 3:
             out[mid] = round(_hull_perimeter_cm(comp), 1)
-    # lengths that need no slicing
+    # CAVEAT — these two are POPULATION FRACTIONS of stature, not measurements of this mesh, so they
+    # are only valid for a body whose proportions match ANSUR. Anny bodies do not: their legs run
+    # long (leg/height 0.61-0.64 against the 0.43-0.53 the pipeline expects), which made the bench
+    # report a -13.6 cm "error" on the inner seam that was the ground truth's fault, not the
+    # pipeline's. Find the real crotch (the lowest row where the leg slices merge) and the real neck
+    # base from the mesh before trusting either of these.
     out["leg_length_inner_seam"] = round((h["crotch"] - z0) * 100.0, 1)
     out["neck_base_height"] = round((h["neck"] - z0) * 100.0, 1)
     out["height_cm"] = round(out["height_cm"], 1)

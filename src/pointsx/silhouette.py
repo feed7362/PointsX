@@ -261,8 +261,13 @@ def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | N
 
     center_x = float(np.mean(spine_xs))
 
-    # Half-band width: 18 % of body pixel-height — typical adult torso depth is
-    # ~14 % of body height, plus a margin so we don't shave the silhouette.
+    # Half-band width: 12 % of body pixel-height. A typical adult torso depth is ~14 % of height,
+    # so a HALF-depth is ~7 %; 12 % leaves room for a deep belly without admitting the arm.
+    # It was 18 % until 2026-09-22, which let a hand hanging at hip level merge into the torso run:
+    # measured on the synthetic bench (8 rendered bodies, exact mesh GT) one body read a hip depth of
+    # 37.8 cm against a true 24.2, worth +14.7 cm of hip circumference. Sweeping the band changed
+    # only that body — every other one reads identically at 0.18 and 0.10 — so tightening costs
+    # nothing here: hip-depth MAE 3.60 -> 2.51 cm, worst 13.6 -> 4.9.
     body_h_px: float | None = None
     head_y = pts[KP.HEAD_TOP, 1] if is_valid(conf, KP.HEAD_TOP) else None
     ankle_y = mean_valid_y(side_kp, KP.LEFT_ANKLE, KP.RIGHT_ANKLE)
@@ -273,7 +278,7 @@ def _side_torso_band(side_kp: Keypoints, mask_w: int) -> tuple[float, float] | N
         # Fall back to 20 % of mask width, which is a generous-but-safe default.
         half_band = 0.10 * mask_w
     else:
-        half_band = 0.18 * body_h_px
+        half_band = 0.12 * body_h_px
 
     return (
         max(0.0, center_x - half_band),
