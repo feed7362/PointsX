@@ -92,7 +92,18 @@ UK = {
 }
 
 
+def _person_by_subject() -> dict[str, str]:
+    """subject_id -> person. subjects.csv has one row per photo PAIR, and several
+    pairs can belong to the same volunteer, so the two are not interchangeable."""
+    path = REPO / "supabase-dump" / "subjects.csv"
+    if not path.is_file():
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        return {r["subject_id"]: r.get("person") or r["subject_id"] for r in csv.DictReader(fh)}
+
+
 def load_rows() -> list[dict]:
+    persons = _person_by_subject()
     rows, sec = [], None
     with open(S / "eval_grid.csv", encoding="utf-8") as f:
         for r in csv.reader(f):
@@ -100,13 +111,15 @@ def load_rows() -> list[dict]:
                 sec = r[0]
                 continue
             if sec == "# per-(combo, subject, measurement)" and len(r) == 7 and r[0] == "coco+rama+off":
-                rows.append({"subject": r[1], "sex": r[2], "mid": r[3],
+                rows.append({"subject": r[1], "person": persons.get(r[1], r[1]),
+                             "sex": r[2], "mid": r[3],
                              "pred": float(r[4]), "gt": float(r[5]), "err": float(r[6])})
     return rows
 
 
 def boot_ci(values_by_subject: dict[str, list[float]], stat, n_boot=5000, seed=7):
-    """Bootstrap over SUBJECTS (the independent unit), not observations."""
+    """Bootstrap over PEOPLE (the independent unit), not observations and not photo
+    pairs — two pairs of the same volunteer are not independent draws."""
     rng = random.Random(seed)
     subs = list(values_by_subject)
     out = []
@@ -123,7 +136,7 @@ def boot_ci(values_by_subject: dict[str, list[float]], stat, n_boot=5000, seed=7
 def fig_mae(rows):
     by_mid: dict[str, dict[str, list[float]]] = {}
     for r in rows:
-        by_mid.setdefault(r["mid"], {}).setdefault(r["subject"], []).append(r["err"])
+        by_mid.setdefault(r["mid"], {}).setdefault(r["person"], []).append(r["err"])
 
     items = []
     for mid, per_sub in by_mid.items():
@@ -134,7 +147,8 @@ def fig_mae(rows):
         items.append((mid, mae, bias, lo, hi, len(errs)))
     items.sort(key=lambda t: t[1])
 
-    n_subj = len({r["subject"] for r in rows})
+    n_people = len({r["person"] for r in rows})
+    n_pairs = len({r["subject"] for r in rows})
     fig, axes = plt.subplots(1, 2, figsize=(10.2, 5.8), gridspec_kw={"width_ratios": [1.55, 1]})
     y = np.arange(len(items))
     labels = [f"{UK.get(m, m)}" for m, *_ in items]
@@ -148,7 +162,7 @@ def fig_mae(rows):
     for i, t in enumerate(items):
         ax.text(t[4] + 0.12, i, f(t[1]), va="center", fontsize=9.5, color=INK)
     ax.set_yticks(y, labels)
-    ax.set_xlabel(f"MAE, см  (95 % ДІ, бутстреп по {n_subj} суб'єктах)")
+    ax.set_xlabel(f"MAE, см  (95 % ДІ, бутстреп по {n_people} особах; {n_pairs} пар фото)")
     ax.set_xlim(0, max(t[4] for t in items) + 0.9)
     ax.grid(axis="y", visible=False)
     ax.set_title("а) Середня абсолютна похибка", fontsize=11.5, loc="left")

@@ -28,7 +28,7 @@ def md(rows: list[list[str]], head: list[str]) -> None:
 rows = load_rows()
 by_mid: dict[str, dict[str, list[float]]] = {}
 for r in rows:
-    by_mid.setdefault(r["mid"], {}).setdefault(r["subject"], []).append(r["err"])
+    by_mid.setdefault(r["mid"], {}).setdefault(r["person"], []).append(r["err"])
 items = []
 for mid, per_sub in by_mid.items():
     errs = [e for v in per_sub.values() for e in v]
@@ -36,18 +36,21 @@ for mid, per_sub in by_mid.items():
     items.append((mid, st.fmean(abs(e) for e in errs), st.fmean(errs), lo, hi, len(errs)))
 items.sort(key=lambda t: -t[1])
 
-n_subj = len({r["subject"] for r in rows})
+n_people = len({r["person"] for r in rows})
+n_pairs = len({r["subject"] for r in rows})
 W("## Таблиця 3.1 — Похибки антропометричних параметрів")
 W("")
-W(f"Джерело: {n_subj} суб'єктів, {len(rows)} парних спостережень «фото ↔ ручна мірка», продукційна")
+W(f"Джерело: {n_people} осіб ({n_pairs} пар фото), {len(rows)} парних спостережень "
+  f"«фото ↔ ручна мірка», продукційна")
 W("конфігурація (COCO-поза + сегментація + еліпс Рамануджана з каліброваними корекціями).")
-W("95 % довірчий інтервал — бутстреп (5 000 ресемплів) по **суб'єктах**, а не по спостереженнях.")
+W("95 % довірчий інтервал — бутстреп (5 000 ресемплів) по **особах**: кілька пар фото однієї людини не є незалежними спостереженнями.")
 W("")
 md([[UK.get(m, m), f(mae), f"[{f(lo)}; {f(hi)}]", f(bias, sign=True), str(n)] for m, mae, bias, lo, hi, n in items],
    ["Параметр", "MAE, см", "95 % ДІ для MAE", "Bias, см", "n"])
 allerr = [r["err"] for r in rows]
 W(f"**Загалом: MAE = {f(st.fmean(abs(e) for e in allerr))} см, "
-  f"bias = {f(st.fmean(allerr), sign=True)} см, n = {len(allerr)} спостережень ({n_subj} суб'єктів).**")
+  f"bias = {f(st.fmean(allerr), sign=True)} см, n = {len(allerr)} спостережень "
+  f"({n_people} осіб, {n_pairs} пар фото).**")
 W("")
 
 # ── Table 3.2 — ablation ────────────────────────────────────────────────────
@@ -60,7 +63,7 @@ W("## Таблиця 3.2 — Внесок окремих складових ме
 W("")
 W("Абляцію виконано на корпусі етапу розробки (16 суб'єктів, ~206 мірок): кроки порівнянні")
 W("між собою, бо зроблені на однакових даних. Підсумкову точність наведено в таблиці 3.1 на")
-W(f"поточному корпусі ({n_subj} суб'єктів).")
+W(f"поточному корпусі ({n_people} осіб, {n_pairs} пар фото).")
 W("")
 base = led[0]["app"]["summary"]["overall"]["mae"]
 tr = []
