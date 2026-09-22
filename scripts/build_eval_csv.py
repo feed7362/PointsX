@@ -79,11 +79,45 @@ GT_RANGES: dict[str, tuple[float, float]] = {
 MIN_VALID_GT = 4
 
 
+def _expand_with_links(rows: list[dict], links: dict, dump: Path) -> list[dict]:
+    """One row per linked photo pair, each carrying its person's reference GT.
+
+    Placeholder rows (a second pair of an already-measured person) hold no usable values, so they
+    were dropped by the gate above; here they come back with the GT of the person's reference row.
+    Folders outside Supabase (photos sent separately) are added the same way. `subject_id` becomes
+    ``<person>-<clothing>-<id8>`` so the eval can aggregate per person and split by clothing.
+    """
+    by_id = {r["subject_id"]: r for r in rows}
+    out: list[dict] = []
+    for pair, meta in sorted(links.items(), key=lambda kv: (kv[1]["person"], kv[0])):
+        ref = by_id.get(meta["gt_row"][:8])
+        if ref is None:
+            print(f"[skip] {pair[:8]}: reference row {meta['gt_row'][:8]} not among the scored rows",
+                  file=sys.stderr)
+            continue
+        folder = dump / pair if (dump / pair).is_dir() else next(
+            (d for d in dump.iterdir() if d.is_dir() and d.name.startswith(pair[:8])), None)
+        if folder is None or not (folder / "front.jpg").is_file():
+            print(f"[skip] {pair[:8]}: photos not in the dump", file=sys.stderr)
+            continue
+        row = dict(ref)
+        row.update(subject_id=f"{meta['person']}-{meta['clothing']}-{pair[:8]}",
+                   front=str(folder / "front.jpg"), side=str(folder / "side.jpg"),
+                   person=meta["person"], clothing=meta["clothing"])
+        out.append(row)
+    print(f"[links] wrote {len(out)} pair rows")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dump", default=str(REPO_ROOT / "supabase-dump"),
                     help="Folder with <submission_id>/{front,side}.jpg")
     ap.add_argument("--out", default=None, help="CSV path (default: <dump>/subjects.csv)")
+    ap.add_argument("--links", default=None,
+                    help="gt_links.json: extra photo pairs of already-measured people (a session where one "
+                         "person was shot several times). Each linked pair becomes its own row carrying the "
+                         "GT of its person's reference row, plus `person` and `clothing` columns.")
     args = ap.parse_args()
 
     dump = Path(args.dump)
@@ -95,7 +129,13 @@ def main() -> int:
     subs = repo.list_submissions()
     print(f"[fetch] {len(subs)} submissions from Supabase")
 
-    cols = ["subject_id", "front", "side", "height_cm", "sex", *GT_MAP.values()]
+    links = {}
+    if args.links:
+        import json as _json
+        links = _json.loads(Path(args.links).read_text(encoding="utf-8")).get("pairs", {})
+        print(f"[links] {len(links)} pairs / {len({v['person'] for v in links.values()})} people")
+
+    cols = ["subject_id", "front", "side", "height_cm", "sex", "person", "clothing", *GT_MAP.values()]
     rows: list[dict] = []
     n_skipped = 0
 
@@ -161,6 +201,15 @@ def main() -> int:
             n_skipped += 1
             continue
         rows.append(row)
+
+    if links:
+        # Sessions where one person was photographed several times are represented pair-by-pair;
+        # every other subject stays one row and is its own "person".
+        linked = {m["gt_row"][:8] for m in links.values()} | {k[:8] for k in links}
+        for r in rows:
+            r.setdefault("person", r["subject_id"])
+            r.setdefault("clothing", "unknown")
+        rows = [r for r in rows if r["subject_id"] not in linked] + _expand_with_links(rows, links, dump)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8", newline="") as f:
