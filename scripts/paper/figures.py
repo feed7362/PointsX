@@ -221,8 +221,12 @@ def fig_bland_altman(rows):
 
 
 # ── Fig 3: ablation ─────────────────────────────────────────────────────────
-def fig_ablation():
-    led = [json.loads(l) for l in open(REPO / "runs/eval/ledger.jsonl", encoding="utf-8")]
+def fig_ablation(rows):
+    """Five development steps on the 16-subject corpus, then the current corpus
+    shown separately. The two are NOT one series: the last bar is a different set
+    of people, so it is detached, differently coloured and labelled as such —
+    otherwise the figure appears to contradict table 3.1."""
+    led = [json.loads(line) for line in open(REPO / "runs/eval/ledger.jsonl", encoding="utf-8")]
     steps = [
         ("Базова конфігурація", 0),
         ("+ гейт якості еталона", 1),
@@ -232,17 +236,34 @@ def fig_ablation():
     ]
     vals = [led[i]["app"]["summary"]["overall"]["mae"] for _, i in steps]
     ns = [led[i]["app"]["summary"]["overall"]["n"] for _, i in steps]
-    names = [n + "\n(n=" + str(k) + " мірок)" for (n, _), k in zip(steps, ns)]
-    fig, ax = plt.subplots(figsize=(8.6, 4.0))
-    y = np.arange(len(vals))[::-1]
-    ax.barh(y, vals, color=[C1] * (len(vals) - 1) + [C3], height=0.6, zorder=3)
+    names = [n + chr(10) + "(n=" + str(k) + " мірок)" for (n, _), k in zip(steps, ns)]
+
+    fixed = [r for r in rows if r["mid"] != "shoulder_slope_width"]
+    cur = st.fmean(abs(r["err"]) for r in fixed)
+    n_people = len({r["person"] for r in rows})
+    names.append("Той самий метод на" + chr(10) + "розширеному корпусі" + chr(10)
+                 + f"({n_people} осіб, n={len(fixed)})")
+    vals.append(cur)
+
+    fig, ax = plt.subplots(figsize=(9.0, 4.4))
+    y = np.arange(len(vals) + 1)[::-1]          # one slot left empty as a separator
+    y = np.delete(y, len(vals) - 1)
+    colors = [C1] * (len(vals) - 2) + [C3, C2]
+    ax.barh(y, vals, color=colors, height=0.6, zorder=3)
     for yy, v in zip(y, vals):
         ax.text(v + 0.09, yy, f(v), va="center", fontsize=10, color=INK)
     ax.set_yticks(y, names)
-    ax.set_xlabel("MAE, см (корпус етапу розробки: 16 суб'єктів)")
-    comma_axis(ax, "x", 0)
-    ax.set_xlim(0, max(vals) + 0.8)
+    ax.set_xlabel("MAE, см (еталонні ручні мірки)")
+    ax.set_xlim(0, max(vals) + 0.9)
     ax.grid(axis="y", visible=False)
+    ax.axhline(y[-1] + 0.62, color=GRID, linewidth=1.0, linestyle="--", zorder=2)
+    ax.text(0.0, -0.22,
+            "Верхні п'ять стовпців — корпус етапу розробки (16 осіб, 13 мірок): вони порівнянні "
+            "між собою." + chr(10) + "Нижній стовпець — той самий метод на розширеному корпусі й "
+            "тому ж наборі з 13 мірок; інші люди," + chr(10) + "тому це не шостий крок абляції, "
+            "а перевірка відтворюваності.",
+            transform=ax.transAxes, fontsize=8.6, color=INK2, va="top")
+    comma_axis(ax, "x", 0)
     fig.savefig(OUT / "fig_ablation.png")
     plt.close(fig)
     return vals
@@ -395,7 +416,7 @@ if __name__ == "__main__":
     rows = load_rows()
     items = fig_mae(rows)
     fig_bland_altman(rows)
-    abl = fig_ablation()
+    abl = fig_ablation(rows)
     sp = fig_speed()
     fig_training()
     fig_regressor()
