@@ -266,7 +266,7 @@ def fig_speed():
     comma_axis(ax, "x", 1)
     geo = st.fmean(sum(data[t]["per_stage"].get(k, {}).get("median_s", 0.0)
                        for k in ("calibrate", "extract", "circumferences", "validate")) for t in threads)
-    ax.text(0.0, -0.30, f"Геометрія та обхвати — {geo*1000:.0f} мс (< 0,5 % циклу), на діаграмі не розрізняється.".replace(".", ",", 1),
+    ax.text(0.0, -0.30, f"Геометрія та обхвати — {geo*1000:.0f} мс (< 0,5 % циклу), на діаграмі не розрізняється.",
             transform=ax.transAxes, fontsize=8.8, color=INK2)
     fig.savefig(OUT / "fig_speed_stages.png")
     plt.close(fig)
