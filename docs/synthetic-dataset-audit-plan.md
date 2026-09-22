@@ -92,7 +92,7 @@ It does **not** replace: ANSUR priors/constants (real people beat renders), the 
 |---|---|---|---|
 | 0 | **HBW baseline**: register, download (eval-only), `eval/hbw.py` running the real pipeline, add to `eval_track.py` as a third benchmark | HBW MAE of production; `ledger` gets a `hbw` column | 2-3 days |
 | 1 | **Cleanup**: delete v1 synthetic data (9.2 GB), `data/eval/photos`, SMPLitex; keep scaffold + anthropometry; write `assets/LICENSES.md` | disk, clean legal state | 1 h |
-| 2 | **Body model smoke test**: 20 bodies each with MPFB2 and Anny; GT from mesh; gate 1 | decision MPFB2 vs Anny | 2-3 days |
+| 2 | ~~Body model smoke test~~ **DONE 2026-09-22: Anny** (see §8) | `scripts/synthetic/` | — |
 | 3 | **Clothing + masks**: cloth sim, tight/loose, clothed + nude masks; phone camera model; gate 2 on 50 bodies | pipeline v2 | 1-2 weeks |
 | 4 | **Pilot 500** + train the body-under-clothing segmenter (U-Net/light seg, CPU-fast at runtime); gate 3 | first transfer number on HBW + app GT | 1-2 weeks |
 | 5 | Scale 5k, iterate on the gate-2/3 gaps; ship the segmenter only if gate 3 passes | | ongoing |
@@ -109,3 +109,41 @@ a synthetic-trained model helps.
   CC BY). SMPL-X, SMPLitex, CLOTH3D/4D, SynBody, BEDLAM, AGORA, BodyM, HBW: reference/eval only.
 - **Small HBW** (35): report per-subject and bootstrap CI, not just MAE.
 - **Blender time**: cloth sim per body dominates; DrapeNet/GarmentCode only if sim is too slow at 5k.
+
+## 8. Step 2 result (2026-09-22): the body model is Anny
+
+`pip install anny` (Apache 2.0, MakeHuman-derived assets CC0, differentiable PyTorch, GPU via Warp).
+MPFB2 was not tested: Anny gives the same MakeHuman parameter space through a scriptable API instead
+of a Blender add-on, so there was nothing left for the comparison to decide.
+
+**What it can do** (measured, `scripts/synthetic/smoke_anny.py`, female at ANSUR-mean stature):
+
+| control | range |
+|---|---|
+| `height` phenotype | stature 118.7 -> 220.7 cm, linear |
+| `weight` phenotype (with `extrapolate_phenotypes=True`) | waist 65.8 -> 90.2 cm at fixed stature |
+| `measure-waist-circ-incr` | waist 64.2 -> 84.2 cm |
+| `measure-hips-circ-incr` | hip 78.2 -> 105.3 cm |
+| `measure-bust-circ-incr` | chest 72.2 -> 104.9 cm |
+| `measure-thigh-circ-incr` | thigh 41.2 -> 61.0 cm |
+| `measure-neck-circ-incr` | neck 33.9 -> 43.5 cm |
+
+`local_changes="all"` exposes **256 modifiers, 20 of them `measure-*`** — bust, underbust, waist,
+hips, thigh, calf, knee, ankle, wrist and neck circumference plus arm/leg lengths and shoulder
+distance. They map almost one-to-one onto our canonical ids, so a body can be **built to hit a
+measurement vector sampled from ANSUR II** instead of sampled at random and hoped for. That is what
+the old generator got wrong (random betas -> waist mean 111.6 cm).
+
+**Measuring the mesh** — `scripts/synthetic/measure_mesh.py`, topology-agnostic (the vendored
+SMPL-Anthropometry is tied to SMPL-X vertex ids): slice horizontally at the ANSUR landmark height for
+the site, keep the cross-section that straddles the body axis (torso) or lies to one side (limb),
+take the convex-hull perimeter — what a tape does. Bugs found and fixed while validating:
+- `age` below 0.5 is a child in MakeHuman semantics: the first run produced a 127 cm "male".
+- the neck ring lost to ear/hair fragments near the axis (necks of 2-7 cm) -> minimum perimeter of
+  15 cm per component, and the neck is the narrowest slice in a band, as in `pointsx.silhouette`.
+After both fixes 9/10 bodies pass `pointsx.gt_sanity` (the tenth is a neck ratio of 0.180 against a
+bound of 0.18). Cost: 13 ms to build a body, 0.6 s to measure it -> ~1 h for 5 000 bodies.
+
+**Still open before rendering (step 3):** solve phenotype + `measure-*` values per body to hit an
+ANSUR target vector (bisection; the mappings above are monotone), then gate 1a is satisfied by
+construction rather than by luck.

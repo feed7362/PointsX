@@ -49,7 +49,10 @@ dependencies = [
 
 [project.optional-dependencies]
 # Synthetic SMPL-X pipeline (vendored anthropometry). Blender (bpy, mathutils) is external, not pip-installable.
-synthetic = ["trimesh>=4.0"]
+synthetic = [
+    "anny>=0.6.0",
+    "trimesh>=4.0",
+]
 
 [dependency-groups]
 # Installed by `uv sync` by default: tests, lint, and the .vercelignore CI guard.
